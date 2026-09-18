@@ -1,0 +1,33 @@
+{
+  "$schema": "../node_modules/@companion-module/base/assets/manifest.schema.json",
+  "type": "connection",
+  "id": "disguise-layer-control",
+  "name": "Disguise Layer Editor",
+  "shortname": "d3layers",
+  "description": "Layer parameter, time and keyframe programming for Stream Deck +",
+  "version": "0.1.0-beta.1",
+  "license": "MIT",
+  "repository": "",
+  "bugs": "",
+  "maintainers": [
+    {
+      "name": "Disguise Layer Editor"
+    }
+  ],
+  "runtime": {
+    "type": "node22",
+    "api": "nodejs-ipc",
+    "apiVersion": "2.1.3",
+    "entrypoint": "../src/entry.mjs"
+  },
+  "manufacturer": "Disguise",
+  "products": [
+    "Designer Layer Control (alpha)"
+  ],
+  "keywords": [
+    "layer",
+    "keyframe",
+    "Stream Deck +"
+  ],
+  "legacyIds": []
+}

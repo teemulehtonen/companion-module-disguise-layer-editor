@@ -1,0 +1,17 @@
+node_modules/
+.tools/
+pkg/
+*.tgz
+*.log
+*.lnk
+releases/
+
+# Private local evidence, media and Designer projects are never source assets.
+assets/*
+*.d3
+*.url
+.env
+.env.*
+!.env.example
+*.pem
+*.key

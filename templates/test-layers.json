@@ -1,0 +1,382 @@
+[
+  {
+    "category": "Content",
+    "name": "2.5D",
+    "type": "TwoPoint5DModule"
+  },
+  {
+    "category": "Content",
+    "name": "Audio",
+    "type": "AudioModule"
+  },
+  {
+    "category": "Content",
+    "name": "DepthVideo",
+    "type": "DepthVideoModule"
+  },
+  {
+    "category": "Content",
+    "name": "RenderStream",
+    "type": "RenderStreamModule"
+  },
+  {
+    "category": "Content",
+    "name": "RenderStreamLocal",
+    "type": "RenderStreamLocalModule"
+  },
+  {
+    "category": "Content",
+    "name": "StageRender",
+    "type": "StageRenderModule"
+  },
+  {
+    "category": "Content",
+    "name": "Video",
+    "type": "VariableVideoModule"
+  },
+  {
+    "category": "Content",
+    "name": "VideoTrigger",
+    "type": "VideoTriggerModule"
+  },
+  {
+    "category": "Content",
+    "name": "VirtualLineup",
+    "type": "VirtualLineupModule"
+  },
+  {
+    "category": "Content",
+    "name": "Web",
+    "type": "WebModule"
+  },
+  {
+    "category": "Control",
+    "name": "CameraControl",
+    "type": "CameraControlModule"
+  },
+  {
+    "category": "Control",
+    "name": "CameraCutControl",
+    "type": "CameraCutControl"
+  },
+  {
+    "category": "Control",
+    "name": "Control",
+    "type": "ControlModule"
+  },
+  {
+    "category": "Control",
+    "name": "DmxLightsControl",
+    "type": "DmxControlModule"
+  },
+  {
+    "category": "Control",
+    "name": "DmxShare",
+    "type": "DmxShareModule"
+  },
+  {
+    "category": "Control",
+    "name": "ExpressionVariables",
+    "type": "ExpressionVariablesModule"
+  },
+  {
+    "category": "Control",
+    "name": "HttpControl",
+    "type": "HttpControlModule"
+  },
+  {
+    "category": "Control",
+    "name": "IndirectionControl",
+    "type": "IndirectionControl"
+  },
+  {
+    "category": "Control",
+    "name": "MDC",
+    "type": "MDCModule"
+  },
+  {
+    "category": "Control",
+    "name": "MTC",
+    "type": "MtcModule"
+  },
+  {
+    "category": "Control",
+    "name": "MasterBrightness",
+    "type": "MasterModule"
+  },
+  {
+    "category": "Control",
+    "name": "MatrixControl",
+    "type": "DVIMatrixControlModule"
+  },
+  {
+    "category": "Control",
+    "name": "MidiNote",
+    "type": "MidiNoteModule"
+  },
+  {
+    "category": "Control",
+    "name": "Open",
+    "type": "OpenModule"
+  },
+  {
+    "category": "Control",
+    "name": "OscControl",
+    "type": "OscControlModule"
+  },
+  {
+    "category": "Control",
+    "name": "PlayMode",
+    "type": "PlayModeModule"
+  },
+  {
+    "category": "Control",
+    "name": "ProjectorControl",
+    "type": "ProjectorControlModule"
+  },
+  {
+    "category": "Control",
+    "name": "TargetObject",
+    "type": "TargetObjectModule"
+  },
+  {
+    "category": "Control",
+    "name": "TimecodeMode",
+    "type": "IgnoreTimecodeModule"
+  },
+  {
+    "category": "Control",
+    "name": "TrackJump",
+    "type": "TrackJumpModule"
+  },
+  {
+    "category": "Control",
+    "name": "TransportBrightnessLocal",
+    "type": "TransportBrightnessLocalModule"
+  },
+  {
+    "category": "Control",
+    "name": "TransportControl",
+    "type": "TransportControlModule"
+  },
+  {
+    "category": "Control",
+    "name": "TransportVolumeLocal",
+    "type": "TransportVolumeLocalModule"
+  },
+  {
+    "category": "Effect",
+    "name": "Blur",
+    "type": "BlurModule"
+  },
+  {
+    "category": "Effect",
+    "name": "CDL",
+    "type": "CDLModule"
+  },
+  {
+    "category": "Effect",
+    "name": "ChannelRouter",
+    "type": "ChannelRouterModule"
+  },
+  {
+    "category": "Effect",
+    "name": "ColourAdjust",
+    "type": "ColourAdjustModule"
+  },
+  {
+    "category": "Effect",
+    "name": "Compose",
+    "type": "ComposeModule"
+  },
+  {
+    "category": "Effect",
+    "name": "EdgeFilter",
+    "type": "EdgeFilterModule"
+  },
+  {
+    "category": "Effect",
+    "name": "Fade",
+    "type": "FadeModule"
+  },
+  {
+    "category": "Effect",
+    "name": "FilmicGrain",
+    "type": "FilmicGrainModule"
+  },
+  {
+    "category": "Effect",
+    "name": "Kaleidoscope",
+    "type": "KaleidoscopeModule"
+  },
+  {
+    "category": "Effect",
+    "name": "Lut",
+    "type": "LutModule"
+  },
+  {
+    "category": "Effect",
+    "name": "MotionBlur",
+    "type": "MotionBlurModule"
+  },
+  {
+    "category": "Effect",
+    "name": "Noise",
+    "type": "NoiseModule"
+  },
+  {
+    "category": "Effect",
+    "name": "OCIO",
+    "type": "OCIOModule"
+  },
+  {
+    "category": "Effect",
+    "name": "PixelMap",
+    "type": "PixelMapModule"
+  },
+  {
+    "category": "Effect",
+    "name": "Pixelate",
+    "type": "PixelateModule"
+  },
+  {
+    "category": "Effect",
+    "name": "Scroll",
+    "type": "ScrollModule"
+  },
+  {
+    "category": "Effect",
+    "name": "SpinBitmap",
+    "type": "SpinBitmap"
+  },
+  {
+    "category": "Effect",
+    "name": "Trigger",
+    "type": "TriggerModule"
+  },
+  {
+    "category": "Effect",
+    "name": "UVLookup",
+    "type": "UVLookupModule"
+  },
+  {
+    "category": "Effect",
+    "name": "VideoTransition",
+    "type": "VariableVideoTransitionModule"
+  },
+  {
+    "category": "Generative",
+    "name": "Bugs",
+    "type": "BugsModule"
+  },
+  {
+    "category": "Generative",
+    "name": "Chevron",
+    "type": "ChevronModule"
+  },
+  {
+    "category": "Generative",
+    "name": "Colour",
+    "type": "ColourModule"
+  },
+  {
+    "category": "Generative",
+    "name": "Gradient",
+    "type": "GradientModule"
+  },
+  {
+    "category": "Generative",
+    "name": "Notch",
+    "type": "NotchModule"
+  },
+  {
+    "category": "Generative",
+    "name": "RGBColour",
+    "type": "RGBColourModule"
+  },
+  {
+    "category": "Generative",
+    "name": "Radar",
+    "type": "RadarModule"
+  },
+  {
+    "category": "Generative",
+    "name": "Readout",
+    "type": "TimecodeReadoutModule"
+  },
+  {
+    "category": "Generative",
+    "name": "Scan",
+    "type": "ScanModule"
+  },
+  {
+    "category": "Generative",
+    "name": "Strobe",
+    "type": "StrobeModule"
+  },
+  {
+    "category": "Generative",
+    "name": "Tennis",
+    "type": "PongModule"
+  },
+  {
+    "category": "Generative",
+    "name": "TestPattern",
+    "type": "TestPatternModule"
+  },
+  {
+    "category": "Generative",
+    "name": "Text",
+    "type": "TextModule"
+  },
+  {
+    "category": "Generative",
+    "name": "TrackingMarker",
+    "type": "TrackingMarkerModule"
+  },
+  {
+    "category": "Legacy",
+    "name": "Bitmap",
+    "type": "BitmapModule"
+  },
+  {
+    "category": "Legacy",
+    "name": "LegacyVideo",
+    "type": "VideoModule"
+  },
+  {
+    "category": "Legacy",
+    "name": "LegacyVideoTransition",
+    "type": "VideoTransitionModule"
+  },
+  {
+    "category": "Previsualization",
+    "name": "AnimateCameraControl",
+    "type": "AnimateCamera"
+  },
+  {
+    "category": "Previsualization",
+    "name": "AnimateCameraPreset",
+    "type": "AnimateCamera2"
+  },
+  {
+    "category": "Previsualization",
+    "name": "AnimateObjectPreset",
+    "type": "ScreenPositionModule"
+  },
+  {
+    "category": "Previsualization",
+    "name": "SceneAnimation",
+    "type": "SceneAnimationModule"
+  },
+  {
+    "category": "Previsualization",
+    "name": "TargetControl",
+    "type": "TargetModule"
+  },
+  {
+    "category": "Previsualization",
+    "name": "TargetPreset",
+    "type": "Target2Module"
+  }
+]
