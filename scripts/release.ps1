@@ -17,7 +17,13 @@ function Remove-CheckedDirectory([string]$Target, [string]$Parent) {
 
 if ((Test-Path -LiteralPath $destination) -and -not $Force) { throw "Release already exists: $destination. Use -Force to rebuild it." }
 # Verify before replacing a previous local release.
-& (Join-Path $PSScriptRoot 'build.ps1')
+Push-Location $projectRoot
+try {
+    & npm.cmd test
+    if ($LASTEXITCODE -ne 0) { throw 'Tests failed.' }
+    & npm.cmd run package
+    if ($LASTEXITCODE -ne 0) { throw 'Module packaging failed.' }
+} finally { Pop-Location }
 Remove-CheckedDirectory $staging (Join-Path $projectRoot '.tools/release-staging')
 New-Item -ItemType Directory -Force -Path $staging | Out-Null
 $source = Join-Path $staging 'source'
@@ -27,10 +33,9 @@ New-Item -ItemType Directory -Path $source | Out-Null
 $sourceFiles = @(
     'package.json','package-lock.json','build-config.cjs','.prettierrc.json','.gitignore','CONTRIBUTING.md',
     'README.md','LICENSE','CHANGELOG.md','KNOWN-LIMITATIONS.md','DISCLAIMER.md','SECURITY.md',
-    '1 - Asenna ymparisto.cmd','2 - Kaanna moduuli.cmd','3 - Aja testit.cmd','5 - Tee julkaisupaketti.cmd',
-    'scripts/setup.ps1','scripts/build.ps1','scripts/release.ps1','scripts/create-shortcuts.ps1',
+    'scripts/release.ps1',
     'scripts/build-page.cjs','scripts/verify-package.mjs','templates/button-style.json',
-    'docs/ARCHITECTURE.md','docs/TRACK-1-TESTS.md','docs/GITHUB-SETUP.md','docs/CODE-MAP.md'
+    'docs/ARCHITECTURE.md','docs/TRACK-1-TESTS.md','docs/GITHUB-SETUP.md','docs/BUILD.md'
 )
 foreach ($folder in @('src','test','companion')) {
     $sourceFiles += Get-ChildItem -LiteralPath (Join-Path $projectRoot $folder) -File -Recurse | ForEach-Object { $_.FullName.Substring($projectRoot.Length + 1) }
@@ -47,6 +52,7 @@ foreach ($relative in @("disguise-layer-control-$version.tgz",'D3-Stream-Deck-Pl
 }
 New-Item -ItemType Directory -Path (Join-Path $bundle 'docs') | Out-Null
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/ARCHITECTURE.md') -Destination (Join-Path $bundle 'docs')
+Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/BUILD.md') -Destination (Join-Path $bundle 'docs')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/TRACK-1-TESTS.md') -Destination (Join-Path $bundle 'docs')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/GITHUB-SETUP.md') -Destination (Join-Path $bundle 'docs')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'CONTRIBUTING.md') -Destination $bundle

@@ -5,6 +5,7 @@ pkg/
 *.log
 *.lnk
 releases/
+/D3-Stream-Deck-Plus.companionconfig
 
 # Private local evidence, media and Designer projects are never source assets.
 assets/*
