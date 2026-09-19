@@ -1,5 +1,6 @@
 'use strict'
 const fs = require('node:fs/promises')
+const { readMovWaveform } = require('./viewer-mov-waveform')
 const { readSmbAudio } = require('./smb-audio')
 
 // Streaming, bounded-memory WAV peak extraction. Disk reads yield between
@@ -114,7 +115,7 @@ class WaveformCache {
     )
       return { status: 'unavailable', reason: 'Audio source requires local file access' }
     const source = await this.client.execute('viewer_audio_source', { uid })
-    if (source.status !== 'ready') return { status: 'unavailable', reason: 'Audio source unavailable' }
+    if (source.status !== 'ready') return { status: 'unavailable', reason: source.reason || 'Audio source unavailable' }
     let entry = this.entries.get(owner)
     if (!entry || entry.uid !== uid || entry.revision !== source.revision) {
       this.invalidate(owner)
@@ -122,12 +123,18 @@ class WaveformCache {
       entry = { uid, controller: new AbortController(), revision: source.revision, status: 'loading' }
       this.entries.set(owner, entry)
       entry.pending = this.tail
-        .then(() => {
+        .then(async () => {
           this.controller.signal.throwIfAborted()
           const signal = entry.controller.signal
           signal.throwIfAborted()
-          if (this.options.resourceShareRoot) return readSmbAudio(this.options, source, signal, readWaveform)
-          return readWaveform(source.filename, signal)
+          const decode = source.container === 'mov' ? readMovWaveform : readWaveform
+          if (/^http:\/\/(127\.0\.0\.1|localhost):/.test(this.client.baseUrl || '')) {
+            try { return await decode(source.filename, signal) }
+            catch (error) {
+              if (!this.options.resourceShareRoot || !['ENOENT', 'EACCES', 'EPERM'].includes(error.code)) throw error
+            }
+          }
+          return readSmbAudio(this.options, source, signal, decode)
         })
         .then((data) => Object.assign(entry, data, { status: 'ready' }))
         .catch((error) =>

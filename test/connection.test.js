@@ -94,7 +94,7 @@ test('LiveUpdate subscribes with lossless hex UID, receives time and closes clea
     assert.equal(socket.sent[0].subscribe.configuration.updateFrequencyMs, 100)
     socket.message({
       subscriptions: [
-        { id: 0, propertyPath: 'object.player.tCurrent' },
+        { id: 0, propertyPath: 'object.track.beatToTime(object.player.tCurrent)' },
         { id: 1, propertyPath: 'str(object.track.uid)' },
       ],
     })

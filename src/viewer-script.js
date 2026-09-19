@@ -4,7 +4,7 @@
 // native state here: the browser is an observer, not another control surface.
 module.exports = `
 if p['command'] == 'viewer_snapshot':
-    seconds = float(manager.player.tCurrent)
+    seconds = float(track.beatToTime(manager.player.tCurrent))
     start = max(0.0, min(float(track.lengthInSec), float(p.get('viewStart', 0))))
     end = max(start, min(float(track.lengthInSec), float(p.get('viewEnd', track.lengthInSec))))
     result = {'trackUid': str(track.uid), 'trackName': str(track.path).replace('\\\\', '/').rsplit('/', 1)[-1],
@@ -29,7 +29,8 @@ if p['command'] == 'viewer_snapshot':
         return {'uid': str(r.uid), 'name': r.description or str(r.path).replace('\\\\', '/').rsplit('/', 1)[-1], 'thumbnail': visual,
                 'audio': has_audio}
     result['quantized'] = bool(track.quant)
-    result['trackAudio'] = viewer_resource(track.audioTrack(track.timeToBeat(seconds)), False) if result['quantized'] else None
+    result['beat'] = float(track.timeToBeat(seconds))
+    result['trackAudio'] = viewer_resource(track.audioTrack(track.timeToBeat(seconds)), False)
     result['arrows'] = []
     ordered_layers = []
     def visit_layers(container, parent=None, depth=0):
@@ -52,8 +53,17 @@ if p['command'] == 'viewer_snapshot':
         row = {'uid': str(layer.uid), 'name': layer.name, 'moduleType': layer.module._classInfo.name,
                'parent': parent, 'depth': depth,
                'start': float(track.beatToTime(layer.tStart)), 'end': float(track.beatToTime(layer.tEnd)), 'fields': [], 'resources': []}
+        row['playback'] = {}
         for field in layer.fields:
             seq = field.sequence
+            if field.name in ('mode', 'at end point') and isinstance(seq, FloatSequence):
+                try:
+                    value = float(field.eval(track.timeToBeat(seconds), 16))
+                    choices = metadata(layer, field).get('choices', [])
+                    label = next((c['label'] for c in choices if c['value'] == value), None)
+                    if label: row['playback']['mode' if field.name == 'mode' else 'endpoint'] = label
+                except pyerrors.Exception:
+                    pass
             try:
                 if isinstance(seq, ResourceSequence):
                     visual = field.typeName in ('VideoClip::RP', 'DxTexture::RP')
@@ -94,13 +104,13 @@ if p['command'] == 'viewer_snapshot':
     width = max(320, min(3840, float(p.get('width', 1200))))
     if result['quantized']:
         b0, b1 = track.timeToBeat(start), track.timeToBeat(end)
-        choices = [0.0625, 0.125, 0.25, 0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
+        choices = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
         step = next((s for s in choices if s*width/max(0.001,b1-b0) >= 18), choices[-1])
         major = max(1, int(math.ceil(110.0/(step*width/max(0.001,b1-b0)))))
         first = int(math.ceil(b0/step))
         for i in range(first, min(first+1000, int(math.floor(b1/step))+1)):
             at = float(track.beatToTime(i*step))
-            result['grid'].append({'time': at, 'major': i % major == 0,
+            result['grid'].append({'time': at, 'beat': i*step, 'major': i % major == 0,
                                   'label': str(manager.beatToTimecode(track.timeToBeat(at)))})
     else:
         choices = sorted(set([1.0/fps(), 2.0/fps(), 5.0/fps(), 10.0/fps(), 1,2,5,10,15,30,60,120,300,600,1800,3600]))
@@ -111,6 +121,15 @@ if p['command'] == 'viewer_snapshot':
             at = i*step
             result['grid'].append({'time': at,'major': i % major == 0,
                                   'label': str(manager.beatToTimecode(track.timeToBeat(at)))})
+    result['beatGrid'] = []
+    if result['trackAudio']:
+        b0, b1 = track.timeToBeat(start), track.timeToBeat(end)
+        steps = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
+        step = next((s for s in steps if s*width/max(0.001,b1-b0) >= 24), steps[-1])
+        major = max(1, int(math.ceil(72.0/(step*width/max(0.001,b1-b0)))))
+        first = int(math.ceil(b0/step))
+        for i in range(first, min(first+1000, int(math.floor(b1/step))+1)):
+            result['beatGrid'].append({'time': float(track.beatToTime(i*step)), 'beat': i*step, 'major': i % major == 0})
     for i in range(7):
         at = start + (end-start)*i/6.0
         result['ticks'].append({'time': at, 'label': str(manager.beatToTimecode(track.timeToBeat(at)))})

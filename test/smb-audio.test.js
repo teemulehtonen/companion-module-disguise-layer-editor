@@ -58,3 +58,15 @@ test('SMB only reads, uses credentials and removes temporary audio after decodin
   assert.equal(closed, true)
   await assert.rejects(fs.stat(tmp))
 })
+
+test('Windows without explicit credentials reads the validated UNC path using its OS session', async () => {
+  const source = { projectDirectory: 'D:\\projects\\show', filename: 'D:\\projects\\show\\audio.wav' }
+  class NoClient { constructor() { throw Error('Must use Windows session') } }
+  let actual
+  await readSmbAudio({ resourceShareRoot: '\\\\host\\projects' }, source,
+    new AbortController().signal, async file => { actual = file }, NoClient, 'win32')
+  assert.equal(actual, '\\\\host\\projects\\show\\audio.wav')
+  const controller = new AbortController(); controller.abort()
+  await assert.rejects(readSmbAudio({ resourceShareRoot: '\\\\host\\projects' }, source,
+    controller.signal, async () => { throw Error('Must not read after cancellation') }, NoClient, 'win32'), {name:'AbortError'})
+})

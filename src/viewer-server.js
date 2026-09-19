@@ -68,6 +68,7 @@ class ViewerServer {
       context.trackUid,
       context.focusUid,
       context.contentRevision,
+      context.tempoKey,
       start,
       end,
       width,
@@ -131,6 +132,7 @@ class ViewerServer {
     return {
       ...this.cache,
       contentRevision: context.contentRevision,
+      tempoKey: context.tempoKey,
       showAllParameters: this.options.showAll === true,
       seekEnabled: typeof this.options.seek === 'function',
       selectionEnabled: typeof this.options.select === 'function',
@@ -181,6 +183,29 @@ class ViewerServer {
               this.cache?.trackUid === current.trackUid ? alignmentGuides(this.cache, current) : [],
           }),
         )
+      }
+      // Diagnostic uses saved connection settings only: no arbitrary host or path.
+      if (req.method === 'POST' && url.pathname === '/api/resources/test') {
+        if (req.headers['x-viewer-token'] !== this.selectionToken) return send(403, 'text/plain', 'Invalid request')
+        if (this.resourceTestPending) return send(409, 'text/plain', 'Test already running')
+        this.resourceTestPending = true
+        const { DirectSmbClient } = require('./smb-client')
+        const { smbTarget } = require('./smb-audio')
+        let client, stage = 'configuration'
+        try {
+          const target = smbTarget(this.options.resourceShareRoot, {projectDirectory:'C:\\projects\\show',filename:'C:\\projects\\show\\probe'})
+          client = new DirectSmbClient(target.host,{connectTimeout:5000,requestTimeout:5000})
+          stage = 'authentication'
+          const session = await client.authenticate({username:this.options.resourceUsername || '',password:this.options.resourcePassword || '',domain:this.options.resourceDomain || ''})
+          stage = 'share'
+          await session.connectTree(target.share)
+          return send(200,'application/json',JSON.stringify({ok:true,stage:'share',fileRead:false}))
+        } catch(error) {
+          return send(200,'application/json',JSON.stringify({ok:false,stage,code:error.statusName || error.code || error.name,fileRead:false}))
+        } finally {
+          await client?.close().catch(()=>{})
+          this.resourceTestPending = false
+        }
       }
       if (req.method === 'POST' && url.pathname === '/api/waveform/refresh') {
         if (

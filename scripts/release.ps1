@@ -35,7 +35,7 @@ $sourceFiles = @(
     'AGENTS.md','README.md','LICENSE','CHANGELOG.md','KNOWN-LIMITATIONS.md','DISCLAIMER.md','SECURITY.md',
     'scripts/release.ps1',
     'scripts/build-page.cjs','scripts/verify-package.mjs','templates/button-style.json',
-    'docs/PROJECT-HANDOFF.md','docs/VIEWER-DEVELOPMENT.md','docs/TIMELINE-VIEWER.md','docs/VIEWER-TEST-REPORT.md','docs/ARCHITECTURE.md','docs/DEVELOPER-MANUAL.md','docs/TRACK-1-TESTS.md','docs/TRACK-6-TESTS.md','docs/GITHUB-SETUP.md','docs/BUILD.md'
+    'docs/RASPBERRY-PI-SMB.md','docs/PROJECT-HANDOFF.md','docs/VIEWER-DEVELOPMENT.md','docs/TIMELINE-VIEWER.md','docs/VIEWER-TEST-REPORT.md','docs/ARCHITECTURE.md','docs/DEVELOPER-MANUAL.md','docs/TRACK-1-TESTS.md','docs/TRACK-6-TESTS.md','docs/GITHUB-SETUP.md','docs/BUILD.md'
 )
 foreach ($folder in @('src','test','companion')) {
     $sourceFiles += Get-ChildItem -LiteralPath (Join-Path $projectRoot $folder) -File -Recurse | ForEach-Object { $_.FullName.Substring($projectRoot.Length + 1) }
@@ -53,6 +53,7 @@ foreach ($relative in @("disguise-layer-control-$version.tgz",'D3-Stream-Deck-Pl
 New-Item -ItemType Directory -Path (Join-Path $bundle 'docs') | Out-Null
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/ARCHITECTURE.md') -Destination (Join-Path $bundle 'docs')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/DEVELOPER-MANUAL.md') -Destination (Join-Path $bundle 'docs')
+Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/RASPBERRY-PI-SMB.md') -Destination (Join-Path $bundle 'docs')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/BUILD.md') -Destination (Join-Path $bundle 'docs')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/TRACK-1-TESTS.md') -Destination (Join-Path $bundle 'docs')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/TRACK-6-TESTS.md') -Destination (Join-Path $bundle 'docs')

@@ -50,6 +50,8 @@ class Editor {
     this.precision = 'coarse'
     this.busy = false
     this.timeStep = 'frame'
+    this.beatStep = 1
+    this.layerBeatStep = 0.25
     this.moveKey = null
     this.layerEdit = ''
     this.selectedKeyTime = null
@@ -354,7 +356,11 @@ class Editor {
     const decimals = { coarse: 1, fine: 2, ultra: 3 }[this.precision] ?? 1
     return Number(this.value.toFixed(decimals)).toFixed(decimals)
   }
+  get beatMode() { return this.snapshot?.beatMode === true }
+  get usesBeatSteps() { return this.beatMode }
+  get timeStepAmount() { return this.usesBeatSteps ? (this.layerEdit ? this.layerBeatStep : this.moveKey ? (this.keyBeatStep ?? 1/128) : this.beatStep) : TIME_STEP_SECONDS[this.timeStep] }
   get timeStepLabel() {
+    if (this.usesBeatSteps) return this.timeStepAmount < 1 ? '1/' + Math.round(1 / this.timeStepAmount) + ' BEAT' : this.timeStepAmount + (this.timeStepAmount === 1 ? ' BEAT' : ' BEATS')
     return { frame: '1 FRAME', second: '1 SEC', two: '2 SEC', five: '5 SEC', ten: '10 SEC', minute: '1 MIN' }[
       this.timeStep
     ]
@@ -363,6 +369,16 @@ class Editor {
     if (this.layerEdit) {
       this.layerEdit = ''
       this.followTime(this.time)
+      return
+    }
+    if (this.usesBeatSteps && this.moveKey) {
+      const steps = [1/128, 1/64, 1/32, 1/16, 1/8, 1/4, 1/2, 1, 4, 8]
+      this.keyBeatStep = steps[(steps.indexOf(this.keyBeatStep ?? 1/128) + 1) % steps.length]
+      return
+    }
+    if (this.usesBeatSteps) {
+      const steps = [0.25, 1, 2, 4, 8, 16, 32]
+      this.beatStep = steps[(steps.indexOf(this.beatStep) + 1) % steps.length]
       return
     }
     const steps = TIME_STEPS
@@ -520,14 +536,16 @@ class Editor {
     const cursor = this.pendingJump && Date.now() < this.pendingJump.until ? this.pendingJump.time : undefined
     this.navigationTime = null
     this.pendingJump = null
-    const frames = !stepOverride && this.timeStep === 'frame'
-    const delta = number(direction) * (stepOverride || TIME_STEP_SECONDS[this.timeStep])
+    const beats = !stepOverride && this.usesBeatSteps
+    const frames = !beats && !stepOverride && this.timeStep === 'frame'
+    const delta = number(direction) * (stepOverride || this.timeStepAmount)
     if (this.layerEdit) {
       await this.remote(async () => {
         const result = await this.client.execute('layer_edit', {
           ...this.liveArgs(),
           delta,
           frames,
+          beats,
           cursor,
           mode: this.layerEdit,
           expectedStart: this.layer.start,
@@ -545,6 +563,7 @@ class Editor {
         ...this.liveArgs(),
         delta,
         frames,
+        beats,
         cursor,
         sourceTime: this.moveKey?.time,
         expectedKey: this.moveKey,
@@ -683,6 +702,11 @@ class Editor {
     }
   }
   cycleLayerStep() {
+    if (this.beatMode) {
+      const steps = [0.25, 1, 4, 8, 16, 32]
+      this.layerBeatStep = steps[(steps.indexOf(this.layerBeatStep) + 1) % steps.length]
+      return
+    }
     const steps = TIME_STEPS
     this.timeStep = steps[(steps.indexOf(this.timeStep) + 1) % steps.length]
   }
@@ -697,8 +721,9 @@ class Editor {
         ...this.liveArgs(),
         mode,
         cursor,
-        delta: direction * TIME_STEP_SECONDS[this.timeStep],
-        frames: this.timeStep === 'frame',
+        delta: direction * (this.beatMode ? this.layerBeatStep : TIME_STEP_SECONDS[this.timeStep]),
+        beats: this.beatMode,
+        frames: !this.beatMode && this.timeStep === 'frame',
         expectedStart: this.layer.start,
         expectedEnd: this.layer.end,
       })

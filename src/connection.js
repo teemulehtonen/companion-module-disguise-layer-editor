@@ -155,11 +155,11 @@ class Connection {
       ? `[l for l in object.track.getLeafLayers(Module) if str(l.uid) == ${JSON.stringify(fieldTarget.layerUid)}][0].findSequence(${JSON.stringify(fieldTarget.name)})`
       : null
     this.valueProperty = fieldPath
-      ? `{'sequenced': not ${fieldPath}.disableSequencing, 'value': ${fieldPath}.eval(object.track.timeToBeat(object.player.tCurrent), 16), 'keys': [{'time': object.track.beatToTime(${fieldPath}.sequence.t(i)), 'value': ${fieldPath}.sequence.key(i).v, 'interpolation': ${fieldPath}.sequence.key(i).interpolation} for i in range(${fieldPath}.sequence.nKeys())]}`
+      ? `{'sequenced': not ${fieldPath}.disableSequencing, 'value': ${fieldPath}.eval(object.player.tCurrent, 16), 'keys': [{'time': object.track.beatToTime(${fieldPath}.sequence.t(i)), 'value': ${fieldPath}.sequence.key(i).v, 'interpolation': ${fieldPath}.sequence.key(i).interpolation} for i in range(${fieldPath}.sequence.nKeys())]}`
       : null
     // Read time and extents together: a seek must not use bounds cached before a Designer trim/move.
     this.timelineProperty =
-      "{'time': object.player.tCurrent, 'timecodeSample': {'seconds': object.player.tCurrent, 'label': str(object.beatToTimecode(object.track.timeToBeat(object.player.tCurrent)))}, 'playing': bool(object.player.playing), 'trackUid': str(object.track.uid), 'selectedLayerUids': [str(l.uid) for l in guisystem.selectedLayers if isinstance(l, Layer)], 'layers': [{'uid': str(l.uid), 'start': object.track.beatToTime(l.tStart), 'end': object.track.beatToTime(l.tEnd)} for l in object.track.getLeafLayers(Module)]}"
+      "{'time': object.track.beatToTime(object.player.tCurrent), 'timecodeSample': {'seconds': object.track.beatToTime(object.player.tCurrent), 'label': str(object.beatToTimecode(object.player.tCurrent))}, 'playing': bool(object.player.playing), 'trackUid': str(object.track.uid), 'selectedLayerUids': [str(l.uid) for l in guisystem.selectedLayers if isinstance(l, Layer)], 'layers': [{'uid': str(l.uid), 'start': object.track.beatToTime(l.tStart), 'end': object.track.beatToTime(l.tEnd)} for l in object.track.getLeafLayers(Module)]}"
     this.clockProperty =
       "{'fps': object.customFps().value_or(object.beatToTimecode(0).fps()), 'mode': {Timecode.SMPTE23976:'23.976', Timecode.SMPTE24:'24', Timecode.SMPTE25:'25', Timecode.SMPTE2997:'29.97 NDF', Timecode.SMPTE2997DF:'29.97 DF', Timecode.SMPTE30:'30'}.get(object.smpteClockType(), 'Other'), 'custom': object.customFps().value_or(0) > 0}"
     const socket = (this.socket = new this.WebSocket(
@@ -230,7 +230,7 @@ class Connection {
             this.liveError = ''
             clearTimeout(this.socketTimer)
           }
-          if (property === 'object.player.tCurrent' && Number.isFinite(change.value)) {
+          if (property === 'object.track.beatToTime(object.player.tCurrent)' && Number.isFinite(change.value)) {
             this.time = change.value
             this.live = true
             this.liveError = ''

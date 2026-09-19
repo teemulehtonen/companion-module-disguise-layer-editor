@@ -1,3 +1,15 @@
+## 0.1.0-beta.88
+
+- Correct native beat/second conversion in Companion, live feedback and viewer timing.
+- Add fractional beat keyframe movement down to 1/128 beat and separate layer-edit steps.
+- Add direct SMB3 network waveform reads on Raspberry Pi and Windows session-based UNC reads.
+- Decode supported PCM audio embedded in single-fragment MOV media.
+- Keep waveform source duration during zoom. Pause clips to layer OUT; Loop and Ping-pong show the full source.
+- Show native NORMAL/LOCKED labels and endpoint icons on timeline layers; simplify AUDIO mode labels.
+- Synchronize playhead animation across fixed header rows and layers.
+- Add beat/bar waveform grids, compact waveform height controls and zero-based beat labels.
+- Hide keyframe markers outside layer extents and correct short-layer edge placement.
+
 ## 0.1.0-beta.52
 
 - Fixed timeline headers, section shading and clickable annotation markers.

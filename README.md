@@ -6,7 +6,7 @@ Disguise layer, keyframe and resource control for Bitfocus Companion and Stream 
 
 ## Install
 
-**Downloads (beta.52):** [Companion module](../../releases/download/v0.1.0-beta.52/disguise-layer-control-0.1.0-beta.52.tgz) · [Companion page](../../releases/download/v0.1.0-beta.52/D3-Stream-Deck-Plus.companionconfig)
+**Downloads (beta.88):** [Companion module](../../releases/download/v0.1.0-beta.88/disguise-layer-control-0.1.0-beta.88.tgz) · [Companion page](../../releases/download/v0.1.0-beta.88/D3-Stream-Deck-Plus.companionconfig)
 
 Tested with Designer 32.4.17 and Companion 5.0.5.
 
@@ -26,6 +26,7 @@ Tested with Designer 32.4.17 and Companion 5.0.5.
 
 - **SELECT KEYFRAME** locks the nearest in-range key; press again to unlock. TIME step changes keep it locked. **PREV/NEXT KEYFRAME** follow the selected parameter and stop at IN / OUT minus one frame.
 - **DELETE KEYFRAME** removes one key. With a constant, **DEFAULT** restores its native default. Hold either for one second to open the delete menu; red indicates ready. Bulk operations require confirmation. **DEFAULT ALL PARAMETERS** resets all supported parameters on the selected layer, including animation outside IN/OUT.
+- On beat-based tracks, SELECT KEYFRAME timing steps are 1/128, 1/64, 1/32, 1/16, 1/8, 1/4, 1/2, 1, 4 and 8 beats. Layer-edit steps are 1/4, 1, 4, 8, 16 and 32 beats. Displays remain timecode.
 - **LAYER EDIT** assigns IN / POSITION (centre) / OUT / FIT to the encoders. Press LAYER EDIT again to return.
 - **RESOURCES** assigns SOURCE / FOLDER / RESOURCE / BACK. Press SOURCE to switch **REPLACE / KEYFRAME** for animatable resources. REPLACE edits the current resource; KEYFRAME schedules the preview at the playhead, preserving the earlier value. Press RESOURCE to apply and return; thumbnails apply directly in the selected mode. Reopening starts in REPLACE. BACK cancels browsing.
 - New numeric keyframes default to **SMOOTH**; existing key types are preserved. Resource keyframes are discrete switches, not crossfades.
@@ -34,6 +35,8 @@ Tested with Designer 32.4.17 and Companion 5.0.5.
 ## Timeline viewer
 
 Enable **ENABLE TIMELINE VIEWER** in module settings and open `http://127.0.0.1:8765`. Select layers/parameters, seek from timeline points, and inspect native curves and resource thumbnails. [Viewer guide and limitations](docs/TIMELINE-VIEWER.md).
+
+For network audio on Raspberry Pi, enter the SMB share and credentials in module settings. No SSH or OS mount is needed. [Network audio setup](docs/RASPBERRY-PI-SMB.md).
 
 ## Build
 

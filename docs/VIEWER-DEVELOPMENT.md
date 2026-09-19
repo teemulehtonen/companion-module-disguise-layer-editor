@@ -10,8 +10,8 @@
 - viewer-script.js: native Python snapshot, hierarchy, sections, metadata, curves and frame/beat grids; inserted in designer-script.js helper scope.
 - viewer-page.js: bundled browser function plus HTML/CSS. The function is serialized: external lexical helpers are not automatically available in the browser.
 - viewer-model.js: redraw hash, alignment and hierarchy helpers. Include new geometry in renderRevision.
-- viewer-waveform.js / viewer-waveform-script.js: native resource lookup, bounded local WAV decoding and cache ownership by layer UID.
-- smb-audio.js: experimental read-only SMB downloads and temporary-file cleanup; passwords use Companion secret storage.
+- viewer-waveform.js / viewer-waveform-script.js: native resource lookup, bounded local WAV / PCM MOV decoding and cache ownership by layer UID.
+- smb-audio.js / smb-client.js: direct read-only SMB3 downloads and temporary-file cleanup; passwords use Companion secret storage.
 - scripts/build-page.cjs: clean generated Companion page, never a personal configuration export.
 
 ## Update model
@@ -27,3 +27,11 @@ All markers and curves use the same time-to-x transform. Sticky headers have sep
 Use textContent for project strings. Same-origin/token checks protect commands, but LAN access has no user authentication; keep loopback as default. Never accept arbitrary Python, paths or resource IDs from the browser. Filesystem permission is necessary for local audio reads.
 
 Tests are in test/viewer-*.test.js, test/parameter-order.test.js and test/smb-audio.test.js. UI changes need focused inspection; protocol/timing changes need regression tests. Run npm test and package smoke checks before publication. Record limitations honestly. Private local scripts are not required to build.
+
+## Timing and playback metadata
+
+Native player.tCurrent is beats: convert it through track.beatToTime before publishing seconds. Float/resource field evaluation takes beats directly. TransportCommand.makeJumpToTime takes seconds. Keep HTTP, LiveUpdate and timecode samples consistent. Test tempo changes away from 60 BPM.
+
+viewer-script.js resolves mode / at end point choices from metadata even for collapsed layers. Never share numeric enum mappings between audio and video. viewer-page.js uses a single pixel position and transition for all playhead segments. Waveform SVG width derives from source duration; clipping depends on endpoint mode.
+
+The token-protected POST /api/resources/test endpoint tests authentication and connecting the configured share only; it accepts no target paths and never reads media. STATUS_SUCCESS on a failed protocol test is a known misleading diagnostic when the dependency reports status zero. Improve error classification before relying on this endpoint for user-facing troubleshooting.

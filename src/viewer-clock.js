@@ -2,7 +2,7 @@
 
 const { paths } = require('./designer-api')
 const property =
-  '[str(object.track.uid), object.player.tCurrent, str(object.beatToTimecode(object.track.timeToBeat(object.player.tCurrent)))]'
+  '[str(object.track.uid), object.track.beatToTime(object.player.tCurrent), str(object.beatToTimecode(object.player.tCurrent)), object.player.tCurrent, bool(object.track.quant), [object.track.bpmAt(object.player.tCurrent), object.track.beatToTime(1), object.track.beatToTime(16), object.track.lengthInBeats, object.track.lengthInSec]]'
 
 // A small, atomic LiveUpdate subscription for display only. Editing continues
 // to use the coherent HTTP snapshot (time, layer bounds and selected field).
@@ -24,7 +24,7 @@ class ViewerClock {
     } else this.stop()
     // A stalled socket must never override fresh HTTP feedback indefinitely.
     return this.sample?.trackUid === context.trackUid && Date.now() - this.received < 2000
-      ? { ...context, time: this.sample.time, timecode: this.sample.timecode }
+      ? { ...context, time: this.sample.time, timecode: this.sample.timecode, ...(Number.isFinite(this.sample.beat) ? { beat: this.sample.beat, quantized: this.sample.quantized, tempoKey: this.sample.tempoKey } : {}) }
       : context
   }
   connect(uid) {
@@ -72,6 +72,9 @@ class ViewerClock {
             return lost()
           this.sample = {
             trackUid: value[0],
+            beat: value[3],
+            tempoKey: JSON.stringify(value[5] || null),
+            quantized: value[4] === true,
             time: value[1],
             timecode: value[2].replace(/[.;](\d+)$/, ':$1'),
           }

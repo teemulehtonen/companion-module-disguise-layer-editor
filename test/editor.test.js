@@ -362,3 +362,44 @@ test('adding a key to a native constant-only parameter is an inert action', asyn
   await e.writeLive('key_set')
   assert.deepEqual(e.field, before)
 })
+
+test('beat timing steps replace frame/second units and send beat deltas', async () => {
+  const e = await ready()
+  e.snapshot.beatMode = true
+  const labels = []
+  for (let i=0;i<7;i++) { labels.push(e.timeStepLabel); e.cycleTimeStep() }
+  assert.deepEqual(labels,['1 BEAT','2 BEATS','4 BEATS','8 BEATS','16 BEATS','32 BEATS','1/4 BEAT'])
+  let request
+  const original=e.client.execute.bind(e.client)
+  e.client.execute=async (command,args)=>{ if(command==='nudge_time'){request=args;return {time:e.time}}return original(command,args) }
+  await e.adjustLiveTime(1)
+  assert.equal(request.beats,true)
+  assert.equal(request.frames,false)
+  assert.equal(request.delta,1)
+  e.snapshot.beatMode=false
+  assert.equal(e.timeStepLabel,'1 FRAME')
+})
+
+test('keyframe movement cycles fractional beats without unlocking selection', async () => {
+  const e = await ready()
+  e.snapshot.beatMode = true
+  e.beatStep = 0.25
+  assert.equal(e.timeStepLabel, '1/4 BEAT')
+  e.moveKey = {time: 0, value: 0}
+  assert.equal(e.usesBeatSteps, true)
+  const labels = []
+  for (let i=0; i<10; i++) { labels.push(e.timeStepLabel); e.cycleTimeStep() }
+  assert.deepEqual(labels, ['1/128 BEAT','1/64 BEAT','1/32 BEAT','1/16 BEAT','1/8 BEAT','1/4 BEAT','1/2 BEAT','1 BEAT','4 BEATS','8 BEATS'])
+  assert.ok(e.moveKey)
+  assert.equal(e.timeStepAmount, 1/128)
+  e.moveKey = null
+  e.layerEdit = 'in'
+  assert.equal(e.timeStepLabel, '1/4 BEAT')
+  assert.equal(e.timeStepAmount, 0.25)
+})
+
+test('layer encoder presses cycle only the requested beat steps', async () => {
+ const e=await ready();e.snapshot.beatMode=true;e.layerEdit='edit';const seen=[];
+ for(let i=0;i<6;i++){seen.push(e.timeStepLabel);e.cycleLayerStep()}
+ assert.deepEqual(seen,['1/4 BEAT','1 BEAT','4 BEATS','8 BEATS','16 BEATS','32 BEATS']);assert.equal(e.timeStepLabel,'1/4 BEAT');
+})
