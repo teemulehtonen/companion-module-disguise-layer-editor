@@ -31,3 +31,11 @@ The numeric/resource tests ran before the final two fixes; keyframe tests were r
 The field inventory found 31 unsupported string settings. Dynamic Notch, RenderStream and Open fields depend on loaded content; absent resources and external device configurations were not manufactured for this test. Resource checks validate typed references, not every possible resource or its internal settings. Mapping, palette and audio-output references were included. See [known limitations](../KNOWN-LIMITATIONS.md) and the earlier [Track 1 tests](TRACK-1-TESTS.md) for separate resource-paging and overlap coverage.
 
 Local project files, raw logs, identifiers, media, screenshots and machine/network information are excluded from the published source and packages.
+
+## Follow-up: 0.1.0-beta.16
+
+A focused live check through Companion verified that new numeric keys use SMOOTH and rewriting an existing key preserves its selected interpolation. The temporary numeric test key was removed afterwards.
+
+Resource KEYFRAME mode was tested for Video/video, Audio/track, Video/palette, Video/mapping and Audio/output. Each case set an initial resource through REPLACE, inserted a different resource at a later time through KEYFRAME, and independently checked both native evaluation and resource reads before and after the switch. All five cases passed. Test resource sequences were reset afterwards and the original track/playhead restored.
+
+The update passed 95 offline tests and the packaged-module smoke test. This focused follow-up does not repeat or extend the rendering/hardware coverage of the original matrix.

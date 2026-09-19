@@ -11,7 +11,7 @@ npm run package
 
 Outputs:
 
-- `disguise-layer-control-0.1.0-beta.14.tgz` — import under Companion → Modules.
+- `disguise-layer-control-0.1.0-beta.16.tgz` — import under Companion → Modules.
 - `D3-Stream-Deck-Plus.companionconfig` — import as a page and map its connection.
 - `pkg/` — intermediate module bundle.
 

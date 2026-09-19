@@ -88,8 +88,8 @@ function actions(instance) {
     key_set: action('Add keyframe at playhead', [], (e) => e.writeLive('key_set')),
     value_press: action('Add numeric keyframe / confirm media and return', [], (e) => e.pressValue()),
     layer_edit: action('Open layer timing editor / return', [], (e) => e.toggleLayerEditor()),
-    layer_press: action('Layer timing step', [], (e) =>
-      e.layerEdit === 'edit' ? e.cycleLayerStep() : undefined,
+    layer_press: action('Layer timing step / resource write mode', [], (e) =>
+      e.layerEdit === 'edit' ? e.cycleLayerStep() : e.mediaMode ? e.toggleMediaKeyframe() : undefined,
     ),
     constant_set: action('Apply constant value (unsequenced parameter only)', [], (e) =>
       e.write('constant_set'),

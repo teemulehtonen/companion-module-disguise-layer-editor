@@ -55,6 +55,8 @@ class Editor {
     this.navigationTime = null
     this.pendingJump = null
     this.mediaMode = false
+    this.mediaKeyframe = false
+    this.mediaCanAnimate = false
     this.mediaFieldIndex = 0
     this.mediaAll = []
     this.mediaFolder = ''
@@ -666,6 +668,7 @@ class Editor {
     this.layerEdit = ''
     if (!this.mediaMode && !this.layer?.mediaFields?.length) return
     this.mediaMode = !this.mediaMode
+    this.mediaKeyframe = false
     this.moveKey = null
     if (this.mediaMode) await this.loadMedia()
     else this.selectDefaultParameter()
@@ -680,6 +683,8 @@ class Editor {
         ...this.liveArgs(),
         field: this.mediaField.name,
       })
+      this.mediaCanAnimate = result.canAnimate === true
+      if (!this.mediaCanAnimate) this.mediaKeyframe = false
       this.mediaAll = result.media.map((m) => ({
         ...m,
         folder: m.folder || m.path.split('/').slice(2, -1).join('/') || '/',
@@ -695,6 +700,7 @@ class Editor {
     })
   }
   async selectMediaField(direction) {
+    this.mediaKeyframe = false
     const count = this.layer?.mediaFields?.length || 0
     this.mediaFieldIndex = count ? (this.mediaFieldIndex + direction + count) % count : 0
     await this.loadMedia()
@@ -711,7 +717,7 @@ class Editor {
     const item = this.mediaItems[index]
     if (!item || !this.mediaField) return
     await this.remote(async () => {
-      await this.client.execute('media_set', {
+      await this.client.execute(this.mediaKeyframe ? 'media_key_set' : 'media_set', {
         ...this.liveArgs(),
         field: this.mediaField.name,
         mediaUid: item.uid,
@@ -724,6 +730,10 @@ class Editor {
     if (!this.mediaItems.length) return
     this.mediaIndex = Math.max(0, Math.min(this.mediaItems.length - 1, this.mediaIndex + direction))
     this.mediaPage = Math.floor(this.mediaIndex / 8)
+  }
+  toggleMediaKeyframe() {
+    this.local()
+    if (this.mediaMode && this.mediaCanAnimate) this.mediaKeyframe = !this.mediaKeyframe
   }
   async pressPad(slot) {
     if (!Number.isInteger(slot) || slot < 0 || slot > 7) throw new Error('Invalid button')

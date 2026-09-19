@@ -6,12 +6,12 @@ Disguise layer, keyframe and resource control for Bitfocus Companion and Stream 
 
 ## Install
 
-**Downloads (0.1.beta):** [Companion module](../../releases/download/v0.1.0-beta.14/disguise-layer-control-0.1.0-beta.14.tgz) · [Companion page](../../releases/download/v0.1.0-beta.14/D3-Stream-Deck-Plus.companionconfig)
+**Downloads (0.1.beta):** [Companion module](../../releases/download/v0.1.0-beta.16/disguise-layer-control-0.1.0-beta.16.tgz) · [Companion page](../../releases/download/v0.1.0-beta.16/D3-Stream-Deck-Plus.companionconfig)
 
 Tested with Designer 32.4.17 and Companion 5.0.5.
 
 1. Enable Designer's HTTP/Python API on a trusted network.
-2. In Companion, import `disguise-layer-control-0.1.0-beta.14.tgz` under **Modules**. Add **Disguise Layer Editor** and enter the Designer host and port (default 80).
+2. In Companion, import `disguise-layer-control-0.1.0-beta.16.tgz` under **Modules**. Add **Disguise Layer Editor** and enter the Designer host and port (default 80).
 3. Import `D3-Stream-Deck-Plus.companionconfig`, choose a destination page and link the connection. Import replaces that page; export it first if needed.
 4. Assign Stream Deck + to that page. **HTTP + SYNC** indicates automatic feedback.
 
@@ -27,7 +27,8 @@ Tested with Designer 32.4.17 and Companion 5.0.5.
 - **SELECT KEYFRAME** locks the nearest in-range key; press again to unlock. TIME step changes keep it locked. **PREV/NEXT KEYFRAME** follow the selected parameter and stop at IN / OUT minus one frame.
 - **DELETE KEYFRAME** removes one key. With a constant, **DEFAULT** restores its native default. Hold either for one second to open the delete menu; red indicates ready. Bulk operations require confirmation. **DEFAULT ALL PARAMETERS** resets all supported parameters on the selected layer, including animation outside IN/OUT.
 - **LAYER EDIT** assigns IN / POSITION (centre) / OUT / FIT to the encoders. Press LAYER EDIT again to return.
-- **RESOURCES** assigns SOURCE / FOLDER / RESOURCE / BACK. Turn to browse; press RESOURCE to apply and return. Thumbnails select directly. BACK cancels browsing.
+- **RESOURCES** assigns SOURCE / FOLDER / RESOURCE / BACK. Press SOURCE to switch **REPLACE / KEYFRAME** for animatable resources. REPLACE edits the current resource; KEYFRAME schedules the preview at the playhead, preserving the earlier value. Press RESOURCE to apply and return; thumbnails apply directly in the selected mode. Reopening starts in REPLACE. BACK cancels browsing.
+- New numeric keyframes default to **SMOOTH**; existing key types are preserved. Resource keyframes are discrete switches, not crossfades.
 - **PLAY SECTION / STOP** controls playback. Float increments are 0.1 / 0.01 / 0.001. Absolute times use Designer's native timecode.
 
 ## Build

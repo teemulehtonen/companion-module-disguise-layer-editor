@@ -532,15 +532,19 @@ class DisguiseLayerControl extends InstanceBase {
     if (mediaMode) {
       padVars.dial_title_0 = 'SOURCE ' + (e.mediaFieldIndex + 1) + '/' + (e.layer?.mediaFields?.length || 0)
       padVars.dial_value_0 = readable(e.mediaField?.label || 'No resources')
-      padVars.dial_info_0 = e.layer?.name || ''
-      padVars.dial_title_2 = 'RESOURCES'
+      padVars.dial_info_0 = e.mediaKeyframe
+        ? 'MODE: KEYFRAME'
+        : e.mediaCanAnimate
+          ? 'MODE: REPLACE'
+          : 'CONSTANT ONLY'
+      padVars.dial_title_2 = e.mediaKeyframe ? 'KEYFRAME' : 'RESOURCES'
       padVars.dial_value_2 = readable(
         e.currentMedia?.name || (e.mediaItems.length ? 'Select resource' : 'No resources'),
         true,
       )
       padVars.dial_title_3 = ''
       padVars.dial_value_3 = 'BACK'
-      padVars.dial_info_3 = ''
+      padVars.dial_info_3 = e.mediaKeyframe ? tc(e.time) : ''
     }
     if (layerMode && e.layerEdit !== 'edit') {
       padVars.dial_value_3 = tc(e.layerEdit === 'out' ? e.layer.end : e.layer.start)

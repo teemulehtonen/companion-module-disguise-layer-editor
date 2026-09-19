@@ -2,7 +2,7 @@ param([switch]$Force)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $version = (Get-Content -LiteralPath (Join-Path $projectRoot 'package.json') -Raw | ConvertFrom-Json).version
-if ($version -ne '0.1.0-beta.14') { throw 'Update the release name and manifest together before creating a different release.' }
+if ($version -ne '0.1.0-beta.16') { throw 'Update the release name and manifest together before creating a different release.' }
 $releaseName = '0.1.beta'
 $releaseRoot = Join-Path $projectRoot 'releases'
 $destination = Join-Path $releaseRoot $releaseName

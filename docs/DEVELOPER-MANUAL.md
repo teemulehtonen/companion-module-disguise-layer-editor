@@ -1,6 +1,6 @@
 # Developer manual
 
-This guide explains how Disguise Layer Editor is implemented and where to make changes. It describes the 0.1.beta codebase, including the feedback fixes in technical version 0.1.0-beta.14. For installation and controls, start with the [README](../README.md). For validation scope, see the [Track 6 report](TRACK-6-TESTS.md).
+This guide explains how Disguise Layer Editor is implemented and where to make changes. It describes the 0.1.beta codebase through technical version 0.1.0-beta.16. For installation and controls, start with the [README](../README.md). For validation scope, see the [Track 6 report](TRACK-6-TESTS.md).
 
 ## 1. What runs where
 
@@ -92,6 +92,8 @@ For a VALUE turn in the normal parameter view:
 
 Value rotation does not automatically create a new numeric keyframe. Pressing VALUE explicitly requests `key_set`; fields marked `canAnimate === false` ignore that request. Enum values follow their native choices rather than arbitrary numeric increments. Float precision modes normally use 0.1, 0.01 and 0.001.
 
+New numeric keys explicitly use `Key.cubic` (SMOOTH). Writing a key at an existing time preserves its interpolation instead of resetting it.
+
 The older local `adjustValue()`, `adjustTime()` and `write()` paths remain for compatibility with existing action definitions and tests. Do not replace live read-before-write operations with these paths just because their implementation is shorter.
 
 ## 5. Native Python command layer
@@ -145,6 +147,8 @@ JavaScript uses seconds; Python converts to/from Designer beats. A frame step us
 RESOURCES opens a separate view with SOURCE, FOLDER, RESOURCE and BACK encoders. `loadMedia()` reads resources compatible with the selected resource field. `mediaAll` is the complete list; `mediaItems` filters it by folder; `mediaPage` selects eight visible items.
 
 Turning the resource encoder previews a choice locally. Pressing it applies the typed reference and returns to the parameter view. A thumbnail button applies its item directly. Mapping, palette and audio-output selections reference Designer resources; this editor does not modify those resources' internal configuration.
+
+`mediaKeyframe` chooses the write policy. SOURCE press toggles it only when `mediaCanAnimate` is true; opening the browser or changing SOURCE resets it to REPLACE. `media_snapshot()` supplies the native animation capability. `setMedia()` sends either `media_set` or `media_key_set` with the preview UID. In KEYFRAME mode the native code validates the reference, preserves the previous constant at IN when enabling sequencing, and inserts the new resource at the live playhead. These are discrete resource switches, not numeric interpolation or crossfades. The eight thumbnail buttons honour the same policy.
 
 `main.loadThumbnails()` retrieves visible thumbnails, caches them by UID and discards results for an obsolete display batch. `client.thumbnail()` accepts bounded PNG responses; missing or invalid thumbnails can be represented without turning them into editing errors.
 

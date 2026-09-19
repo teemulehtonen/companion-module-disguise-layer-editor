@@ -1,3 +1,9 @@
+# 0.1.beta — 0.1.0-beta.16
+
+- New numeric keyframes explicitly default to SMOOTH. Updating an existing keyframe preserves its interpolation type.
+- Resource browser SOURCE press switches REPLACE / KEYFRAME. Confirming a preview or pressing a thumbnail in KEYFRAME mode creates a timed resource change while preserving the preceding constant.
+- Added the developer manual covering implementation, data flow and maintenance.
+
 # 0.1.beta — 0.1.0-beta.14
 
 - Uppercase control displays, larger LCD headings and a centred PARAMETER heading.

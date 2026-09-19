@@ -117,7 +117,8 @@ def media_snapshot(layer, field):
     seq = field.sequence
     resource = (seq.key(0).r if field.disableSequencing else seq.evalResource(track.timeToBeat(float(manager.player.tCurrent)))) if seq.nKeys() else None
     resources = resource_items(field)
-    return {'media': resources, 'selectedUid': str(resource.uid) if resource else '', 'field': field.name}
+    return {'media': resources, 'selectedUid': str(resource.uid) if resource else '', 'field': field.name,
+            'canAnimate': not field.notSequencable, 'sequenced': not field.disableSequencing}
 
 def metadata(layer, field):
     result = {'name': field.name, 'uid': str(field.uid), 'label': friendly_label(field),
@@ -371,23 +372,35 @@ if p['command'] in ('media_list', 'media_set', 'media_key_set'):
         seq = field.sequence
         if not isinstance(seq, ResourceSequence):
             raise ValueError('Media field is not a ResourceSequence')
-        markDirty(seq)
-        if p['command'] == 'media_key_set':
-            if field.notSequencable:
-                raise ValueError('This media field cannot be keyframed')
-            resource = seq.evalResource(beat)
-            markDirty(field)
-            field.disableSequencing = False
-            seq.setResource(beat, resource)
-        else:
+        if layer.locked:
+            raise ValueError('Layer is locked')
+        resource = None
+        if p.get('mediaUid') is not None:
             matches = [r for r in accessible_resources(field) if str(r.uid) == p['mediaUid']]
             if len(matches) != 1:
                 raise ValueError('Media is no longer available')
+            resource = matches[0]
+        if p['command'] == 'media_key_set':
+            if field.notSequencable:
+                raise ValueError('This media field cannot be keyframed')
+            if p.get('mediaUid') is None:
+                resource = seq.key(0).r if field.disableSequencing and seq.nKeys() else seq.evalResource(beat)
+            markDirty(field)
+            markDirty(seq)
+            if field.disableSequencing and seq.nKeys():
+                # Retain the old constant from IN until the new resource key.
+                seq.key(0).localT = layer.tStart - (seq.t(0) - seq.key(0).localT)
+            field.disableSequencing = False
+            seq.setResource(beat, resource)
+        else:
+            if p.get('mediaUid') is None:
+                raise ValueError('Media is no longer available')
             if not seq.nKeys():
                 raise ValueError('Media sequence has no initial key')
+            markDirty(seq)
             indices = [i for i in range(seq.nKeys()) if seq.t(i) <= beat + Key.tEpsilon]
             index = 0 if field.disableSequencing or not indices else indices[-1]
-            seq.key(index).r = matches[0]
+            seq.key(index).r = resource
         field.notifyEdit()
     return media_snapshot(layer, field)
 if field is None or not isinstance(field.sequence, FloatSequence):
@@ -522,8 +535,16 @@ if command in ('key_set', 'constant_set'):
             raise ValueError('Keyframe time is outside the layer')
         markDirty(field)
         markDirty(seq)
+        # New numeric keys use SMOOTH explicitly instead of inheriting the
+        # native sequence default. Rewriting an existing key keeps its type.
+        interpolation = next((seq.key(i).interpolation for i in range(seq.nKeys())
+                              if abs(track.beatToTime(seq.t(i)) - seconds) < 0.00001), Key.cubic)
         field.disableSequencing = False
         seq.setFloat(beat, value)
+        for i in range(seq.nKeys()):
+            if abs(track.beatToTime(seq.t(i)) - seconds) < 0.00001:
+                seq.key(i).interpolation = interpolation
+                break
 elif command == 'key_clear':
     if p.get('confirmed') is not True:
         raise ValueError('Clear all keyframes requires confirmation')

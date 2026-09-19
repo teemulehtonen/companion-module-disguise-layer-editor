@@ -9,6 +9,17 @@ async function ready() {
   return e
 }
 
+test('new keys default to smooth while replacing a key preserves its type', async () => {
+  const e = await ready()
+  await e.adjustLiveTime(1, 2)
+  await e.pressValue()
+  assert.equal(e.field.keys.find((k) => k.time === 2).interpolation, 2)
+  await e.cycleKeyType()
+  assert.equal(e.field.keys.find((k) => k.time === 2).interpolation, 0)
+  await e.pressValue()
+  assert.equal(e.field.keys.find((k) => k.time === 2).interpolation, 0)
+})
+
 test('DEFAULT ALL PARAMETERS confirms once and resets constants, animation and resources only on its layer', async () => {
   const e = await ready()
   const layer = e.client.data.layers[0]
@@ -683,6 +694,73 @@ test('media dial previews across pages; press applies exactly once and returns; 
   await e.browseMedia(1)
   await e.toggleMedia()
   assert.equal(calls.filter(([c]) => c === 'media_set').length, 1)
+})
+
+test('resource keyframe mode writes the preview at the playhead and resets on reopen', async () => {
+  const e = await ready()
+  const calls = []
+  e.client.execute = async (command, args) => {
+    calls.push([command, args])
+    return {
+      canAnimate: true,
+      media: [{ uid: '101', name: 'Clip', folder: 'Clips', path: 'objects/VideoClip/Clips/clip' }],
+      selectedUid: '101',
+    }
+  }
+  await e.toggleMedia()
+  e.toggleMediaKeyframe()
+  assert.equal(e.mediaKeyframe, true)
+  assert.equal(calls.filter(([c]) => c === 'media_key_set').length, 0)
+  await e.pressValue()
+  const writes = calls.filter(([c]) => c === 'media_key_set')
+  assert.equal(writes.length, 1)
+  assert.equal(writes[0][1].mediaUid, '101')
+  assert.equal(writes[0][1].field, 'video')
+  assert.equal(e.mediaMode, false)
+  await e.toggleMedia()
+  assert.equal(e.mediaKeyframe, false)
+})
+
+test('resource thumbnail honours keyframe mode and unsupported sources cannot enable it', async () => {
+  const e = await ready()
+  const writes = []
+  let canAnimate = true
+  e.client.execute = async (command, args) => {
+    if (command !== 'media_list') writes.push([command, args])
+    return {
+      canAnimate,
+      media: [{ uid: '101', name: 'Resource', folder: 'Internal', path: 'objects/resource/item' }],
+      selectedUid: '101',
+    }
+  }
+  await e.toggleMedia()
+  e.toggleMediaKeyframe()
+  await e.pressPad(0)
+  assert.equal(writes[0][0], 'media_key_set')
+  canAnimate = false
+  await e.selectMediaField(1)
+  e.toggleMediaKeyframe()
+  assert.equal(e.mediaKeyframe, false)
+  await e.pressValue()
+  assert.equal(writes[1][0], 'media_set')
+})
+
+test('failed resource keyframe apply retains browser and preview', async () => {
+  const e = await ready()
+  e.client.execute = async (command) => {
+    if (command === 'media_key_set') throw new Error('Resource changed')
+    return {
+      canAnimate: true,
+      media: [{ uid: '101', name: 'Resource', folder: '/', path: 'objects/resource/item' }],
+      selectedUid: '101',
+    }
+  }
+  await e.toggleMedia()
+  e.toggleMediaKeyframe()
+  await assert.rejects(e.pressValue(), /Resource changed/)
+  assert.equal(e.mediaMode, true)
+  assert.equal(e.mediaKeyframe, true)
+  assert.equal(e.currentMedia.uid, '101')
 })
 
 test('SOURCE and folders browse without writing; failed apply keeps browser open', async () => {
