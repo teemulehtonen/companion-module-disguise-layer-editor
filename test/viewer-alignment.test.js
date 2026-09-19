@@ -30,13 +30,13 @@ test('guides are restricted to active timing/key edit modes and ignore carrier k
   assert.deepEqual(alignmentGuides(data, context), [])
   assert.deepEqual(
     alignmentGuides(data, { ...context, layerEdit: true }).map((g) => g.time),
-    [0, 10],
+    [0, 5, 10],
   )
   assert.deepEqual(
     alignmentGuides(data, { ...context, moveKey: true }).map((g) => g.time),
     [5],
   )
-  assert.deepEqual(alignmentGuides(data, { ...context, moveKey: true, keyTime: null }), [])
+  assert.equal(alignmentGuides(data, { ...context, moveKey: true, keyTime: null })[0].subtle, true)
 })
 test('guides use fractional FPS without matching adjacent frames', () => {
   const fps = 60000 / 1001,
@@ -59,4 +59,14 @@ test('layer edit shows exact moving bounds for audio and video without matches',
     assert.deepEqual(alignmentGuides(data,context).map(g=>g.time),[3.001,4.009])
     assert.deepEqual(alignmentGuides(data,{...context,layerEdit:false}),[])
   }
+})
+
+test('subtle guides match selected-layer keys and exclude out-of-range and subframe near misses', () => {
+  const data=snapshot()
+  data.layers[0].fields[0].keys.push({time:12},{time:5.001})
+  data.layers[1].fields=[{name:'other',sequenced:true,keys:[{time:12}]}]
+  const guides=alignmentGuides(data,{focusUid:'a',layerEdit:true})
+  assert.deepEqual(guides.map(g=>g.time),[0,5,10])
+  assert.equal(guides.find(g=>g.time===5).subtle,true)
+  assert.deepEqual(alignmentGuides(data,{focusUid:'a'}),[])
 })

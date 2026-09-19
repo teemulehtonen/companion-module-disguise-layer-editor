@@ -49,7 +49,7 @@ function alignmentGuides(snapshot, context) {
     for (const field of [...(layer.fields || []), ...(layer.resources || [])])
       if (hasKeyframes(field))
         field.keys.forEach((key, index) => {
-          if (Number.isFinite(key.time))
+          if (Number.isFinite(key.time) && key.time >= layer.start && key.time < layer.end)
             landmarks.push({
               layer: layer.uid,
               kind: 'key',
@@ -88,6 +88,21 @@ function alignmentGuides(snapshot, context) {
         labels: [target.label, ...matches.map((item) => item.label)].slice(0, 8),
         count: matches.length,
       })
+  }
+  // Subtle guides for other sequenced keys in the selected layer. Require
+  // actual time coincidence: distinct fractional-beat keys can share a frame.
+  const processedKeyTimes = new Set()
+  const strongTimes = [...guides.values()].map(g => g.time)
+  for (const target of landmarks.filter(item => item.layer === context.focusUid && item.kind === 'key')) {
+    if (processedKeyTimes.has(target.time)) continue
+    processedKeyTimes.add(target.time)
+    const matches = (buckets.get(Math.round(target.time * fps)) || [])
+      .filter(item => item !== target && Math.abs(item.time - target.time) < 1e-6)
+    if (!matches.length || strongTimes.some(time => Math.abs(time - target.time) < 1e-6)) continue
+    guides.set('key:' + target.time, {
+      time:target.time, subtle:true,
+      labels:[target.label,...matches.map(item=>item.label)].slice(0,8), count:matches.length,
+    })
   }
   return [...guides.values()].sort((a, b) => a.time - b.time)
 }

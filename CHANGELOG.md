@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-beta.97
+
+- Add faint selected-layer keyframe alignment guides during Layer Edit and Select Keyframe. Exclude hidden out-of-layer keys and subframe near misses.
+
 ## 0.1.0-beta.96
 
 - Always show exact IN/OUT guides for the selected layer in Layer Edit, for all layer types. Keep keyframe-edit guides match-only.
