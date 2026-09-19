@@ -82,10 +82,10 @@ for (let i = 0; i < 8; i++) {
     const img = c.style.layers.find((l) => l.type === 'image')
     img.base64Image = expression(variable(`pad_image_${i}`))
     img.enabled = expression(isMedia)
-    img.y = literal(33)
-    img.height = literal(31)
-    text.y = expression(`${isMedia} ? 65 : 10`)
-    text.height = expression(`${isMedia} ? 34 : 80`)
+    img.y = literal(3)
+    img.height = literal(36)
+    text.y = expression(`${isMedia} ? 40 : 10`)
+    text.height = expression(`${isMedia} ? 59 : 80`)
     text.fontsize = expression(`${isMedia} ? ${theme.type.mediaFile} : ${theme.type.tool}`)
     const folder = structuredClone(text)
     folder.id = 'folder'
@@ -96,21 +96,20 @@ for (let i = 0; i < 8; i++) {
     folder.height = literal(30)
     folder.fontsize = literal(theme.type.mediaFolder)
     folder.color = literal(theme.accent)
-    c.style.layers.push(folder)
     const kind = structuredClone(folder)
     kind.id = 'resource-kind'
     kind.name = 'Resource type without thumbnail'
     kind.text = literal(variable(`pad_kind_${i}`))
-    kind.y = literal(35)
-    kind.height = literal(27)
+    kind.y = literal(6)
+    kind.height = literal(30)
     kind.fontsize = literal(56)
     kind.color = literal(theme.secondary)
     c.style.layers.push(kind)
   }
   if (i === 3) {
     const showClock = variable('playing') + ' && ' + variable('ui_mode') + " == 'PARAMS'"
-    text.y = expression(variable('ui_mode') + " == 'MEDIA' ? 65 : (" + showClock + ' ? 6 : 10)')
-    text.height = expression(variable('ui_mode') + " == 'MEDIA' ? 34 : (" + showClock + ' ? 56 : 80)')
+    text.y = expression(variable('ui_mode') + " == 'MEDIA' ? 40 : (" + showClock + ' ? 6 : 10)')
+    text.height = expression(variable('ui_mode') + " == 'MEDIA' ? 59 : (" + showClock + ' ? 56 : 80)')
     text.fontsize = expression(
       variable('ui_mode') +
         " == 'MEDIA' ? " +

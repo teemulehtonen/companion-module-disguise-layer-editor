@@ -594,15 +594,7 @@ class DisguiseLayerControl extends InstanceBase {
       padVars[`pad_${i}`] = mediaMode ? item?.name || '' : padLabels[i]
       padVars[`pad_image_${i}`] = item ? this.thumbnailCache?.get(item.uid) || '' : ''
       padVars[`pad_kind_${i}`] = item && !padVars[`pad_image_${i}`] ? e.mediaField?.label || 'Resource' : ''
-      padVars[`pad_folder_${i}`] = item
-        ? (item.folder.split('/').filter(Boolean).at(-1) || 'Root').replace(/[-_]/g, ' ')
-        : ''
-      const folderWords = padVars[`pad_folder_${i}`].split(' ')
-      if (padVars[`pad_folder_${i}`].length > 12 && folderWords.length > 1) {
-        const split = Math.max(1, Math.floor(folderWords.length / 2))
-        padVars[`pad_folder_${i}`] =
-          folderWords.slice(0, split).join(' ') + '\n' + folderWords.slice(split).join(' ')
-      }
+      padVars[`pad_folder_${i}`] = ''
       if (item)
         padVars[`pad_${i}`] = item.name
           .replace(/\.(mov|mp4|png|jpg|jpeg|wav|aif|aiff)$/i, '')

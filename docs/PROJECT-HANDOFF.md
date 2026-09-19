@@ -1,4 +1,4 @@
-# Project handoff — beta.91
+# Project handoff — beta.95
 
 Read this file, DEVELOPER-MANUAL.md and VIEWER-DEVELOPMENT.md when resuming. Public source and release packages contain no development machine settings.
 

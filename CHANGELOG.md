@@ -1,7 +1,8 @@
 ## 0.1.0-beta.88
 
-## 0.1.0-beta.91
+## 0.1.0-beta.95
 
+- Show the currently evaluated media name, duration and FPS; resource keyframe changes follow the playhead. Prefer video thumbnails over palettes.
 - Show source-media duration and video FPS below the layer type; remove seconds labels from waveform rows.
 
 - Recognize direct AudioFile resources used by Tennis, alongside AudioTrack and VideoClip resources.

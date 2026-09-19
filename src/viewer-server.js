@@ -314,6 +314,7 @@ class ViewerServer {
           )
         }
         const bytes = await this.thumbnails.get(uid)
+        if (!bytes.length) this.thumbnails.delete(uid) // Transient failures must not poison the cache.
         return send(bytes.length ? 200 : 404, 'image/png', bytes)
       }
       send(404, 'text/plain', 'Not found')

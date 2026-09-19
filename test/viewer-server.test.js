@@ -104,3 +104,14 @@ test('live values remain available while a geometry refresh is pending', async (
   const snapshot = await pending
   assert.equal(snapshot.liveValue, 0.75)
 })
+
+test('thumbnail failure is retried and successful bytes are cached', async t => {
+  const s = await setup(t)
+  await s.server.state(new URLSearchParams())
+  let calls = 0
+  s.client.thumbnail = async () => ++calls === 1 ? '' : Buffer.from('recovered').toString('base64')
+  assert.equal((await fetch(s.url + '/api/thumbnail/123')).status,404)
+  assert.equal(await (await fetch(s.url + '/api/thumbnail/123?retry=1')).text(),'recovered')
+  assert.equal((await fetch(s.url + '/api/thumbnail/123')).status,200)
+  assert.equal(calls,2)
+})
