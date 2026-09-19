@@ -1,4 +1,4 @@
-## 0.1.0-beta.88
+# Changelog
 
 ## 0.1.0-beta.95
 
@@ -10,6 +10,8 @@
 - Remove known legacy waveform temporary media; preserve unrelated files.
 - Verified a 1.46 GB HAP video waveform on Raspberry Pi in about 2.4 seconds.
 
+
+## 0.1.0-beta.88
 
 - Correct native beat/second conversion in Companion, live feedback and viewer timing.
 - Add fractional beat keyframe movement down to 1/128 beat and separate layer-edit steps.

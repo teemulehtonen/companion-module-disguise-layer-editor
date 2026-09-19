@@ -23,3 +23,13 @@ See KNOWN-LIMITATIONS.md for source waveform limitations, unsupported field type
 ## Workflow
 
 Inspect git status/diff and preserve unrelated work. Use targeted local batches to save credits; npm test and npm run package before release. npm run release -- -Force creates an allowlisted source/archive set. Never commit private probes, media, paths, credentials, machine IDs or real connection exports. Use generated Companion pages. Publish only when requested. Keep README download links, release tag and package versions aligned. User continues manual tests after this release.
+
+## Latest beta.95 details
+
+- Network audio must never be copied to local storage. Both WAV and PCM MOV decode from seekable read-only handles; only waveform peaks are cached in bounded memory. smb-client.js uses pinned smb3-client 0.2.0 internals for byte-range reads. Recheck that adapter when upgrading the dependency.
+- audio-temp-cleanup.js removes only legacy source.wav files inside matching d3-wave temporary directories; it does not recursively delete other content.
+- The viewer displays the currently evaluated media resource name, source duration and source video FPS. Long names retain both ends. Resource selection is evaluated at the playhead; do not substitute the first resource key.
+- Layer rows are 52 px; shared corner controls use a 4 px top inset. Thumbnail failures are evicted from the server cache and browser images retry up to three times.
+- Generated Resources buttons omit folder labels and allocate more space to filenames. Import the generated page into the existing editor page and link the existing connection; never assume the destination page number.
+- Final automated validation: 130 tests plus packaged-module smoke checks. Live Raspberry Pi checks confirmed both WAV and embedded PCM MOV waveforms. A read-only inventory covered 76 layer types; five AudioFile resources decoded locally. These checks do not certify every resource/playback mode.
+- The latest user continues manual testing. Keep future changes targeted and avoid repeating broad live tests without a relevant change.
