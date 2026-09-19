@@ -1,9 +1,5 @@
 'use strict'
 const path = require('node:path')
-const os = require('node:os')
-const fs = require('node:fs/promises')
-const { createWriteStream } = require('node:fs')
-const { pipeline } = require('node:stream/promises')
 const { DirectSmbClient: Client } = require('./smb-client')
 
 function smbTarget(share, source, designerRoot) {
@@ -31,8 +27,7 @@ function smbTarget(share, source, designerRoot) {
   }
 }
 
-// Only download a Designer-resolved audio resource. No SMB write API is used.
-// The temporary source is removed after peak extraction, including on failure.
+// Read only requested byte ranges into bounded memory. Never copy media to disk.
 async function readSmbAudio(options, source, signal, decode, ClientImpl = Client, platform = process.platform) {
   const target = smbTarget(options.resourceShareRoot, source, options.resourceDesignerRoot)
   // With no explicit credentials, Windows can use its existing SMB session.
@@ -43,9 +38,8 @@ async function readSmbAudio(options, source, signal, decode, ClientImpl = Client
   }
   const client = new ClientImpl(target.host, { connectTimeout: 5000, requestTimeout: 5000 })
   client.on('error', () => {})
-  let directory, stream
+  let handle
   const cancel = () => {
-    stream?.destroy()
     void client.close().catch(() => {})
   }
   signal.addEventListener('abort', cancel, { once: true })
@@ -59,12 +53,11 @@ async function readSmbAudio(options, source, signal, decode, ClientImpl = Client
     })
     signal.throwIfAborted()
     const tree = await session.connectTree(target.share)
-    directory = await fs.mkdtemp(path.join(os.tmpdir(), 'd3-wave-'))
-    const filename = path.join(directory, 'source.wav')
-    stream = await tree.createFileReadStream(target.file)
-    await pipeline(stream, createWriteStream(filename, { flags: 'wx', mode: 0o600 }), { signal })
-    return await decode(filename, signal)
+    handle = await tree.openReadOnly(target.file)
+    signal.throwIfAborted()
+    return await decode(handle, signal)
   } catch (error) {
+    if (error.code === 'MOV_PCM_UNSUPPORTED' || error.name === 'AbortError') throw error
     const failure = new Error('SMB audio unavailable')
     failure.code =
       (error?.status ?? error?.header?.status) === undefined
@@ -73,9 +66,8 @@ async function readSmbAudio(options, source, signal, decode, ClientImpl = Client
     throw failure
   } finally {
     signal.removeEventListener('abort', cancel)
-    stream?.destroy()
+    await handle?.close().catch(() => {})
     await client.close().catch(() => {})
-    if (directory) await fs.rm(directory, { recursive: true, force: true })
   }
 }
 module.exports = { smbTarget, readSmbAudio }

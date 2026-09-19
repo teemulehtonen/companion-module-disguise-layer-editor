@@ -1,5 +1,15 @@
 ## 0.1.0-beta.88
 
+## 0.1.0-beta.91
+
+- Show source-media duration and video FPS below the layer type; remove seconds labels from waveform rows.
+
+- Recognize direct AudioFile resources used by Tennis, alongside AudioTrack and VideoClip resources.
+- Read WAV and embedded MOV audio directly over SMB without copying media to Raspberry Pi storage.
+- Remove known legacy waveform temporary media; preserve unrelated files.
+- Verified a 1.46 GB HAP video waveform on Raspberry Pi in about 2.4 seconds.
+
+
 - Correct native beat/second conversion in Companion, live feedback and viewer timing.
 - Add fractional beat keyframe movement down to 1/128 beat and separate layer-edit steps.
 - Add direct SMB3 network waveform reads on Raspberry Pi and Windows session-based UNC reads.

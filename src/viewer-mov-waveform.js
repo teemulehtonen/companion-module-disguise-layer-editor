@@ -4,7 +4,7 @@ const fs = require('node:fs/promises')
 // Read PCM samples directly from MOV chunk tables. Never decode video or modify
 // the source. Bound metadata allocations and yield between small audio reads.
 async function readMovWaveform(filename, signal) {
-  const file = await fs.open(filename, 'r')
+  const file = typeof filename === 'object' ? filename : await fs.open(filename, 'r')
   const fail = message => { const error = new Error(message); error.code = 'MOV_PCM_UNSUPPORTED'; throw error }
   try {
     const size = (await file.stat()).size

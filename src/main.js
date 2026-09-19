@@ -12,6 +12,10 @@ const { ViewerServer } = require('./viewer-server')
 
 class DisguiseLayerControl extends InstanceBase {
   async init(config, isFirstInit, secrets = {}) {
+    try {
+      const cleaned = await require('./audio-temp-cleanup').cleanupLegacyAudioTemp()
+      this.log('info', 'Legacy waveform cleanup: ' + cleaned.files + ' files, ' + cleaned.bytes + ' bytes removed')
+    } catch { this.log('warn', 'Legacy waveform temporary-file cleanup failed') }
     this.setVariableDefinitions(
       Object.fromEntries(
         Object.entries({

@@ -23,10 +23,20 @@ if p['command'] == 'viewer_snapshot':
         if not r: return None
         has_audio = False
         try:
-            has_audio = (isinstance(r, AudioTrack) and r.header.nChannels > 0 and r.header.nSamples > 0) or (isinstance(r, VideoClip) and bool(r.hasAudio))
+            has_audio = (isinstance(r, (AudioTrack, AudioFile)) and r.header.nChannels > 0 and r.header.nSamples > 0) or (isinstance(r, VideoClip) and bool(r.hasAudio))
         except pyerrors.Exception:
             pass
-        return {'uid': str(r.uid), 'name': r.description or str(r.path).replace('\\\\', '/').rsplit('/', 1)[-1], 'thumbnail': visual,
+        duration = None
+        media_fps = None
+        try:
+            if isinstance(r, VideoClip) and float(r.fileFps) > 0:
+                media_fps = float(r.fileFps)
+                duration = float(r.fileNFrames) / media_fps
+            elif isinstance(r, (AudioTrack, AudioFile)) and float(r.header.sampleRate) > 0:
+                duration = float(r.header.nSamples) / float(r.header.sampleRate)
+        except pyerrors.Exception:
+            pass
+        return {'duration': duration, 'fps': media_fps, 'uid': str(r.uid), 'name': r.description or str(r.path).replace('\\\\', '/').rsplit('/', 1)[-1], 'thumbnail': visual,
                 'audio': has_audio}
     result['quantized'] = bool(track.quant)
     result['beat'] = float(track.timeToBeat(seconds))

@@ -6,7 +6,7 @@ const { readSmbAudio } = require('./smb-audio')
 // Streaming, bounded-memory WAV peak extraction. Disk reads yield between
 // chunks so decoding cannot stall Companion's event loop or Designer's UI.
 async function readWaveform(filename, signal) {
-  const file = await fs.open(filename, 'r')
+  const file = typeof filename === 'object' ? filename : await fs.open(filename, 'r')
   try {
     const stat = await file.stat()
     const head = Buffer.alloc(12)

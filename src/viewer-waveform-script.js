@@ -4,9 +4,11 @@
 module.exports = `
 if p['command'] == 'viewer_audio_source':
     import os
-    resource = next((r for r in resourceManager.allResources(AudioTrack) if str(r.uid) == p.get('uid')), None)
+    resource = next((r for cls in (AudioTrack, AudioFile) for r in resourceManager.allResources(cls) if str(r.uid) == p.get('uid')), None)
     container = 'wav'
-    if resource is not None and resource.audioFile is not None:
+    if isinstance(resource, AudioFile):
+        filename = os.path.abspath(str(resource.path))
+    elif resource is not None and resource.audioFile is not None:
         filename = os.path.abspath(str(resource.audioFile.path))
     else:
         video = next((r for r in resourceManager.allResources(VideoClip) if str(r.uid) == p.get('uid')), None)

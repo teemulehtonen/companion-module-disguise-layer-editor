@@ -1,4 +1,4 @@
-# Project handoff — beta.88
+# Project handoff — beta.91
 
 Read this file, DEVELOPER-MANUAL.md and VIEWER-DEVELOPMENT.md when resuming. Public source and release packages contain no development machine settings.
 
@@ -10,7 +10,7 @@ Native player.tCurrent is BEATS. All module/viewer timestamps and TransportComma
 
 Keyframe move steps on beat tracks: 1/128 through 1/2, 1, 4, 8 beats. Layer steps: 1/4, 1, 4, 8, 16, 32. Non-beat tracks retain frame/second steps. SELECT KEYFRAME stays locked when the timing step changes.
 
-Audio: local WAV, supported embedded PCM MOV, Windows UNC with the OS session, or direct authenticated SMB3 via smb-client.js. No SSH/mount path is required. Read RASPBERRY-PI-SMB.md. Temporary SMB files are removed after decoding. Credentials belong only in Companion configuration/secret storage.
+Audio: local WAV, supported embedded PCM MOV, Windows UNC with the OS session, or direct authenticated SMB3 via smb-client.js. No SSH/mount path is required. Read RASPBERRY-PI-SMB.md. SMB WAV/MOV readers seek directly in the remote file and never write media to local disk. Credentials belong only in Companion configuration/secret storage.
 
 Waveforms use source duration, never layer duration. Pause clips at OUT; Loop/Ping-pong show one complete source (no repeated or reversed cycles). Playback labels use native enum metadata: audio and video assign different numeric values. Sticky/body playheads share position and transition.
 

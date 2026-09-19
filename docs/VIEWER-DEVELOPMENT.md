@@ -11,7 +11,7 @@
 - viewer-page.js: bundled browser function plus HTML/CSS. The function is serialized: external lexical helpers are not automatically available in the browser.
 - viewer-model.js: redraw hash, alignment and hierarchy helpers. Include new geometry in renderRevision.
 - viewer-waveform.js / viewer-waveform-script.js: native resource lookup, bounded local WAV / PCM MOV decoding and cache ownership by layer UID.
-- smb-audio.js / smb-client.js: direct read-only SMB3 downloads and temporary-file cleanup; passwords use Companion secret storage.
+- smb-audio.js / smb-client.js: direct read-only SMB3 byte-range access (no local media copies); passwords use Companion secret storage.
 - scripts/build-page.cjs: clean generated Companion page, never a personal configuration export.
 
 ## Update model
