@@ -552,6 +552,9 @@ class Editor {
   }
   async writeLive(command) {
     this.requireField()
+    // Some Designer settings (for example Web dimensions) are constants by
+    // design. Pressing the value dial must not send an impossible key write.
+    if (command === 'key_set' && this.field.canAnimate === false) return
     this.moveKey = null
     this.navigationTime = null
     this.pendingJump = null
@@ -911,7 +914,7 @@ class Editor {
       this.lastMediaField = null
     } else if (kind === 'field') {
       const count = this.layer?.fields.length ?? 0
-      this.fieldIndex = count ? (this.fieldIndex + direction + count) % count : 0
+      this.fieldIndex = count ? Math.max(0, Math.min(count - 1, this.fieldIndex + direction)) : 0
     } else throw new Error('Unknown selector')
     this.loadValue()
   }

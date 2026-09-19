@@ -1,5 +1,5 @@
 'use strict'
-const { InstanceBase, InstanceStatus, combineRgb } = require('@companion-module/base')
+const { InstanceBase, InstanceStatus, combineRgb } = require('./companion-api')
 const { DesignerClient } = require('./client')
 const { DemoClient } = require('./demo')
 const { Editor } = require('./editor')
@@ -7,6 +7,7 @@ const { Connection } = require('./connection')
 const { actions, presets } = require('./definitions')
 const { timecode, absoluteTimecode } = require('./timecode')
 const theme = require('./theme')
+const { layerTypeLabel } = require('./layer-types')
 
 class DisguiseLayerControl extends InstanceBase {
   async init(config) {
@@ -15,6 +16,7 @@ class DisguiseLayerControl extends InstanceBase {
         Object.entries({
           track: 'Snapshot track',
           layer: 'Selected layer',
+          layer_type: 'Friendly layer type',
           parameter: 'Selected numeric parameter',
           playing: 'Designer is playing',
           playback_label: 'Play section / stop button label',
@@ -74,6 +76,7 @@ class DisguiseLayerControl extends InstanceBase {
           mode: 'DEMO or DESIGNER',
           last_error: 'Last error',
           connected: 'Designer HTTP connection',
+          heartbeat: 'Pulse after a successful Designer response',
           live_connected: 'LiveUpdate time feedback',
           live_time: 'Designer playhead seconds (live)',
           connection_status: 'Connection status',
@@ -153,51 +156,61 @@ class DisguiseLayerControl extends InstanceBase {
       this.editor = new Editor(this.client)
       this.updateStatus(InstanceStatus.Connecting, config.demo ? 'Demo ready' : 'Connecting to Designer')
       if (!config.demo) {
-        const connection = new Connection(this.client, (state) => {
-          if (this.connection !== connection) return
-          if (!state.connected && this.editor?.snapshot) this.editor.stale = true
-          if (state.trackUid && this.editor?.snapshot && state.trackUid !== this.editor.snapshot.trackUid)
-            this.editor.stale = true
-          const active = state.transports?.find((t) => String(t.uid) === this.editor?.snapshot?.transportUid)
-          if (state.probeRevision !== this.lastProbeRevision) {
-            this.lastProbeRevision = state.probeRevision
-            if (
-              state.connected &&
-              this.editor?.snapshot &&
-              (!active || String(active.currentTrack?.uid) !== this.editor.snapshot.trackUid)
-            )
+        const connection = new Connection(
+          this.client,
+          (state) => {
+            if (this.connection !== connection) return
+            if (!state.connected && this.editor?.snapshot) this.editor.stale = true
+            if (state.trackUid && this.editor?.snapshot && state.trackUid !== this.editor.snapshot.trackUid)
               this.editor.stale = true
-          }
-          if (this.editor?.snapshot && !this.editor.stale) {
-            if (state.timeline) this.editor.followTimeline(state.timeline)
-            else this.editor.followTime(state.time)
-          }
-          const e = this.editor
-          if (e && typeof state.timeline?.playing === 'boolean') e.playing = state.timeline.playing
-          if (e?.snapshot && state.clock) {
-            e.snapshot.fps = state.clock.fps
-            e.snapshot.customFps = state.clock.custom
-            e.snapshot.tcMode = String(state.clock.mode)
-          }
-          if (
-            e?.field &&
-            !e.busy &&
-            !e.stale &&
-            state.fieldTarget?.layerUid === e.layer.uid &&
-            state.fieldTarget?.name === e.field.name &&
-            state.fieldValue
-          ) {
-            e.acceptLive({ field: state.fieldValue })
-          }
-          if (e?.snapshot && state.connected && !e.stale)
-            connection.watch(
-              e.snapshot.transportUid,
-              e.field ? { layerUid: e.layer.uid, name: e.field.name } : null,
+            const active = state.transports?.find(
+              (t) => String(t.uid) === this.editor?.snapshot?.transportUid,
             )
-          this.connectionStatus()
-          this.publish()
-          if (state.connected && (!this.editor?.snapshot || this.editor.stale)) this.requestSync()
-        })
+            if (state.probeRevision !== this.lastProbeRevision) {
+              this.lastProbeRevision = state.probeRevision
+              if (
+                state.connected &&
+                this.editor?.snapshot &&
+                (!active || String(active.currentTrack?.uid) !== this.editor.snapshot.trackUid)
+              )
+                this.editor.stale = true
+            }
+            if (this.editor?.snapshot && !this.editor.stale) {
+              if (state.timeline) this.editor.followTimeline(state.timeline)
+              else this.editor.followTime(state.time)
+            }
+            const e = this.editor
+            if (e && typeof state.timeline?.playing === 'boolean') e.playing = state.timeline.playing
+            if (e?.snapshot && state.clock) {
+              e.snapshot.fps = state.clock.fps
+              e.snapshot.customFps = state.clock.custom
+              e.snapshot.tcMode = String(state.clock.mode)
+            }
+            if (
+              e?.field &&
+              !e.busy &&
+              !e.stale &&
+              state.fieldTarget?.layerUid === e.layer.uid &&
+              state.fieldTarget?.name === e.field.name &&
+              state.fieldValue
+            ) {
+              e.acceptLive({ field: state.fieldValue })
+            }
+            if (e?.snapshot && state.connected && !e.stale)
+              connection.watch(
+                e.snapshot.transportUid,
+                e.field ? { layerUid: e.layer.uid, name: e.field.name } : null,
+              )
+            this.connectionStatus()
+            this.publish()
+            if (state.connected && (!this.editor?.snapshot || this.editor.stale)) this.requestSync()
+          },
+          {
+            onHeartbeat: () => {
+              if (this.connection === connection) this.publish()
+            },
+          },
+        )
         this.connection = connection
         void connection.start()
         this.autoSyncTimer = setInterval(() => this.requestSync(), 2000)
@@ -268,6 +281,8 @@ class DisguiseLayerControl extends InstanceBase {
   async performNow(fn, { synchronise = true, scrub = false } = {}) {
     const editor = this.editor
     if (!editor) return
+    const connection = this.connection
+    connection?.invalidateFeedback?.()
     try {
       if (synchronise && editor.stale && this.connection?.connected) {
         const track = editor.snapshot?.trackUid,
@@ -306,6 +321,8 @@ class DisguiseLayerControl extends InstanceBase {
       this.queueGeneration++
       this.log('warn', error.message)
       this.updateStatus(InstanceStatus.UnknownError, error.message)
+    } finally {
+      connection?.invalidateFeedback?.()
     }
     this.publish()
   }
@@ -319,7 +336,12 @@ class DisguiseLayerControl extends InstanceBase {
       this.updateStatus(InstanceStatus.ConnectionFailure, c?.error || 'Connecting to Designer')
     else if (this.lastError) this.updateStatus(InstanceStatus.UnknownError, this.lastError)
     else if (this.editor?.stale)
-      this.updateStatus(InstanceStatus.Connecting, 'Synchronising Designer changes')
+      // A metadata refresh is normal while changing tracks/layers. The HTTP
+      // connection is still healthy; Connecting flashes warnings on every key.
+      this.updateStatus(
+        this.editor.snapshot ? InstanceStatus.Ok : InstanceStatus.Connecting,
+        'Synchronising Designer changes',
+      )
     else
       this.updateStatus(
         InstanceStatus.Ok,
@@ -333,6 +355,7 @@ class DisguiseLayerControl extends InstanceBase {
   publish() {
     const e = this.editor
     const fmt = (value) => (Number.isFinite(value) ? String(Number(value.toFixed(3))) : '-')
+    const bound = (value) => (Number.isFinite(value) ? String(Number(value.toPrecision(7))) : '—')
     const readable = (value, filename = false) => {
       let text = String(value || '')
       if (filename) text = text.replace(/\.(mov|mp4|png|jpe?g|wav|aiff?)$/i, '')
@@ -371,12 +394,12 @@ class DisguiseLayerControl extends InstanceBase {
         Math.max(1, 1000 - (Date.now() - deletePress.time)),
       )
     const padLabels = [
-      'PREV\nKEY',
-      'NEXT\nKEY',
+      'PREV\nKEYFRAME',
+      'NEXT\nKEYFRAME',
       layerMode || 'LAYER\nEDIT',
       playbackLabel,
-      'SELECT\nKEY',
-      e?.canResetDefault ? 'DEFAULT' : 'DELETE\nKEY',
+      'SELECT\nKEYFRAME',
+      e?.canResetDefault ? 'DEFAULT' : 'DELETE\nKEYFRAME',
       'TYPE\n' + keyType,
       'RESOURCES',
     ]
@@ -453,7 +476,7 @@ class DisguiseLayerControl extends InstanceBase {
         : 'LAYER ' + (e ? e.activeLayers.indexOf(e.layer) + 1 : 0) + '/' + (e?.activeLayers.length || 0),
       mediaMode ? 'FOLDER' : 'PARAMETER',
       mediaMode ? 'FILE / PREVIEW' : 'VALUE / ' + (e?.precision || 'coarse').toUpperCase(),
-      (layerMode || (e?.moveKey ? 'MOVE KEY' : 'TIME')) + ' / ' + (e?.timeStepLabel || ''),
+      (layerMode || (e?.moveKey ? 'MOVE KEYFRAME' : 'TIME')) + ' / ' + (e?.timeStepLabel || ''),
     ]
     const values = [
       e?.layer?.name || 'No active layer',
@@ -469,13 +492,13 @@ class DisguiseLayerControl extends InstanceBase {
         ? e.mediaField?.label || 'No media field'
         : e?.field?.choices?.length
           ? e.field.choices.length + ' options'
-          : (e?.field?.min ?? '—') + ' … ' + (e?.field?.max ?? '—'),
+          : bound(e?.field?.min) + '–' + bound(e?.field?.max),
       mediaMode
         ? `${e.mediaIndex + 1} / ${e.mediaItems.length}   PAGE ${e.mediaPage + 1}/${Math.max(1, Math.ceil(e.mediaItems.length / 8))}`
         : e?.field?.sequenced
-          ? 'SELECTED KEY'
+          ? 'SELECTED KEYFRAME'
           : 'LIVE CONSTANT',
-      'K- ' + (prev ? fmt(e.time - prev.time) : '—') + ' / K+ ' + (next ? fmt(next.time - e.time) : '—'),
+      'KF ◀ ' + (prev ? fmt(e.time - prev.time) : '—') + ' / KF ▶ ' + (next ? fmt(next.time - e.time) : '—'),
     ]
     for (let i = 0; i < 4; i++) {
       padVars[`dial_title_${i}`] = titles[i]
@@ -499,12 +522,12 @@ class DisguiseLayerControl extends InstanceBase {
     padVars.dial_info_2 = mediaMode
       ? `${e.mediaIndex + 1}/${e.mediaItems.length}  PAGE ${e.mediaPage + 1}/${Math.max(1, Math.ceil(e.mediaItems.length / 8))}`
       : e?.field?.sequenced
-        ? 'KEY ' + tc(here?.time)
+        ? 'KF ' + tc(here?.time)
         : 'CONSTANT'
     padVars.dial_info_3 =
-      'K- ' +
+      'KF ◀ ' +
       duration(prev ? e.time - prev.time : undefined) +
-      '\nK+ ' +
+      '\nKF ▶ ' +
       duration(next ? next.time - e.time : undefined)
     if (mediaMode) {
       padVars.dial_title_0 = 'SOURCE ' + (e.mediaFieldIndex + 1) + '/' + (e.layer?.mediaFields?.length || 0)
@@ -539,7 +562,7 @@ class DisguiseLayerControl extends InstanceBase {
     }
     if (clearBrowser) {
       for (let i = 0; i < 4; i++) padVars['dial_info_' + i] = ''
-      padVars.dial_title_0 = 'DELETE ALL KEYS'
+      padVars.dial_title_0 = 'DELETE ALL KEYFRAMES'
       padVars.dial_value_0 = readable(clearBrowser.layerName)
       padVars.dial_title_1 =
         'PARAMETER ' + (clearItem ? clearBrowser.index + 1 : 0) + '/' + clearBrowser.items.length
@@ -549,6 +572,12 @@ class DisguiseLayerControl extends InstanceBase {
       padVars.dial_value_2 = String(clearItem?.keyCount || 0)
       padVars.dial_title_3 = ''
       padVars.dial_value_3 = 'BACK'
+    }
+    // Capitalise display text only. Resource paths, parameter IDs, image data
+    // and public raw-value variables must retain their original case.
+    for (const name of Object.keys(padVars)) {
+      if (/^(pad_\d+|pad_(folder|kind)_\d+|dial_(title|value|info)_\d+)$/.test(name))
+        padVars[name] = String(padVars[name]).toUpperCase()
     }
     this.setVariableValues({
       ...padVars,
@@ -562,6 +591,7 @@ class DisguiseLayerControl extends InstanceBase {
       parameter_animated: Boolean(!clearBrowser && !e?.layerEdit && e?.field?.sequenced && keys.length > 1),
       track: e?.snapshot?.trackName || '',
       layer: e?.layer?.name || 'No active layer',
+      layer_type: layerTypeLabel(e?.layer?.moduleType).toUpperCase(),
       parameter: e?.field?.label || e?.field?.name || '',
       parameter_id: e?.field?.name || '',
       parameter_min: e?.field?.min ?? '-',
@@ -589,6 +619,7 @@ class DisguiseLayerControl extends InstanceBase {
       mode: this.config?.demo ? 'DEMO' : 'DESIGNER',
       last_error: this.lastError || '',
       connected: Boolean(this.connection?.connected),
+      heartbeat: Boolean(this.connection?.heartbeat),
       live_connected: Boolean(this.connection?.live),
       live_time: this.connection?.time ?? '',
       timecode: tc(e?.time),

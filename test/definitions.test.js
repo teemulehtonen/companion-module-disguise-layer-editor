@@ -42,9 +42,14 @@ test('Companion lifecycle supports demo load, action execution and shutdown', as
   await instance.init({ demo: true })
   await instance.actions.refresh.callback({ options: {} })
   assert.equal(state.layer, 'Background')
+  assert.equal(state.dial_value_0, 'BACKGROUND')
+  assert.equal(state.dial_value_1, state.parameter.toUpperCase())
   assert.equal(state.parameter_animated, true)
+  Object.assign(instance.editor.field, { min: 0, max: 1.000000047 })
+  instance.publish()
+  assert.equal(state.dial_info_1, '0–1')
   assert.match(state.dial_info_0, /^IN /)
-  assert.equal(state.pad_5, 'DELETE\nKEY')
+  assert.equal(state.pad_5, 'DELETE\nKEYFRAME')
   await instance.actions.pad.callback({ options: { slot: 3 } })
   assert.equal(state.playing, true)
   assert.equal(state.pad_3, 'STOP')
@@ -93,4 +98,41 @@ test('display presets use the connection label and resolve live values', () => {
   assert.equal(render(definitions.connection.style.text), 'HTTP + LIVE\n00:00:18:00')
   for (const preset of Object.values(definitions)) assert.ok(!preset.style.text.includes('$(this:'))
   assert.equal(presets('renamed')[1].fine.style.text, '$(renamed:step_mode)')
+})
+
+test('metadata refresh keeps a healthy connection OK without hiding real faults', () => {
+  const { InstanceStatus } = require('../src/companion-api')
+  const instance = Object.create(DisguiseLayerControl.prototype)
+  instance.config = {}
+  instance.connection = { connected: true }
+  instance.editor = { stale: true, snapshot: { trackUid: '1' } }
+  let actual
+  instance.updateStatus = (status) => {
+    actual = status
+  }
+  instance.connectionStatus()
+  assert.equal(actual, InstanceStatus.Ok)
+  instance.lastError = 'Native write failed'
+  instance.connectionStatus()
+  assert.equal(actual, InstanceStatus.UnknownError)
+  instance.lastError = ''
+  instance.connection.connected = false
+  instance.connectionStatus()
+  assert.equal(actual, InstanceStatus.ConnectionFailure)
+})
+
+test('all shipped presets are reachable from a preset group', () => {
+  const [groups, definitions] = presets()
+  const ids = new Set(groups.flatMap((group) => group.definitions))
+  assert.deepEqual([...ids].sort(), Object.keys(definitions).sort())
+})
+
+test('friendly layer types use Add Layer names and keep unknown types readable', () => {
+  const { layerTypeLabel } = require('../src/layer-types')
+  assert.equal(layerTypeLabel('VariableVideoModule'), 'Video')
+  assert.equal(layerTypeLabel('VideoModule'), 'Legacy Video')
+  assert.equal(layerTypeLabel('TwoPoint5DModule'), '2.5D')
+  assert.equal(layerTypeLabel('ColourAdjustModule'), 'Colour Adjust')
+  assert.equal(layerTypeLabel('FutureEffectModule'), 'Future Effect')
+  assert.equal(layerTypeLabel(), '')
 })

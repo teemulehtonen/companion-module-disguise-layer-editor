@@ -1,5 +1,6 @@
 'use strict'
 const { makeScript } = require('./designer-script')
+const { paths, requireSuccess, decodeExecution } = require('./designer-api')
 
 /** HTTP boundary: validate responses here; editing policy belongs to Editor.
  * A shared abort signal cancels in-flight work when Companion replaces the
@@ -10,8 +11,8 @@ class DesignerClient {
     if (!/^[a-zA-Z0-9.-]+$/.test(host || '')) throw new Error('Enter a Designer IP address or hostname')
     if (!Number.isInteger(Number(port)) || Number(port) < 1 || Number(port) > 65535)
       throw new Error('Invalid HTTP port')
-    this.url = `http://${host}:${Number(port)}/api/session/python/execute`
     this.baseUrl = `http://${host}:${Number(port)}`
+    this.url = this.baseUrl + paths.execute
     this.fetch = fetchImpl
     this.controller = new AbortController()
   }
@@ -20,7 +21,7 @@ class DesignerClient {
   }
   async thumbnail(uid) {
     if (!/^[0-9]+$/.test(uid)) return ''
-    const response = await this.fetch(`${this.baseUrl}/api/v1/thumbnail/${uid}?width=160&height=90`, {
+    const response = await this.fetch(this.baseUrl + paths.thumbnail(uid), {
       signal: AbortSignal.any([this.controller.signal, AbortSignal.timeout(5000)]),
     })
     if (!response.ok) return ''
@@ -29,7 +30,7 @@ class DesignerClient {
     return bytes.toString('base64')
   }
   async probe() {
-    const response = await this.fetch(`${this.baseUrl}/api/session/transport/activetransport`, {
+    const response = await this.fetch(this.baseUrl + paths.transports, {
       signal: AbortSignal.any([this.controller.signal, AbortSignal.timeout(5000)]),
     })
     if (!response.ok) throw new Error(`Designer HTTP ${response.status} (transport API)`)
@@ -54,18 +55,12 @@ class DesignerClient {
       throw new Error(`Designer HTTP ${response.status}${details ? ': ' + details.slice(0, 1500) : ''}`)
     }
     const body = await response.json()
-    if (!body.status || body.status.code !== 0)
-      throw new Error(body.status?.message || 'Invalid Designer API response')
-    try {
-      return typeof body.returnValue === 'string' ? JSON.parse(body.returnValue) : body.returnValue
-    } catch {
-      throw new Error('Designer returned invalid JSON')
-    }
+    return decodeExecution(body)
   }
   async togglePlayback(context) {
     const state = await this.execute('playback_state', context)
     const endpoint = state.playing ? 'stop' : 'playsection'
-    const response = await this.fetch(`${this.baseUrl}/api/session/transport/${endpoint}`, {
+    const response = await this.fetch(this.baseUrl + paths.playback(state.playing), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ transports: [{ uid: context.transportUid }] }),
@@ -73,7 +68,7 @@ class DesignerClient {
     })
     if (!response.ok) throw new Error(`Designer HTTP ${response.status} (${endpoint})`)
     const result = await response.json()
-    if (result.status?.code !== 0) throw new Error(result.status?.message || 'Playback command failed')
+    requireSuccess(result, 'Playback command failed')
     return { playing: !state.playing }
   }
 }

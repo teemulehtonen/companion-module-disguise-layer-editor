@@ -1,4 +1,5 @@
 'use strict'
+const { paths } = require('./designer-api')
 
 // REST health checks never execute Python. A successful probe identifies Designer,
 // rather than treating any open TCP port as a valid connection.
@@ -6,10 +7,11 @@ class Connection {
   constructor(
     client,
     onState,
-    { interval = 5000, WebSocketImpl = WebSocket, enableLiveUpdate = false } = {},
+    { interval = 5000, WebSocketImpl = WebSocket, enableLiveUpdate = false, onHeartbeat = () => {} } = {},
   ) {
     this.client = client
     this.onState = onState
+    this.onHeartbeat = onHeartbeat
     this.interval = interval
     this.WebSocket = WebSocketImpl
     // Designer 32.4.17 repeatedly faults while evaluating LiveUpdate subscriptions.
@@ -20,10 +22,32 @@ class Connection {
     this.live = false
     this.time = undefined
     this.ids = new Map()
+    this.feedbackRevision = 0
+  }
+  // A control action supersedes both cached feedback and an in-flight poll.
+  // Otherwise a later health probe can replay the pre-write parameter state.
+  invalidateFeedback() {
+    this.feedbackRevision++
+    this.timeline = undefined
+    this.time = undefined
+    this.fieldValue = undefined
+    this.trackUid = undefined
+    this.clock = undefined
   }
   start() {
     if (typeof this.client.execute === 'function') this.schedulePoll()
     return this.check()
+  }
+  // The timer only ends a pulse. Only a validated Designer response starts one.
+  pulseHeartbeat() {
+    clearTimeout(this.heartbeatTimer)
+    this.heartbeat = true
+    this.heartbeatTimer = setTimeout(() => {
+      this.heartbeat = false
+      // Extinguishing a visual pulse must not replay old timeline/value data.
+      if (!this.closed) this.onHeartbeat()
+    }, 200)
+    this.heartbeatTimer.unref?.()
   }
   schedulePoll() {
     // Schedule after completion, rather than setInterval, so a slow Designer
@@ -36,13 +60,20 @@ class Connection {
   async poll() {
     const transport = this.transportUid,
       targetKey = this.targetKey,
-      fieldTarget = this.fieldTarget
+      fieldTarget = this.fieldTarget,
+      revision = this.feedbackRevision
     try {
       if (this.connected && transport && !this.closed) {
         const result = await this.client.execute('live_state', { transportUid: transport, fieldTarget })
         // A response can arrive after an encoder selection or configuration change.
         // Never publish the old parameter's keys into the new selection.
-        if (this.closed || this.transportUid !== transport || this.targetKey !== targetKey) return
+        if (
+          this.closed ||
+          this.transportUid !== transport ||
+          this.targetKey !== targetKey ||
+          this.feedbackRevision !== revision
+        )
+          return
         if (!Number.isFinite(result.timeline?.time) || !Array.isArray(result.timeline.layers))
           throw new Error('Invalid live state')
         this.timeline = {
@@ -54,6 +85,7 @@ class Connection {
         this.fieldValue = result.fieldValue
         this.clock = { fps: result.clock.fps, mode: result.clock.tcMode, custom: result.clock.customFps }
         this.polling = true
+        this.pulseHeartbeat()
         this.onState(this)
       }
     } catch (error) {
@@ -71,6 +103,7 @@ class Connection {
       const transports = await this.client.probe()
       if (this.closed) return
       this.connected = true
+      this.pulseHeartbeat()
       this.error = ''
       this.transports = transports
       this.probeRevision = (this.probeRevision || 0) + 1
@@ -78,6 +111,8 @@ class Connection {
     } catch (error) {
       if (this.closed) return
       this.connected = false
+      this.heartbeat = false
+      clearTimeout(this.heartbeatTimer)
       this.error = error.message
       this.dropSocket()
     }
@@ -115,7 +150,7 @@ class Connection {
     this.clockProperty =
       "{'fps': object.customFps().value_or(object.beatToTimecode(0).fps()), 'mode': {Timecode.SMPTE23976:'23.976', Timecode.SMPTE24:'24', Timecode.SMPTE25:'25', Timecode.SMPTE2997:'29.97 NDF', Timecode.SMPTE2997DF:'29.97 DF', Timecode.SMPTE30:'30'}.get(object.smpteClockType(), 'Other'), 'custom': object.customFps().value_or(0) > 0}"
     const socket = (this.socket = new this.WebSocket(
-      this.client.baseUrl.replace(/^http/, 'ws') + '/api/session/liveupdate',
+      this.client.baseUrl.replace(/^http/, 'ws') + paths.liveUpdate,
     ))
     const current = () => !this.closed && this.socket === socket
     this.socketTimer = setTimeout(() => {
@@ -208,6 +243,8 @@ class Connection {
     this.closed = true
     clearTimeout(this.timer)
     clearTimeout(this.pollTimer)
+    clearTimeout(this.heartbeatTimer)
+    this.heartbeat = false
     this.dropSocket()
   }
 }

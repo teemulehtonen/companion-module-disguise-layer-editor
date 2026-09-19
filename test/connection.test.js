@@ -23,6 +23,39 @@ class Socket extends EventTarget {
     this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(value) }))
   }
 }
+
+test('a write invalidates cached feedback and delayed same-parameter polls', async () => {
+  let resolvePoll
+  const c = new Connection(
+    {
+      execute: () =>
+        new Promise((resolve) => {
+          resolvePoll = resolve
+        }),
+      probe: async () => [],
+    },
+    () => {},
+  )
+  c.connected = true
+  c.transportUid = '1'
+  c.targetKey = 'brightness'
+  c.fieldValue = { value: 0, sequenced: false }
+  const pending = c.poll()
+  c.invalidateFeedback()
+  resolvePoll({
+    timeline: { time: 1, layers: [] },
+    fieldValue: { value: 0, sequenced: false },
+    clock: { fps: 25 },
+  })
+  try {
+    await pending
+    await c.check()
+    assert.equal(c.fieldValue, undefined)
+    assert.equal(c.timeline, undefined)
+  } finally {
+    c.close()
+  }
+})
 test('production feedback never opens faulting LiveUpdate subscriptions and retains polling targets', async () => {
   const c = new Connection({ probe: async () => [] }, () => {}, {
     WebSocketImpl: class {
@@ -271,6 +304,37 @@ test('polling discards a response for an old parameter or closed connection', as
     resolve(result)
     await second
     assert.equal(c.time, undefined)
+  } finally {
+    c.close()
+  }
+})
+
+test('heartbeat pulses only after a successful response and clears on timeout, failure and close', async () => {
+  let fail = false
+  const c = new Connection(
+    {
+      probe: async () => {
+        if (fail) throw Error('offline')
+        return []
+      },
+    },
+    () => {},
+  )
+  try {
+    assert.ok(!c.heartbeat)
+    await c.check()
+    assert.equal(c.heartbeat, true)
+    await new Promise((resolve) => setTimeout(resolve, 240))
+    assert.equal(c.heartbeat, false)
+    await c.check()
+    assert.equal(c.heartbeat, true)
+    fail = true
+    await c.check()
+    assert.equal(c.heartbeat, false)
+    fail = false
+    await c.check()
+    c.close()
+    assert.equal(c.heartbeat, false)
   } finally {
     c.close()
   }

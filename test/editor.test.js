@@ -194,7 +194,7 @@ test('encoder bursts accumulate without floating point drift or network calls', 
   assert.equal(e.value, 1.5)
   assert.equal(e.dirty, true)
 })
-test('selectors wrap and reset staged values', async () => {
+test('layer selection wraps but parameter selection stops at each end', async () => {
   const e = await ready()
   e.adjustValue(3)
   e.select('layer', -1)
@@ -203,7 +203,13 @@ test('selectors wrap and reset staged values', async () => {
   assert.equal(e.dirty, false)
   e.select('layer', 1)
   e.select('field', -1)
+  assert.equal(e.fieldIndex, 0)
+  e.select('field', 1)
   assert.equal(e.field.name, 'speed')
+  e.select('field', 1)
+  assert.equal(e.field.name, 'speed')
+  e.select('field', -1)
+  assert.equal(e.fieldIndex, 0)
 })
 test('key navigation selects exact time and value, without moving Designer', async () => {
   const e = await ready()
@@ -343,4 +349,16 @@ test('constant DEFAULT resets without confirmation but refuses newly animated fi
   f.keys.push({ time: 50, value: 0 })
   await assert.rejects(e.padUp(5, 400), /animated/)
   assert.equal(f.keys.length, 2)
+})
+
+test('adding a key to a native constant-only parameter is an inert action', async () => {
+  const e = await ready()
+  e.field.canAnimate = false
+  const before = structuredClone(e.field)
+  e.client.execute = async () => {
+    throw Error('Unexpected native request')
+  }
+  await e.pressValue()
+  await e.writeLive('key_set')
+  assert.deepEqual(e.field, before)
 })

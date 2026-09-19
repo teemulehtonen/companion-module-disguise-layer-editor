@@ -2,7 +2,7 @@ param([switch]$Force)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $version = (Get-Content -LiteralPath (Join-Path $projectRoot 'package.json') -Raw | ConvertFrom-Json).version
-if ($version -ne '0.1.0-beta.1') { throw 'Update the release name and manifest together before creating a different release.' }
+if ($version -ne '0.1.0-beta.14') { throw 'Update the release name and manifest together before creating a different release.' }
 $releaseName = '0.1.beta'
 $releaseRoot = Join-Path $projectRoot 'releases'
 $destination = Join-Path $releaseRoot $releaseName
@@ -35,7 +35,7 @@ $sourceFiles = @(
     'README.md','LICENSE','CHANGELOG.md','KNOWN-LIMITATIONS.md','DISCLAIMER.md','SECURITY.md',
     'scripts/release.ps1',
     'scripts/build-page.cjs','scripts/verify-package.mjs','templates/button-style.json',
-    'docs/ARCHITECTURE.md','docs/TRACK-1-TESTS.md','docs/GITHUB-SETUP.md','docs/BUILD.md'
+    'docs/ARCHITECTURE.md','docs/TRACK-1-TESTS.md','docs/TRACK-6-TESTS.md','docs/GITHUB-SETUP.md','docs/BUILD.md'
 )
 foreach ($folder in @('src','test','companion')) {
     $sourceFiles += Get-ChildItem -LiteralPath (Join-Path $projectRoot $folder) -File -Recurse | ForEach-Object { $_.FullName.Substring($projectRoot.Length + 1) }
@@ -54,6 +54,7 @@ New-Item -ItemType Directory -Path (Join-Path $bundle 'docs') | Out-Null
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/ARCHITECTURE.md') -Destination (Join-Path $bundle 'docs')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/BUILD.md') -Destination (Join-Path $bundle 'docs')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/TRACK-1-TESTS.md') -Destination (Join-Path $bundle 'docs')
+Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/TRACK-6-TESTS.md') -Destination (Join-Path $bundle 'docs')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/GITHUB-SETUP.md') -Destination (Join-Path $bundle 'docs')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'CONTRIBUTING.md') -Destination $bundle
 Compress-Archive -Path (Join-Path $source '*') -DestinationPath (Join-Path $bundle "disguise-layer-editor-$releaseName-source.zip")
@@ -70,7 +71,11 @@ try {
 Compress-Archive -LiteralPath @((Join-Path $bundle "disguise-layer-control-$version.tgz"), (Join-Path $bundle 'D3-Stream-Deck-Plus.companionconfig')) -DestinationPath (Join-Path $bundle "disguise-layer-editor-$releaseName-companion.zip")
 $hashes = Get-ChildItem -LiteralPath $bundle -File -Recurse | Sort-Object FullName | ForEach-Object {
     $name = $_.FullName.Substring($bundle.Length + 1).Replace('\','/')
-    '{0}  {1}' -f (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $name
+    $stream = [IO.File]::OpenRead($_.FullName)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    try { $hash = [BitConverter]::ToString($sha.ComputeHash($stream)).Replace('-', '').ToLowerInvariant() }
+    finally { $stream.Dispose(); $sha.Dispose() }
+    '{0}  {1}' -f $hash, $name
 }
 Set-Content -LiteralPath (Join-Path $bundle 'SHA256SUMS.txt') -Value $hashes -Encoding ascii
 Remove-CheckedDirectory $destination $releaseRoot

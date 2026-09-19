@@ -131,6 +131,18 @@ for (let i = 0; i < 8; i++) {
     clock.fontsize = literal(48)
     clock.color = literal(theme.text)
     c.style.layers.push(clock)
+    const heartbeat = structuredClone(clock)
+    heartbeat.id = 'designer-heartbeat'
+    heartbeat.name = 'Designer response heartbeat'
+    heartbeat.enabled = expression(`${variable('ui_mode')} == 'PARAMS' && ${variable('heartbeat')}`)
+    heartbeat.text = literal('●')
+    heartbeat.x = literal(85)
+    heartbeat.y = literal(3)
+    heartbeat.width = literal(12)
+    heartbeat.height = literal(14)
+    heartbeat.fontsize = literal(80)
+    heartbeat.color = literal(theme.keyframe)
+    c.style.layers.push(heartbeat)
   }
   if (i === 5) {
     const showHint = `${variable('ui_mode')} == 'PARAMS' && ${variable('delete_hint')} != ''`
@@ -174,7 +186,7 @@ for (let i = 0; i < 8; i++) {
   title.name = 'Heading'
   title.y = literal(0)
   title.height = literal(18)
-  title.fontsize = literal(theme.type.title)
+  title.fontsize = literal(column === 3 ? theme.type.timeTitle : theme.type.title)
   title.color = literal(theme.accent)
   title.text = literal(variable(`dial_title_${column}`))
   const detail = structuredClone(title)
@@ -186,14 +198,29 @@ for (let i = 0; i < 8; i++) {
   detail.color = literal(theme.secondary)
   detail.text = literal(variable(`dial_info_${column}`))
   c.style.layers.push(title, detail)
+  if (column === 0) {
+    const showType = `${variable('ui_mode')} == 'PARAMS' && ${variable('layer_edit')} == 'SCRUB'`
+    body.height = expression(`${showType} ? 24 : 40`)
+    const type = structuredClone(title)
+    type.id = 'layer-type'
+    type.name = 'Friendly layer type'
+    type.enabled = expression(showType)
+    type.text = literal(variable('layer_type'))
+    type.y = literal(43)
+    type.height = literal(18)
+    type.fontsize = literal(theme.type.title)
+    type.color = literal(theme.accent)
+    c.style.layers.push(type)
+  }
   if (column === 1) {
-    title.width = literal(86)
+    // Centre the heading across the display; the indicator is an overlay.
+    title.width = literal(100)
     const dot = structuredClone(title)
     dot.id = 'animated'
     dot.name = 'Parameter has keyframes'
     dot.text = literal('●')
     dot.x = literal(88)
-    dot.width = literal(10)
+    dot.width = literal(12)
     dot.fontsize = literal(theme.type.indicator)
     dot.color = literal(theme.keyframe)
     dot.enabled = expression(`${variable('parameter_animated')} && ${variable('ui_mode')} != 'MEDIA'`)

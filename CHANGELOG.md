@@ -1,3 +1,17 @@
+# 0.1.beta — 0.1.0-beta.14
+
+- Uppercase control displays, larger LCD headings and a centred PARAMETER heading.
+- Friendly layer-type labels share the LAYER heading's font size and colour. Keyframe buttons use the full word; timing hints use KF followed by direction arrows.
+- Larger keyframe indicator, compact parameter bounds and a Designer-response heartbeat on PLAY SECTION.
+- Parameter navigation stops at the first and last entry.
+- Healthy metadata synchronisation no longer changes the connection to Connecting.
+- Constant-only Designer fields ignore keyframe creation instead of sending an invalid command.
+- Centralised REST and Companion SDK integration boundaries, with an upgrade guide in the architecture document.
+- All shipped presets are included in the preset groups.
+- Prevent cached or delayed polling feedback from reverting the state after a control action.
+- Confirmed layer defaults are harmless when there are no supported parameters.
+- Live compatibility coverage for all 76 Add Layer types; see [Track 6 report](docs/TRACK-6-TESTS.md).
+
 # 0.1.beta — 0.1.0-beta.1
 
 - Initial Disguise Layer Editor beta; anonymous source and commit metadata.

@@ -257,6 +257,10 @@ if p['command'] in ('key_clear_list', 'keys_clear', 'parameter_default', 'layer_
                           'kind': 'RESOURCE' if isinstance(f.sequence, ResourceSequence) else 'VALUE',
                           'keyCount': f.sequence.nKeys()}
                          for f in supported if f.sequence.nKeys() > 1 or (not f.disableSequencing and f.sequence.nKeys() > 0)]}
+    # Some layer types expose only unsupported string settings. A confirmed
+    # whole-layer reset then has nothing to change; it is not an API failure.
+    if p['command'] == 'layer_default' and p.get('confirmed') is True and not supported:
+        return {'cleared': []}
     if p.get('confirmed') is not True or not p.get('fields'):
         raise ValueError('Select parameters and confirm before clearing')
     seconds = float(manager.player.tCurrent)

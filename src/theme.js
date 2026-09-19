@@ -27,9 +27,10 @@ module.exports = Object.freeze({
     tool: 20,
     mediaFile: 68,
     mediaFolder: 68,
-    title: 70,
+    title: 80,
+    timeTitle: 70,
     value: 74,
-    detail: 40,
-    indicator: 70,
+    detail: 46,
+    indicator: 85,
   }),
 })

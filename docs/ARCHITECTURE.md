@@ -19,4 +19,21 @@
 
 Action/variable IDs and the internal module ID `disguise-layer-control` remain stable for existing pages. Production feedback uses HTTP polling; LiveUpdate is retained only as an opt-in protocol test path.
 
+## Updating integrations
+
+The tested baseline is Designer 32.4.17, Companion 5.0.5 and Companion SDK 2.1.3. A future API version is not automatically compatible.
+
+| Upstream change | Integration boundary | Validation |
+| --- | --- | --- |
+| Designer REST paths or response envelopes | `src/designer-api.js`, `src/client.js` | `test/client.test.js` |
+| Designer native classes, metadata, sequences or time conversion | `src/designer-script.js` | Offline script assertions and live tests on a disposable track |
+| Designer feedback / subscriptions | `src/connection.js` | `test/connection.test.js` and live selection tests |
+| Companion SDK or instance lifecycle | `src/companion-api.js`, `src/main.js`, package and manifest SDK versions | `scripts/verify-package.mjs` exercises the bundled module with a host context |
+| Companion actions, feedback or variable schemas | `src/definitions.js`, `src/main.js` | Definition tests and importing into the target Companion version |
+| Companion page export format | `scripts/build-page.cjs`, `templates/button-style.json` | Import the generated page and test its controls |
+
+Keep the Editor's seconds-based data model and stable action IDs unchanged when adapting a boundary. Update captured response fixtures and tests first, then test against the actual target applications. Do not silently retry writes or guess renamed native methods. Missing metadata or unsupported field types must remain visible in compatibility reports.
+
+The heartbeat variable is a short pulse triggered by a validated Designer response. Its timer only extinguishes the pulse; it cannot fabricate connectivity.
+
 Release packaging uses an explicit source allowlist and excludes local evidence. See [contribution checks](../CONTRIBUTING.md).
