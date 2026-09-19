@@ -1,6 +1,6 @@
 {
   "name": "companion-module-disguise-layer-control",
-  "version": "0.1.0-beta.100",
+  "version": "0.1.0-beta.101",
   "private": true,
   "description": "Disguise Designer layer and keyframe programming for Companion and Stream Deck +",
   "main": "src/entry.mjs",

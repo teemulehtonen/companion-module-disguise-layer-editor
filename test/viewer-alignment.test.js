@@ -83,3 +83,27 @@ test('key guides compare only the selected parameter against other layers', () =
   assert.deepEqual(alignmentGuides(data,{...context,layerEdit:false,moveKey:true,keyTime:7}),[])
   assert.deepEqual(alignmentGuides(data,{...context,parameter:'another'}).filter(g=>g.subtle).map(g=>g.time),[6])
 })
+
+test('alignment matrix: IN/OUT, numeric/resource keys, group bounds and fractional FPS; never snaps', () => {
+  let checked=0
+  for (const fps of [25,30,30000/1001,60000/1001])
+    for (const source of ['start','end','numeric','resource'])
+      for (const target of ['start','end','numeric','resource','groupStart','groupEnd']) {
+        const selected={uid:'a',name:'A',start:1,end:9,fields:[],resources:[]}
+        const other={uid:'b',name:'B',start:0,end:10,fields:[],resources:[]}
+        const set=(layer,kind,time)=>{
+          if(kind==='start'||kind==='end') layer[kind]=time
+          else if(kind.startsWith('group')){layer.group=true;layer[kind==='groupStart'?'start':'end']=time}
+          else layer[kind==='resource'?'resources':'fields']=[{name:'value',sequenced:true,keys:[{time}]}]
+        }
+        set(selected,source,5);set(other,target,5)
+        const snapshot={fps,layers:[selected,other]}, before=structuredClone(snapshot)
+        const context={focusUid:'a',parameter:'value',layerEdit:source==='start'||source==='end',moveKey:source==='numeric'||source==='resource',keyTime:5}
+        assert.ok(alignmentGuides(snapshot,context).some(g=>g.time===5&&g.count>0),source+' vs '+target)
+        assert.deepEqual(snapshot,before,'guide calculation must never snap or mutate')
+        set(other,target,5+1/(fps*128))
+        assert.ok(!alignmentGuides(snapshot,context).some(g=>g.count>0),'nearby subframe is not an alignment')
+        checked++
+      }
+  assert.equal(checked,96)
+})

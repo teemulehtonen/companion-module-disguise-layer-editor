@@ -1,4 +1,4 @@
-# Project handoff — beta.100
+# Project handoff — beta.101
 
 Read this file, DEVELOPER-MANUAL.md and VIEWER-DEVELOPMENT.md when resuming. Public source and release packages contain no development machine settings.
 
@@ -43,3 +43,5 @@ Beta.98: keyframe alignment targets only context.parameter in the selected layer
 Beta.99: native keyframes may sit exactly at layer OUT. Viewer key visibility is inclusive of IN and OUT; keys strictly outside remain hidden. This does not change transport playback’s exclusive OUT behavior.
 
 Beta.100: zoom buttons and Ctrl+wheel centre on state.time (playhead), clamped to track view bounds. FIT LAYER remains layer-centred.
+
+Beta.101: alignment counts only coincidences within 1 microsecond across different layers, including group IN/OUT. Matched guides are solid and brighter; unmatched Layer Edit boundaries remain dashed. No snapping. test/viewer-alignment.test.js covers 96 boundary/key/resource/group/FPS pairs plus subframe near misses and nonmutation.

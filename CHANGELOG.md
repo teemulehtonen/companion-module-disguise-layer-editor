@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-beta.101
+
+- Highlight true timeline alignments with a brighter solid line; never snap or alter times.
+- Require exact time coincidence for every guide and include group boundaries. Verify 96 pair/FPS combinations.
+
 ## 0.1.0-beta.100
 
 - Centre zoom buttons and Ctrl+wheel on the playhead, within track view bounds.

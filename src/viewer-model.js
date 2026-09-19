@@ -37,7 +37,6 @@ function alignmentGuides(snapshot, context) {
   if (!Number.isFinite(fps) || fps <= 0) return []
   const landmarks = []
   for (const layer of snapshot.layers || []) {
-    if (layer.group) continue
     for (const edge of ['start', 'end'])
       if (Number.isFinite(layer[edge]))
         landmarks.push({
@@ -46,6 +45,7 @@ function alignmentGuides(snapshot, context) {
           time: layer[edge],
           label: layer.name + (edge === 'start' ? ' · IN' : ' · OUT'),
         })
+    if (layer.group) continue // Group bounds are real; aggregated child keys are not new landmarks.
     for (const field of [...(layer.fields || []), ...(layer.resources || [])])
       if (hasKeyframes(field))
         field.keys.forEach((key, index) => {
@@ -68,7 +68,7 @@ function alignmentGuides(snapshot, context) {
         : Number.isFinite(context.keyTime) &&
           item.kind === 'key' &&
           item.field === context.parameter &&
-          Math.abs(item.time - context.keyTime) < 0.51 / fps),
+          Math.abs(item.time - context.keyTime) < 1e-6),
   )
   const buckets = new Map()
   for (const item of landmarks) {
@@ -76,15 +76,20 @@ function alignmentGuides(snapshot, context) {
     if (!buckets.has(frame)) buckets.set(frame, [])
     buckets.get(frame).push(item)
   }
+  const matchesAt = target => {
+    const frame = Math.round(target.time * fps)
+    return [frame-1,frame,frame+1].flatMap(key=>buckets.get(key)||[])
+      .filter(item=>item.layer!==target.layer && Math.abs(item.time-target.time)<1e-6)
+  }
   const guides = new Map()
   for (const target of targets) {
     const frame = Math.round(target.time * fps)
-    const matches = buckets.get(frame).filter((item) => item.layer !== target.layer)
+    const matches = matchesAt(target)
     // Layer editing always shows exact IN/OUT, including subframe beat edges.
     // Keyframe editing retains its match-only alignment guides.
     if (context.layerEdit || matches.length)
       guides.set(context.layerEdit ? target.kind : frame, {
-        time: context.layerEdit ? target.time : frame / fps,
+        time: target.time,
         labels: [target.label, ...matches.map((item) => item.label)].slice(0, 8),
         count: matches.length,
       })
@@ -96,8 +101,7 @@ function alignmentGuides(snapshot, context) {
   for (const target of landmarks.filter(item => item.layer === context.focusUid && item.kind === 'key' && item.field === context.parameter)) {
     if (processedKeyTimes.has(target.time)) continue
     processedKeyTimes.add(target.time)
-    const matches = (buckets.get(Math.round(target.time * fps)) || [])
-      .filter(item => item.layer !== target.layer && Math.abs(item.time - target.time) < 1e-6)
+    const matches = matchesAt(target)
     if (!matches.length || strongTimes.some(time => Math.abs(time - target.time) < 1e-6)) continue
     guides.set('key:' + target.time, {
       time:target.time, subtle:true,
