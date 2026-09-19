@@ -42,6 +42,6 @@ npm run package
 
 Windows: `npm run release` creates archives in `releases/0.1.beta`. To replace a local build, use `npm run release -- -Force`. Module and page files are generated outputs, excluded from Git.
 
-[Build details](docs/BUILD.md) · [Contributing](CONTRIBUTING.md) · [Architecture](docs/ARCHITECTURE.md) · [Test report](docs/TRACK-6-TESTS.md)
+[Build details](docs/BUILD.md) · [Developer manual](docs/DEVELOPER-MANUAL.md) · [Contributing](CONTRIBUTING.md) · [Architecture](docs/ARCHITECTURE.md) · [Test report](docs/TRACK-6-TESTS.md)
 
 MIT licensed. The internal module ID remains `disguise-layer-control` for compatibility.

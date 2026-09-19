@@ -1,5 +1,7 @@
 # Architecture
 
+For a walkthrough of the files, state model and editing flows, see the [developer manual](DEVELOPER-MANUAL.md).
+
 ## Request flow
 
 `definitions.js` maps controls to `editor.js`. `main.js` serializes actions and publishes displays. `client.js` sends HTTP requests; `designer-script.js` supplies Python that checks live state before writing inside Designer. `connection.js` polls feedback sequentially.
