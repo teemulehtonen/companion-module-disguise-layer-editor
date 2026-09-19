@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-beta.99
+
+- Keep keyframes at the exact native layer OUT visible in curves, resource rows and group summaries. Keys after OUT remain hidden.
+
 ## 0.1.0-beta.98
 
 - Restrict keyframe guides to the selected parameter and comparisons against other layers only.

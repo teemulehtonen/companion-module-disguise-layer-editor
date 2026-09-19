@@ -169,7 +169,7 @@ function browserMain() {
       sections.lane.append(band)
     }
   }
-  const visibleKeys = (field, layer) => (field.keys || []).filter(key => key.time >= layer.start && key.time < layer.end)
+  const visibleKeys = (field, layer) => (field.keys || []).filter(key => key.time >= layer.start && key.time <= layer.end)
   function curve(lane, field, layer) {
     if (!field.sequenced || !field.keys?.length) return
     const samples = (field.samples || []).filter((s) => Number.isFinite(s.value))
@@ -177,7 +177,7 @@ function browserMain() {
     const values = samples.map((s) => s.value)
     values.push(
       ...(field.keys || [])
-        .filter((k) => k.time >= layer.start && k.time < layer.end && k.time >= start && k.time <= start + span && Number.isFinite(k.value))
+        .filter((k) => k.time >= layer.start && k.time <= layer.end && k.time >= start && k.time <= start + span && Number.isFinite(k.value))
         .map((k) => k.value),
     )
     if (Number.isFinite(field.min) && Number.isFinite(field.max) && field.max > field.min)

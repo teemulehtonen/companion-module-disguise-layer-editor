@@ -49,7 +49,7 @@ function alignmentGuides(snapshot, context) {
     for (const field of [...(layer.fields || []), ...(layer.resources || [])])
       if (hasKeyframes(field))
         field.keys.forEach((key, index) => {
-          if (Number.isFinite(key.time) && key.time >= layer.start && key.time < layer.end)
+          if (Number.isFinite(key.time) && key.time >= layer.start && key.time <= layer.end)
             landmarks.push({
               layer: layer.uid,
               kind: 'key',
@@ -118,8 +118,8 @@ function summariseGroups(layers) {
       while (parent && !seen.has(parent)) {
         seen.add(parent)
         if (parent === group.uid) {
-          group.fields.push(...(child.fields || []).map(field => ({ ...field, keys: (field.keys || []).filter(key => key.time >= (child.start ?? -Infinity) && key.time < (child.end ?? Infinity)) })))
-          group.resources.push(...(child.resources || []).map(field => ({ ...field, keys: (field.keys || []).filter(key => key.time >= (child.start ?? -Infinity) && key.time < (child.end ?? Infinity)) })))
+          group.fields.push(...(child.fields || []).map(field => ({ ...field, keys: (field.keys || []).filter(key => key.time >= (child.start ?? -Infinity) && key.time <= (child.end ?? Infinity)) })))
+          group.resources.push(...(child.resources || []).map(field => ({ ...field, keys: (field.keys || []).filter(key => key.time >= (child.start ?? -Infinity) && key.time <= (child.end ?? Infinity)) })))
           break
         }
         parent = byUid.get(parent)?.parent

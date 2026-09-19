@@ -27,3 +27,12 @@ test('malformed parent cycles cannot hang group summaries', () => {
   ]
   assert.equal(summariseGroups(layers).length, 3)
 })
+
+test('group markers retain last interior frame and exact OUT, but not later keys', () => {
+  for (const fps of [25,30,60000/1001]) {
+    const end=75, times=[end-1/fps,end,end+1/fps]
+    const layers=[{uid:'g',group:true},{uid:'l',parent:'g',start:0,end,fields:[{keys:times.map(time=>({time}))}],resources:[]}]
+    summariseGroups(layers)
+    assert.deepEqual(layers[0].fields[0].keys.map(k=>k.time),times.slice(0,2))
+  }
+})
