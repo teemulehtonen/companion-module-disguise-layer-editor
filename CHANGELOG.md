@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-beta.100
+
+- Centre zoom buttons and Ctrl+wheel on the playhead, within track view bounds.
+
 ## 0.1.0-beta.99
 
 - Keep keyframes at the exact native layer OUT visible in curves, resource rows and group summaries. Keys after OUT remain hidden.

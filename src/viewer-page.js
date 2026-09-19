@@ -717,7 +717,7 @@ function browserMain() {
     if (!state) return
     cancelAnimationFrame(frame)
     frame = 0
-    const centre = start + span / 2
+    const centre = Number.isFinite(state.time) ? state.time : start + span / 2
     span = Math.min(state.length || 1, Math.max(2 / (state.fps || 25), span * factor))
     start = bounds(centre - span / 2)
     draw()

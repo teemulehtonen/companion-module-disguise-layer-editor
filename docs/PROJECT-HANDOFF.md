@@ -1,4 +1,4 @@
-# Project handoff — beta.99
+# Project handoff — beta.100
 
 Read this file, DEVELOPER-MANUAL.md and VIEWER-DEVELOPMENT.md when resuming. Public source and release packages contain no development machine settings.
 
@@ -41,3 +41,5 @@ Beta.97 adds subtle match-only guides for all sequenced keys in the selected lay
 Beta.98: keyframe alignment targets only context.parameter in the selected layer. Compare against other layers only; never count the selected layer’s own keys or boundaries.
 
 Beta.99: native keyframes may sit exactly at layer OUT. Viewer key visibility is inclusive of IN and OUT; keys strictly outside remain hidden. This does not change transport playback’s exclusive OUT behavior.
+
+Beta.100: zoom buttons and Ctrl+wheel centre on state.time (playhead), clamped to track view bounds. FIT LAYER remains layer-centred.
