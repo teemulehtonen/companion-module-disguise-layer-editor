@@ -1,5 +1,6 @@
 'use strict'
 const { makeScript } = require('./designer-script')
+const { orderLayerParameters } = require('./parameter-order')
 const { paths, requireSuccess, decodeExecution } = require('./designer-api')
 
 /** HTTP boundary: validate responses here; editing policy belongs to Editor.
@@ -55,7 +56,18 @@ class DesignerClient {
       throw new Error(`Designer HTTP ${response.status}${details ? ': ' + details.slice(0, 1500) : ''}`)
     }
     const body = await response.json()
-    return decodeExecution(body)
+    const result = decodeExecution(body)
+    if (command === 'viewer_snapshot') result.layers.forEach(orderLayerParameters)
+    return result
+  }
+  async annotations(uid) {
+    const response = await this.fetch(this.baseUrl + paths.annotations(uid), {
+      signal: AbortSignal.any([this.controller.signal, AbortSignal.timeout(5000)]),
+    })
+    if (!response.ok) throw new Error('Annotations unavailable')
+    const body = requireSuccess(await response.json())
+    if (String(body.result?.uid) !== uid) throw new Error('Annotation track mismatch')
+    return body.result.annotations
   }
   async togglePlayback(context) {
     const state = await this.execute('playback_state', context)

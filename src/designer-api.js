@@ -5,6 +5,7 @@
 const paths = Object.freeze({
   execute: '/api/session/python/execute',
   transports: '/api/session/transport/activetransport',
+  annotations: (uid) => '/api/session/transport/annotations?uid=' + encodeURIComponent(uid),
   liveUpdate: '/api/session/liveupdate',
   thumbnail: (uid) => `/api/v1/thumbnail/${uid}?width=160&height=90`,
   playback: (playing) => `/api/session/transport/${playing ? 'stop' : 'playsection'}`,

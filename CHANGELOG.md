@@ -1,3 +1,10 @@
+## 0.1.0-beta.37
+
+- Add an experimental timeline viewer with native curves, resource thumbnails, groups and relationship arrows.
+- Add browser selection, timeline seeking and per-layer visibility controls.
+- Keep live values and selection responsive while geometry refreshes.
+- Add cached local WAV source previews; direct SMB remains experimental and embedded video audio decoding is not supported.
+
 # 0.1.beta — 0.1.0-beta.16
 
 - New numeric keyframes explicitly default to SMOOTH. Updating an existing keyframe preserves its interpolation type.

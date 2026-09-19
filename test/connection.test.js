@@ -339,3 +339,25 @@ test('heartbeat pulses only after a successful response and clears on timeout, f
     c.close()
   }
 })
+
+test('new LiveUpdate feedback supersedes an in-flight HTTP poll', async () => {
+  let resolve
+  const c = new Connection(
+    { baseUrl: 'http://localhost', execute: () => new Promise((r) => (resolve = r)) },
+    () => {},
+    { enableLiveUpdate: true, WebSocketImpl: Socket },
+  )
+  c.connected = true
+  c.watch('123')
+  const socket = c.socket
+  socket.message({ subscriptions: [{ id: 1, propertyPath: c.timelineProperty }] })
+  const pending = c.poll()
+  socket.message({ valuesChanged: [{ id: 1, value: { time: 20, trackUid: '1', layers: [] } }] })
+  resolve({ timeline: { time: 10, layers: [] }, clock: { fps: 25 } })
+  await pending
+  assert.equal(c.time, 20)
+  c.invalidateFeedback()
+  socket.message({ valuesChanged: [{ id: 1, value: { time: 5, trackUid: '1', layers: [] } }] })
+  assert.equal(c.time, undefined)
+  c.close()
+})

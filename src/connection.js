@@ -1,5 +1,6 @@
 'use strict'
 const { paths } = require('./designer-api')
+const { contentProperty } = require('./live-properties')
 
 // REST health checks never execute Python. A successful probe identifies Designer,
 // rather than treating any open TCP port as a valid connection.
@@ -14,8 +15,7 @@ class Connection {
     this.onHeartbeat = onHeartbeat
     this.interval = interval
     this.WebSocket = WebSocketImpl
-    // Designer 32.4.17 repeatedly faults while evaluating LiveUpdate subscriptions.
-    // Keep production feedback on sequential HTTP polling; opt-in is for protocol tests.
+    // LiveUpdate supplies fast feedback; sequential HTTP remains the recovery path.
     this.enableLiveUpdate = enableLiveUpdate
     this.closed = false
     this.connected = false
@@ -23,11 +23,22 @@ class Connection {
     this.time = undefined
     this.ids = new Map()
     this.feedbackRevision = 0
+    this.liveRevision = 0
+    this.retryAt = 0
   }
   // A control action supersedes both cached feedback and an in-flight poll.
   // Otherwise a later health probe can replay the pre-write parameter state.
   invalidateFeedback() {
     this.feedbackRevision++
+    if (this.enableLiveUpdate) {
+      this.dropSocket()
+      clearTimeout(this.resumeTimer)
+      this.resumeTimer = setTimeout(() => {
+        this.resumeTimer = null
+        this.watch(this.transportUid, this.fieldTarget)
+      }, 120)
+      this.resumeTimer.unref?.()
+    }
     this.timeline = undefined
     this.time = undefined
     this.fieldValue = undefined
@@ -54,14 +65,15 @@ class Connection {
     // cannot accumulate overlapping Python requests. LiveUpdate is advisory:
     // some Designer builds acknowledge subscriptions without publishing values.
     if (this.closed) return
-    this.pollTimer = setTimeout(() => this.poll(), 500)
+    this.pollTimer = setTimeout(() => this.poll(), this.live ? 1500 : 500)
     this.pollTimer.unref?.()
   }
   async poll() {
     const transport = this.transportUid,
       targetKey = this.targetKey,
       fieldTarget = this.fieldTarget,
-      revision = this.feedbackRevision
+      revision = this.feedbackRevision,
+      liveRevision = this.liveRevision
     try {
       if (this.connected && transport && !this.closed) {
         const result = await this.client.execute('live_state', { transportUid: transport, fieldTarget })
@@ -71,7 +83,8 @@ class Connection {
           this.closed ||
           this.transportUid !== transport ||
           this.targetKey !== targetKey ||
-          this.feedbackRevision !== revision
+          this.feedbackRevision !== revision ||
+          this.liveRevision !== liveRevision
         )
           return
         if (!Number.isFinite(result.timeline?.time) || !Array.isArray(result.timeline.layers))
@@ -128,7 +141,7 @@ class Connection {
     if (!/^(?:0x[0-9a-f]+|[0-9]+)$/i.test(transportUid)) return
     const targetKey = JSON.stringify(fieldTarget)
     if (
-      (this.socket || !this.enableLiveUpdate) &&
+      (this.socket || !this.enableLiveUpdate || this.resumeTimer || Date.now() < this.retryAt) &&
       this.transportUid === transportUid &&
       this.targetKey === targetKey
     )
@@ -137,7 +150,7 @@ class Connection {
     this.transportUid = transportUid
     this.fieldTarget = fieldTarget
     this.targetKey = targetKey
-    if (!this.enableLiveUpdate) return
+    if (!this.enableLiveUpdate || Date.now() < this.retryAt || this.resumeTimer) return
     const fieldPath = fieldTarget
       ? `[l for l in object.track.getLeafLayers(Module) if str(l.uid) == ${JSON.stringify(fieldTarget.layerUid)}][0].findSequence(${JSON.stringify(fieldTarget.name)})`
       : null
@@ -155,6 +168,7 @@ class Connection {
     const current = () => !this.closed && this.socket === socket
     this.socketTimer = setTimeout(() => {
       if (current() && !this.live) {
+        this.retryAt = Date.now() + 30000
         this.dropSocket()
         this.liveError = 'LiveUpdate subscription timed out'
         this.onState(this)
@@ -177,6 +191,18 @@ class Connection {
         }),
       )
     })
+    socket.addEventListener('open', () => {
+      if (current())
+        socket.send(
+          JSON.stringify({
+            subscribe: {
+              object: `getByUID(0x${BigInt(transportUid).toString(16)})`,
+              configuration: { updateFrequencyMs: 500 },
+              properties: [contentProperty],
+            },
+          }),
+        )
+    })
     socket.addEventListener('message', (event) => {
       if (!current()) return
       try {
@@ -184,8 +210,14 @@ class Connection {
         if (data.error) throw new Error(String(data.error))
         if (Array.isArray(data.subscriptions))
           this.ids = new Map(data.subscriptions.map((s) => [s.id, s.propertyPath]))
+        if (data.valuesChanged?.length) {
+          this.liveRevision++
+          this.pulseHeartbeat()
+        }
         for (const change of data.valuesChanged || []) {
           const property = this.ids.get(change.id)
+          if (property === contentProperty && typeof change.value === 'string')
+            this.contentRevision = change.value
           if (
             property === this.timelineProperty &&
             Number.isFinite(change.value?.time) &&
@@ -213,12 +245,14 @@ class Connection {
         this.onState(this)
       } catch (error) {
         this.liveError = error.message
+        this.retryAt = Date.now() + 30000
         this.dropSocket()
         this.onState(this)
       }
     })
     const lost = () => {
       if (!current()) return
+      this.retryAt = Date.now() + 30000
       this.dropSocket()
       this.liveError = 'LiveUpdate disconnected; retrying on next health check'
       this.onState(this)
@@ -242,6 +276,7 @@ class Connection {
   close() {
     this.closed = true
     clearTimeout(this.timer)
+    clearTimeout(this.resumeTimer)
     clearTimeout(this.pollTimer)
     clearTimeout(this.heartbeatTimer)
     this.heartbeat = false

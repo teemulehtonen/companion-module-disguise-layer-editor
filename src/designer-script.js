@@ -1,4 +1,6 @@
 'use strict'
+const viewerScript = require('./viewer-script')
+const waveformScript = require('./viewer-waveform-script')
 
 // ASCII-only transport prevents Python 2 source-encoding and quoting problems.
 // The payload is data, never interpolated Python source. Context guards and
@@ -186,7 +188,9 @@ def snapshot():
         for field in layer.fields:
             seq = field.sequence
             if isinstance(seq, ResourceSequence) and media_type(field) is not None:
-                media_fields.append({'name': field.name, 'label': friendly_label(field)})
+                media_fields.append({'name': field.name, 'label': friendly_label(field),
+                                     'sequenced': not field.disableSequencing,
+                                     'keys': [{'time': float(track.beatToTime(seq.t(i)))} for i in range(seq.nKeys())]})
             if not isinstance(seq, FloatSequence) or seq.nKeys() == 0:
                 continue
             value = float(field.eval(beat, 16))
@@ -202,6 +206,8 @@ def snapshot():
     result.update(clock_info())
     return result
 
+${waveformScript}
+${viewerScript}
 if p['command'] == 'refresh':
     return snapshot()
 if p['command'] == 'live_state':

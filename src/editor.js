@@ -1,4 +1,5 @@
 'use strict'
+const { orderLayerParameters } = require('./parameter-order')
 
 // Shared order for the time encoder and layer timing controls. Frame uses the
 // current transport FPS; the remaining steps are expressed in seconds.
@@ -257,6 +258,7 @@ class Editor {
         transportUid = this.snapshot?.transportUid
       const mediaName = this.mediaField?.name
       const next = validateSnapshot(await this.client.execute('refresh'))
+      next.layers.forEach(orderLayerParameters)
       const keep = preserve && next.trackUid === trackUid && next.transportUid === transportUid
       this.snapshot = next
       this.timecodeSamples = next.timecodeSamples
@@ -425,6 +427,77 @@ class Editor {
     if (this.field)
       await this.remote(async () => this.acceptLive(await this.client.execute('read_field', this.liveArgs())))
     if (this.mediaMode) await this.loadMedia()
+  }
+  async seekFromViewer({ trackUid, time }) {
+    this.local()
+    if (!Number.isFinite(time)) return { ok: false, reason: 'Invalid time' }
+    await this.refresh({ preserve: true })
+    if (this.snapshot.trackUid !== trackUid) return { ok: false, reason: 'Track changed; try again' }
+    const fps = this.snapshot.fps || 25
+    const target = Math.max(0, Math.min(this.snapshot.length, Math.round(time * fps) / fps))
+    // Explicit transport seek, never the dial command that can move a selected key.
+    const result = await this.remote(() => this.client.execute('seek', { ...this.context(), time: target }))
+    this.time = result.time
+    this.acceptTimecodes(result)
+    this.pendingJump = { time: result.time, until: Date.now() + 1500 }
+    return { ok: true, time: result.time }
+  }
+  async selectFromViewer({ trackUid, layerUid, parameter, point, keyTime }) {
+    this.local()
+    if (this.moveKey) return { ok: false, reason: 'Exit SELECT KEY before changing selection' }
+    if (this.clearKeysBrowser) return { ok: false, reason: 'Close the DELETE menu before changing selection' }
+    // Refresh before accepting a browser click: the layer may have moved or
+    // disappeared since rendering. Selection never seeks or writes a value.
+    await this.refresh({ preserve: true })
+    if (this.snapshot.trackUid !== trackUid) return { ok: false, reason: 'Track changed; select again' }
+    const layer = this.snapshot.layers.find((item) => item.uid === layerUid)
+    if (!layer || (!point && (!this.activeLayers.includes(layer) || this.time >= layer.end)))
+      return { ok: false, reason: 'Select a layer at the current playhead' }
+    const numeric = parameter === undefined ? -1 : layer.fields.findIndex((field) => field.name === parameter)
+    const resource =
+      parameter === undefined ? -1 : (layer.mediaFields || []).findIndex((field) => field.name === parameter)
+    if (parameter !== undefined && numeric < 0 && resource < 0)
+      return { ok: false, reason: 'Parameter is no longer available' }
+    if (point) {
+      const fps = this.snapshot.fps || 25
+      let target
+      if (point === 'in') target = layer.start
+      else if (point === 'out') target = Math.max(layer.start, (Math.ceil(layer.end * fps - 1e-7) - 1) / fps)
+      else if (point === 'key') {
+        const field = numeric >= 0 ? layer.fields[numeric] : layer.mediaFields?.[resource]
+        const key = field?.sequenced && field.keys?.find(k => Math.abs(k.time-keyTime) < 1e-6)
+        if (!key || key.time < layer.start || key.time >= layer.end) return {ok:false,reason:'Keyframe is no longer inside this layer'}
+        target = key.time
+      } else return {ok:false,reason:'Invalid timeline point'}
+      if (!Number.isFinite(target) || target < 0 || target > this.snapshot.length) return {ok:false,reason:'Layer is outside the track'}
+      const result = await this.remote(() => this.client.execute('seek', {...this.context(),time:target}))
+      this.time = result.time
+      this.pendingJump = {time:result.time,until:Date.now()+1500}
+      this.activeLayerSignature = this.activeLayers.map(l => l.uid).sort().join(',')
+    }
+    this.layerIndex = this.snapshot.layers.indexOf(layer)
+    // Suppress only the already-observed Designer selection; a new mouse
+    // selection in Designer can still take ownership on the next update.
+    this.designerSelectionIds = this.snapshot.selectedLayerUids || []
+    this.designerSelectionKey = JSON.stringify([trackUid, this.designerSelectionIds])
+    this.designerLayerUid = null
+    this.layerEdit = ''
+    this.mediaMode = false
+    this.mediaAll = []
+    this.mediaKeyframe = false
+    this.mediaFieldIndex = 0
+    this.selectDefaultParameter()
+    if (numeric >= 0) {
+      this.selectedKeyTime = point === 'key' ? keyTime : null
+      this.fieldIndex = numeric
+      this.loadValue()
+    }
+    if (resource >= 0) {
+      this.mediaFieldIndex = resource
+      this.mediaMode = true
+      await this.loadMedia()
+    }
+    return { ok: true }
   }
   async adjustLiveValue(direction, step = 0) {
     if (!this.field) return

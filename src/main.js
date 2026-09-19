@@ -8,13 +8,16 @@ const { actions, presets } = require('./definitions')
 const { timecode, absoluteTimecode } = require('./timecode')
 const theme = require('./theme')
 const { layerTypeLabel } = require('./layer-types')
+const { ViewerServer } = require('./viewer-server')
 
 class DisguiseLayerControl extends InstanceBase {
-  async init(config) {
+  async init(config, isFirstInit, secrets = {}) {
     this.setVariableDefinitions(
       Object.fromEntries(
         Object.entries({
           track: 'Snapshot track',
+          layer_uid: 'Selected layer UID',
+          viewer_status: 'Timeline viewer status',
           layer: 'Selected layer',
           layer_type: 'Friendly layer type',
           parameter: 'Selected numeric parameter',
@@ -109,7 +112,7 @@ class DisguiseLayerControl extends InstanceBase {
         callback: () => Boolean(this.connection?.connected),
       },
     })
-    await this.configUpdated(config)
+    await this.configUpdated(config, secrets)
   }
   getConfigFields() {
     return [
@@ -130,9 +133,69 @@ class DisguiseLayerControl extends InstanceBase {
         min: 1,
         max: 65535,
       },
+      {
+        type: 'checkbox',
+        id: 'viewerEnabled',
+        label: 'ENABLE TIMELINE VIEWER',
+        width: 8,
+        default: false,
+      },
+      {
+        type: 'checkbox',
+        id: 'viewerLan',
+        label: 'ALLOW LAN ACCESS',
+        tooltip:
+          'Allow devices on the local network to view this track without authentication. Keep disabled for this computer only.',
+        width: 8,
+        default: false,
+      },
+      {
+        type: 'number',
+        id: 'viewerPort',
+        label: 'VIEWER PORT',
+        width: 4,
+        default: 8765,
+        min: 1024,
+        max: 65535,
+      },
+      {
+        type: 'checkbox',
+        id: 'viewerShowAllParameters',
+        label: 'SHOW ALL PARAMETERS',
+        tooltip: 'Show constant parameters as well as animated parameters in the focused viewer layer.',
+        width: 8,
+        default: false,
+      },
+      {
+        type: 'textinput',
+        id: 'resourceShareRoot',
+        label: 'RESOURCES: SMB D3 PROJECTS SHARE',
+        width: 12,
+        default: '',
+        tooltip: 'UNC or smb://server/share path to D3 Projects. Empty uses local audio files.',
+      },
+      {
+        type: 'textinput',
+        id: 'resourceUsername',
+        label: 'RESOURCES: SMB USERNAME',
+        width: 6,
+        default: '',
+        tooltip: 'Leave empty only when the share permits guest access.',
+      },
+      { type: 'secret-text', id: 'resourcePassword', label: 'RESOURCES: SMB PASSWORD', width: 6 },
+      {
+        type: 'textinput',
+        id: 'resourceDomain',
+        label: 'RESOURCES: SMB DOMAIN (OPTIONAL)',
+        width: 6,
+        default: '',
+      },
     ]
   }
-  async configUpdated(config) {
+  async configUpdated(config, secrets = {}) {
+    await this.viewer?.close()
+    this.viewer = null
+    this.viewerStatus = 'DISABLED'
     clearInterval(this.autoSyncTimer)
     this.syncPending = false
     this.nextSyncAttempt = 0
@@ -180,6 +243,10 @@ class DisguiseLayerControl extends InstanceBase {
               else this.editor.followTime(state.time)
             }
             const e = this.editor
+            if (state.contentRevision && state.contentRevision !== this.lastContentRevision) {
+              if (this.lastContentRevision && e?.snapshot && !e.busy) e.stale = true
+              this.lastContentRevision = state.contentRevision
+            }
             if (e && typeof state.timeline?.playing === 'boolean') e.playing = state.timeline.playing
             if (e?.snapshot && state.clock) {
               e.snapshot.fps = state.clock.fps
@@ -206,6 +273,7 @@ class DisguiseLayerControl extends InstanceBase {
             if (state.connected && (!this.editor?.snapshot || this.editor.stale)) this.requestSync()
           },
           {
+            enableLiveUpdate: true,
             onHeartbeat: () => {
               if (this.connection === connection) this.publish()
             },
@@ -219,6 +287,76 @@ class DisguiseLayerControl extends InstanceBase {
     } catch (error) {
       this.lastError = error.message
       this.updateStatus(InstanceStatus.BadConfig, error.message)
+    }
+    if (config.viewerEnabled && this.editor) {
+      try {
+        this.viewer = new ViewerServer(
+          this.client,
+          () => ({
+            trackUid: this.editor?.snapshot?.trackUid,
+            transportUid: this.editor?.snapshot?.transportUid,
+            contentRevision: String(this.connection?.contentRevision || '') + ':' + (this.viewerEditRevision || 0),
+            focusUid: this.editor?.layer?.uid,
+            parameter: this.editor?.mediaMode ? this.editor?.mediaField?.name : this.editor?.field?.name,
+            layerEdit: Boolean(this.editor?.layerEdit),
+            moveKey: Boolean(this.editor?.moveKey),
+            keyTime: this.editor?.moveKey?.time ?? this.editor?.selectedKeyTime,
+            liveValue: this.editor?.value,
+            time: this.editor?.time,
+            timecode: absoluteTimecode(
+              this.editor?.time,
+              this.editor?.snapshot?.fps || 25,
+              false,
+              this.editor?.timecodeSamples,
+              this.editor?.liveTimecodeSample,
+            ),
+            connected: Boolean(this.connection?.connected),
+          }),
+          {
+            showAll: config.viewerShowAllParameters === true,
+            resourceDesignerRoot: config.resourceDesignerRoot || '',
+            resourceShareRoot: config.resourceShareRoot || '',
+            resourceUsername: config.resourceUsername || '',
+            resourceDomain: config.resourceDomain || '',
+            resourcePassword: secrets.resourcePassword || '',
+            seek: async (target) => {
+              let result = { ok: false, reason: 'Seek unavailable' }
+              await this.perform(
+                async (editor) => {
+                  try {
+                    result = await editor.seekFromViewer(target)
+                  } catch {
+                    result = { ok: false, reason: 'Designer seek could not be completed' }
+                  }
+                },
+                { synchronise: false },
+              )
+              return result
+            },
+            select: async (target) => {
+              let result = { ok: false, reason: 'Selection is unavailable; retry after synchronisation' }
+              await this.perform(
+                async (editor) => {
+                  try {
+                    result = await editor.selectFromViewer(target)
+                  } catch {
+                    result = { ok: false, reason: 'Designer selection could not be refreshed' }
+                  }
+                },
+                { synchronise: false },
+              )
+              return result
+            },
+          },
+        )
+        const port = await this.viewer.start(Number(config.viewerPort ?? 8765), config.viewerLan === true)
+        this.viewerStatus = `LISTENING ON ${port}`
+      } catch (error) {
+        await this.viewer?.close()
+        this.viewer = null
+        this.viewerStatus = error.code === 'EADDRINUSE' ? 'VIEWER PORT IN USE' : 'VIEWER UNAVAILABLE'
+        this.log('warn', this.viewerStatus)
+      }
     }
     this.publish()
   }
@@ -307,6 +445,7 @@ class DisguiseLayerControl extends InstanceBase {
         }
       }
       await fn(editor)
+      if (!scrub || editor.moveKey || editor.layerEdit) this.viewerEditRevision = (this.viewerEditRevision || 0) + 1
       if (editor !== this.editor) return
       this.lastError = ''
       if (editor.snapshot && this.connection?.connected)
@@ -613,6 +752,8 @@ class DisguiseLayerControl extends InstanceBase {
       layer_position: e ? e.activeLayers.indexOf(e.layer) + 1 : 0,
       layer_elapsed: e?.layer ? fmt(e.time - (e.layer.start ?? 0)) : '-',
       layer_remaining: e?.layer ? fmt(e.layer.end - e.time) : '-',
+      layer_uid: e?.layer?.uid || '',
+      viewer_status: this.viewerStatus || 'DISABLED',
       key_previous_distance: prev ? fmt(e.time - prev.time) : '-',
       key_next_distance: next ? fmt(next.time - e.time) : '-',
       value: e?.value ?? 0,
@@ -642,6 +783,7 @@ class DisguiseLayerControl extends InstanceBase {
     void this.loadThumbnails()
   }
   async destroy() {
+    await this.viewer?.close()
     clearTimeout(this.deleteHoldTimer)
     clearInterval(this.autoSyncTimer)
     this.connection?.close()
