@@ -1,4 +1,4 @@
-# Project handoff — beta.97
+# Project handoff — beta.98
 
 Read this file, DEVELOPER-MANUAL.md and VIEWER-DEVELOPMENT.md when resuming. Public source and release packages contain no development machine settings.
 
@@ -37,3 +37,5 @@ Inspect git status/diff and preserve unrelated work. Use targeted local batches 
 Beta.96: Layer Edit always displays selected-layer IN/OUT guides, at exact source times (including subframe beat boundaries). Other modes retain their previous match-only keyframe guides. Regression: test/viewer-alignment.test.js.
 
 Beta.97 adds subtle match-only guides for all sequenced keys in the selected layer during Layer Edit/Select Keyframe. Source keys outside layer bounds are excluded; subtle matches require coincident time, not merely the same frame bucket.
+
+Beta.98: keyframe alignment targets only context.parameter in the selected layer. Compare against other layers only; never count the selected layer’s own keys or boundaries.

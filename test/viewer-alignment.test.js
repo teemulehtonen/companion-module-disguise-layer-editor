@@ -65,8 +65,21 @@ test('subtle guides match selected-layer keys and exclude out-of-range and subfr
   const data=snapshot()
   data.layers[0].fields[0].keys.push({time:12},{time:5.001})
   data.layers[1].fields=[{name:'other',sequenced:true,keys:[{time:12}]}]
-  const guides=alignmentGuides(data,{focusUid:'a',layerEdit:true})
+  const guides=alignmentGuides(data,{focusUid:'a',parameter:'value',layerEdit:true})
   assert.deepEqual(guides.map(g=>g.time),[0,5,10])
   assert.equal(guides.find(g=>g.time===5).subtle,true)
   assert.deepEqual(alignmentGuides(data,{focusUid:'a'}),[])
+})
+
+test('key guides compare only the selected parameter against other layers', () => {
+  const data=snapshot()
+  data.layers[0].fields.push({name:'another',sequenced:true,keys:[{time:5},{time:7}]})
+  data.layers[0].fields[0].keys.push({time:7})
+  const context={focusUid:'a',parameter:'value',layerEdit:true}
+  assert.deepEqual(alignmentGuides(data,context).filter(g=>g.subtle).map(g=>g.time),[5])
+  data.layers[1].start=6
+  data.layers[0].fields[1].keys.push({time:6})
+  assert.deepEqual(alignmentGuides(data,context).filter(g=>g.subtle),[])
+  assert.deepEqual(alignmentGuides(data,{...context,layerEdit:false,moveKey:true,keyTime:7}),[])
+  assert.deepEqual(alignmentGuides(data,{...context,parameter:'another'}).filter(g=>g.subtle).map(g=>g.time),[6])
 })

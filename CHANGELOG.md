@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-beta.98
+
+- Restrict keyframe guides to the selected parameter and comparisons against other layers only.
+
 ## 0.1.0-beta.97
 
 - Add faint selected-layer keyframe alignment guides during Layer Edit and Select Keyframe. Exclude hidden out-of-layer keys and subframe near misses.

@@ -79,7 +79,7 @@ function alignmentGuides(snapshot, context) {
   const guides = new Map()
   for (const target of targets) {
     const frame = Math.round(target.time * fps)
-    const matches = buckets.get(frame).filter((item) => item !== target)
+    const matches = buckets.get(frame).filter((item) => item.layer !== target.layer)
     // Layer editing always shows exact IN/OUT, including subframe beat edges.
     // Keyframe editing retains its match-only alignment guides.
     if (context.layerEdit || matches.length)
@@ -89,15 +89,15 @@ function alignmentGuides(snapshot, context) {
         count: matches.length,
       })
   }
-  // Subtle guides for other sequenced keys in the selected layer. Require
+  // Subtle guides only for the selected parameter, against other layers. Require
   // actual time coincidence: distinct fractional-beat keys can share a frame.
   const processedKeyTimes = new Set()
   const strongTimes = [...guides.values()].map(g => g.time)
-  for (const target of landmarks.filter(item => item.layer === context.focusUid && item.kind === 'key')) {
+  for (const target of landmarks.filter(item => item.layer === context.focusUid && item.kind === 'key' && item.field === context.parameter)) {
     if (processedKeyTimes.has(target.time)) continue
     processedKeyTimes.add(target.time)
     const matches = (buckets.get(Math.round(target.time * fps)) || [])
-      .filter(item => item !== target && Math.abs(item.time - target.time) < 1e-6)
+      .filter(item => item.layer !== target.layer && Math.abs(item.time - target.time) < 1e-6)
     if (!matches.length || strongTimes.some(time => Math.abs(time - target.time) < 1e-6)) continue
     guides.set('key:' + target.time, {
       time:target.time, subtle:true,
