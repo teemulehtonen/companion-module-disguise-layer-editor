@@ -1,6 +1,6 @@
 # Developer manual
 
-This guide explains how Disguise Layer Editor is implemented and where to make changes. It describes the 0.1.beta codebase through technical version 0.1.0-beta.16. For installation and controls, start with the [README](../README.md). For validation scope, see the [Track 6 report](TRACK-6-TESTS.md).
+This guide explains how Disguise Layer Editor is implemented and where to make changes. It describes the 0.1.beta codebase through technical version 0.1.0-beta.52. For installation and controls, start with the [README](../README.md). For validation scope, see the [Track 6 report](TRACK-6-TESTS.md).
 
 ## 1. What runs where
 
@@ -209,3 +209,5 @@ npm run package
 Generated archives, local tools, media, test projects and raw evidence are excluded from Git. `release.ps1` uses an explicit documentation/source allowlist; add new distributable documentation there. Review the actual archive contents before publication. Increment the technical version for changed published module builds and keep the manifest, lockfile, filenames and documentation consistent. Documentation-only Git changes do not require replacing a published binary or moving its tag.
 
 Offline tests do not prove native rendering or hardware output. Live tests need an authorised test environment and a backup; record what was actually exercised and keep unsupported cases visible. Refer to [known limitations](../KNOWN-LIMITATIONS.md), [contributing](../CONTRIBUTING.md) and [security](../SECURITY.md) before sharing changes.
+
+See [viewer development](VIEWER-DEVELOPMENT.md) and [project handoff](PROJECT-HANDOFF.md) for current architecture and continuation instructions.

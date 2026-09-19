@@ -1,3 +1,10 @@
+## 0.1.0-beta.52
+
+- Fixed timeline headers, section shading and clickable annotation markers.
+- Current cue/MIDI/note details and frame-aware section countdown.
+- Timeline layer selection and centred FIT LAYER with 4% margins.
+- Developer handoff and large-keyframe stress observations.
+
 ## 0.1.0-beta.37
 
 - Add an experimental timeline viewer with native curves, resource thumbnails, groups and relationship arrows.

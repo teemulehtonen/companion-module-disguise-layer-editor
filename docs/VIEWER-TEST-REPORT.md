@@ -37,3 +37,9 @@ The test batch passed within its stated scope. The viewer is distributed as an e
 ## Beta.37 focused verification
 
 Ten viewer-server and selection tests passed, including live feedback during a pending geometry read and point selection. The final minimal rerun passed all five server tests. The installed viewer returned HTTP 200 with 14 layers and an active connection. Packaging smoke checks passed. Existing Companion functional tests were not repeated. Direct SMB and embedded video audio remain unverified/unsupported as documented in the viewer guide.
+
+## Beta.52 validation
+
+122 offline tests passed. Package smoke checks passed. Synthetic browser fixture: 20 layers, 1,000 keys each (20,000 total), one expanded layer. Initial JavaScript draw took approximately 189 ms; redraw hashing about 24 ms; fixture payload about 2.9 MB. These are single local observations, not paint/animation frame timings or native Designer performance guarantees. The UI remained LIVE. Dense full redraws are not 60-fps smooth; virtualization/canvas remains a development priority. Existing real-project tests do not cover native transport with 20,000 keys.
+
+Zoomed fixture draw: approximately 92 ms with 10,020 visible collapsed-row markers. Timing measures synchronous JavaScript DOM construction, not complete browser paint.

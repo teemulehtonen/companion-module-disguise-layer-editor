@@ -10,6 +10,15 @@ if p['command'] == 'viewer_snapshot':
     result = {'trackUid': str(track.uid), 'trackName': str(track.path).replace('\\\\', '/').rsplit('/', 1)[-1],
               'length': float(track.lengthInSec), 'time': seconds, 'fps': fps(),
               'timecode': str(manager.beatToTimecode(track.timeToBeat(seconds))), 'layers': [], 'warnings': [], 'ticks': []}
+    result['sections'] = []
+    try:
+        for index in range(track.nSections()):
+            section = track.sectionInfo(index)
+            result['sections'].append({'index': index + 1,
+                'start': float(track.beatToTime(section.tStart)),
+                'end': float(track.beatToTime(section.tEnd))})
+    except pyerrors.Exception:
+        result['warnings'].append('Section information unavailable')
     def viewer_resource(r, visual):
         if not r: return None
         has_audio = False
@@ -87,16 +96,16 @@ if p['command'] == 'viewer_snapshot':
         b0, b1 = track.timeToBeat(start), track.timeToBeat(end)
         choices = [0.0625, 0.125, 0.25, 0.5, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
         step = next((s for s in choices if s*width/max(0.001,b1-b0) >= 18), choices[-1])
-        major = max(1, int(math.ceil(90.0/(step*width/max(0.001,b1-b0)))))
+        major = max(1, int(math.ceil(110.0/(step*width/max(0.001,b1-b0)))))
         first = int(math.ceil(b0/step))
         for i in range(first, min(first+1000, int(math.floor(b1/step))+1)):
             at = float(track.beatToTime(i*step))
             result['grid'].append({'time': at, 'major': i % major == 0,
-                                  'label': ('%g' % (i*step))+' BEAT'})
+                                  'label': str(manager.beatToTimecode(track.timeToBeat(at)))})
     else:
         choices = sorted(set([1.0/fps(), 2.0/fps(), 5.0/fps(), 10.0/fps(), 1,2,5,10,15,30,60,120,300,600,1800,3600]))
         step = next((s for s in choices if s*width/max(0.001,end-start) >= 18), choices[-1])
-        major = max(1,int(math.ceil(90.0/(step*width/max(0.001,end-start)))))
+        major = max(1,int(math.ceil(110.0/(step*width/max(0.001,end-start)))))
         first = int(math.ceil(start/step))
         for i in range(first,min(first+1000,int(math.floor(end/step))+1)):
             at = i*step

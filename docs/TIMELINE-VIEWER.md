@@ -88,3 +88,7 @@ RESOURCES: SMB D3 PROJECTS SHARE accepts a UNC or smb://server/share path. The a
 IN, OUT and keyframe markers highlight on hover. Clicking selects the target and seeks; OUT seeks to the last frame inside the layer. Selection locks remain enforced. Per-layer icons show sequenced parameters (default for the focused layer), all parameters or none.
 
 Small live reads continue while geometry loads. Confirmed selections update cached rows immediately; stale snapshot selections are discarded. Companion edits invalidate geometry without waiting for the periodic refresh. This does not guarantee a fixed latency: native API and network response times still apply.
+
+## Beta.52 UI
+
+Timeline headers stay visible during vertical scrolling. Section bands alternate theme colours. CUE, TIMECODE, MIDI and NOTES flags seek when clicked; TC rows only show actual tags. Layer bars select only at the playhead. FIT LAYER centres with 4% margins and disables FOLLOW. The header shows current marker details and section time remaining, red in the final ten seconds. See PROJECT-HANDOFF.md for current limitations.

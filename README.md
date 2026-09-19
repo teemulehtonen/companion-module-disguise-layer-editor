@@ -6,12 +6,12 @@ Disguise layer, keyframe and resource control for Bitfocus Companion and Stream 
 
 ## Install
 
-**Downloads (0.1.beta):** [Companion module](../../releases/download/v0.1.0-beta.37/disguise-layer-control-0.1.0-beta.37.tgz) · [Companion page](../../releases/download/v0.1.0-beta.37/D3-Stream-Deck-Plus.companionconfig)
+**Downloads:** [Published releases](../../releases). Source development version: 0.1.0-beta.52; matching binaries are not yet published.
 
 Tested with Designer 32.4.17 and Companion 5.0.5.
 
 1. Enable Designer's HTTP/Python API on a trusted network.
-2. In Companion, import `disguise-layer-control-0.1.0-beta.37.tgz` under **Modules**. Add **Disguise Layer Editor** and enter the Designer host and port (default 80).
+2. In Companion, import `disguise-layer-control-<version>.tgz` under **Modules**. Add **Disguise Layer Editor** and enter the Designer host and port (default 80).
 3. Import `D3-Stream-Deck-Plus.companionconfig`, choose a destination page and link the connection. Import replaces that page; export it first if needed.
 4. Assign Stream Deck + to that page. **HTTP + SYNC** indicates automatic feedback.
 
@@ -50,3 +50,5 @@ Windows: `npm run release` creates archives in `releases/0.1.beta`. To replace a
 [Build details](docs/BUILD.md) · [Developer manual](docs/DEVELOPER-MANUAL.md) · [Contributing](CONTRIBUTING.md) · [Architecture](docs/ARCHITECTURE.md) · [Test report](docs/TRACK-6-TESTS.md)
 
 MIT licensed. The internal module ID remains `disguise-layer-control` for compatibility.
+
+[Resume development](docs/PROJECT-HANDOFF.md) · [Viewer architecture](docs/VIEWER-DEVELOPMENT.md)
