@@ -30,7 +30,7 @@ test('guides are restricted to active timing/key edit modes and ignore carrier k
   assert.deepEqual(alignmentGuides(data, context), [])
   assert.deepEqual(
     alignmentGuides(data, { ...context, layerEdit: true }).map((g) => g.time),
-    [10],
+    [0, 10],
   )
   assert.deepEqual(
     alignmentGuides(data, { ...context, moveKey: true }).map((g) => g.time),
@@ -47,4 +47,16 @@ test('guides use fractional FPS without matching adjacent frames', () => {
   assert.equal(alignmentGuides(data, context).length, 1)
   data.layers[1].start = 101 / fps
   assert.equal(alignmentGuides(data, context).length, 0)
+})
+
+test('layer edit shows exact moving bounds for audio and video without matches', () => {
+  for (const moduleType of ['AudioModule', 'VariableVideoModule', 'ColourModule']) {
+    const layer = {uid:'selected',name:'Layer',moduleType,start:1.001,end:1.009,fields:[],resources:[]}
+    const data = {fps:25,layers:[layer]}
+    const context = {focusUid:layer.uid,layerEdit:true}
+    assert.deepEqual(alignmentGuides(data,context).map(g=>g.time),[1.001,1.009])
+    layer.start+=2; layer.end+=3
+    assert.deepEqual(alignmentGuides(data,context).map(g=>g.time),[3.001,4.009])
+    assert.deepEqual(alignmentGuides(data,{...context,layerEdit:false}),[])
+  }
 })

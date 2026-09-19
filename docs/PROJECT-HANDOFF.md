@@ -1,4 +1,4 @@
-# Project handoff — beta.95
+# Project handoff — beta.96
 
 Read this file, DEVELOPER-MANUAL.md and VIEWER-DEVELOPMENT.md when resuming. Public source and release packages contain no development machine settings.
 
@@ -33,3 +33,5 @@ Inspect git status/diff and preserve unrelated work. Use targeted local batches 
 - Generated Resources buttons omit folder labels and allocate more space to filenames. Import the generated page into the existing editor page and link the existing connection; never assume the destination page number.
 - Final automated validation: 130 tests plus packaged-module smoke checks. Live Raspberry Pi checks confirmed both WAV and embedded PCM MOV waveforms. A read-only inventory covered 76 layer types; five AudioFile resources decoded locally. These checks do not certify every resource/playback mode.
 - The latest user continues manual testing. Keep future changes targeted and avoid repeating broad live tests without a relevant change.
+
+Beta.96: Layer Edit always displays selected-layer IN/OUT guides, at exact source times (including subframe beat boundaries). Other modes retain their previous match-only keyframe guides. Regression: test/viewer-alignment.test.js.

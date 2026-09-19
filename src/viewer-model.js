@@ -80,9 +80,11 @@ function alignmentGuides(snapshot, context) {
   for (const target of targets) {
     const frame = Math.round(target.time * fps)
     const matches = buckets.get(frame).filter((item) => item !== target)
-    if (matches.length)
-      guides.set(frame, {
-        time: frame / fps,
+    // Layer editing always shows exact IN/OUT, including subframe beat edges.
+    // Keyframe editing retains its match-only alignment guides.
+    if (context.layerEdit || matches.length)
+      guides.set(context.layerEdit ? target.kind : frame, {
+        time: context.layerEdit ? target.time : frame / fps,
         labels: [target.label, ...matches.map((item) => item.label)].slice(0, 8),
         count: matches.length,
       })

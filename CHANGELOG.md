@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-beta.96
+
+- Always show exact IN/OUT guides for the selected layer in Layer Edit, for all layer types. Keep keyframe-edit guides match-only.
+
 ## 0.1.0-beta.95
 
 - Show the currently evaluated media name, duration and FPS; resource keyframe changes follow the playhead. Prefer video thumbnails over palettes.
