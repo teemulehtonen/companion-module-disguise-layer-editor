@@ -225,7 +225,7 @@ class DemoClient {
         field.value = k.value
         return { ...result(), selectedKey: structuredClone(k) }
       }
-      if (command === 'key_type') k.interpolation = (k.interpolation + 1) % 3
+      if (command === 'key_type') k.interpolation = args.type ?? (k.interpolation + 1) % 3
       else {
         if (JSON.stringify(k) !== JSON.stringify(args.expectedKey))
           throw new Error('Selected keyframe changed')

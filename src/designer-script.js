@@ -80,6 +80,37 @@ def accessible_resources(field):
         except pyerrors.Exception:
             continue
 
+def resource_media_info(r):
+    # Read native headers only. Never open/copy media or infer alpha/audio from
+    # a filename. Missing properties remain unknown, especially internal objects.
+    info = {}
+    try:
+        if isinstance(r, VideoClip):
+            info['audio'] = bool(r.hasAudio)
+            if r.video_file:
+                info['codec'] = str(r.video_file.codec)
+                info['alpha'] = bool(r.video_file.hasAlpha)
+                enabled = [fragment for fragment in r.video_file.fragments if fragment.enabled and str(fragment.version) == str(r.enabledVersion)]
+                info['version'] = str(r.enabledVersion)
+                if len(enabled) == 1 and len(enabled[0].proxies) == 1:
+                    info['filename'] = str(enabled[0].proxies[0].path).replace('\\\\', '/').rsplit('/', 1)[-1]
+            if not info.get('codec', '').startswith('still_image:') and float(r.fps) > 0:
+                info['fps'] = float(r.fps)
+                duration = float(r.transportDuration.t)
+                if not math.isnan(duration) and not math.isinf(duration):
+                    info['duration'] = max(0, duration)
+        elif isinstance(r, (AudioTrack, AudioFile)):
+            info['audio'] = r.header.nChannels > 0 and r.header.nSamples > 0
+            info['codec'] = str(r.header.codecName)
+            if float(r.header.sampleRate) > 0:
+                info['duration'] = float(r.header.nSamples) / float(r.header.sampleRate)
+            audio_file = r.audioFile if isinstance(r, AudioTrack) else r
+            if audio_file:
+                info['filename'] = str(audio_file.path).replace('\\\\', '/').rsplit('/', 1)[-1]
+    except pyerrors.Exception:
+        pass
+    return info
+
 def resource_items(field):
     result = []
     for r in accessible_resources(field):
@@ -95,8 +126,12 @@ def resource_items(field):
             folder = '/'.join(['Internal'] + parts[1:-1])
         else:
             folder = '/'.join(parts[:-1]) or 'Project'
-        result.append({'uid': str(r.uid), 'name': r.description or parts[-1], 'path': path, 'folder': folder,
-                       'thumbnail': visual, 'resourceType': field.typeName[:-4]})
+        item = {'uid': str(r.uid), 'name': r.description or parts[-1], 'path': path, 'folder': folder,
+                'thumbnail': visual, 'resourceType': field.typeName[:-4]}
+        item.update(resource_media_info(r))
+        if item.get('filename'):
+            item['name'] = item['filename']
+        result.append(item)
     return sorted(result, key=lambda r: (r['folder'].lower(), r['name'].lower(), r['uid']))
 
 def friendly_label(field):
@@ -466,6 +501,10 @@ if command in ('select_key', 'key_type', 'key_move'):
     if command == 'key_type':
         types = [Key.select, Key.linear, Key.cubic]
         next_type = types[(types.index(key.interpolation) + 1) % len(types)]
+        if 'type' in p:
+            if p['type'] not in (0, 1, 2):
+                raise ValueError('Invalid keyframe type')
+            next_type = types[p['type']]
         markDirty(seq)
         key.interpolation = next_type
     else:

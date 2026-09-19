@@ -4,6 +4,7 @@
 
 - main.js: Companion lifecycle, ordered command queue, viewer lifecycle and edit revision.
 - editor.js: selection/seek invariants, parameters and keyframe editing.
+- viewer-editor.js: opt-in mouse adapter; strict Companion action allowlist, shared-state fingerprint, resource folder/page selection and explicit native key type.
 - connection.js / live-properties.js: read-only Designer LiveUpdate feedback and HTTP fallback.
 - viewer-clock.js: independent transport clock subscription.
 - viewer-server.js: shared geometry cache, /api/state, /api/live, validated selection/seek routes, waveform refresh and thumbnail allowlist.
@@ -25,6 +26,8 @@ All markers and curves use the same time-to-x transform. Sticky headers have sep
 ## Security and verification
 
 Use textContent for project strings. Same-origin/token checks protect commands, but LAN access has no user authentication; keep loopback as default. Never accept arbitrary Python, paths or resource IDs from the browser. Filesystem permission is necessary for local audio reads.
+
+POST /api/edit exists only with ALLOW VIEWER EDIT. main.js executes it inside perform(), then viewer-editor.js checks the shared state token and invokes the same definitions.js actions. Do not nest the real queue. Resources use server-owned folder/file indices; the submitted UID must match that indexed entry and is never forwarded unchecked. File paths are never accepted. Queried resource batches extend a bounded thumbnail allowlist. Failed writes are not replayed. Live display polling does not own editing state; preserve the pending edit response against older poll responses. Mouse input is relative encoder detents, not a second beat/time conversion implementation.
 
 Tests are in test/viewer-*.test.js, test/parameter-order.test.js and test/smb-audio.test.js. UI changes need focused inspection; protocol/timing changes need regression tests. Run npm test and package smoke checks before publication. Record limitations honestly. Private local scripts are not required to build.
 

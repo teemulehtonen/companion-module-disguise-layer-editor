@@ -9,9 +9,10 @@ const { page, browserScript, stylesheet } = require('./viewer-page')
 const { visibleParameters, alignmentGuides, summariseGroups, renderRevision } = require('./viewer-model')
 const { layerTypeLabel } = require('./layer-types')
 const { WaveformCache } = require('./viewer-waveform')
+const { validEditRequest } = require('./viewer-editor')
 
-// Data reads and a narrowly validated selection route. No route accepts value
-// edits, seeks, paths, Python, or arbitrary resource IDs. Browsers share refreshes.
+// Browser commands are opt-in and use the shared Companion queue. No route
+// accepts native code, filesystem paths or arbitrary resource IDs.
 class ViewerServer {
   constructor(client, context, options = {}) {
     this.client = client
@@ -23,6 +24,7 @@ class ViewerServer {
     this.updated = 0
     this.thumbnails = new Map()
     this.allowedThumbnails = new Set()
+    this.pickerThumbnails = new Set()
     this.waveforms = new WaveformCache(client, options)
     this.selectionToken = randomBytes(24).toString('hex')
   }
@@ -44,6 +46,7 @@ class ViewerServer {
     this.server?.closeAllConnections()
     if (this.server?.listening) await new Promise((resolve) => this.server.close(resolve))
     this.thumbnails.clear()
+    this.pickerThumbnails.clear()
   }
   async state(query) {
     const context = this.context()
@@ -136,6 +139,8 @@ class ViewerServer {
       showAllParameters: this.options.showAll === true,
       seekEnabled: typeof this.options.seek === 'function',
       selectionEnabled: typeof this.options.select === 'function',
+      editEnabled: typeof this.options.edit === 'function',
+      editor: typeof this.options.edit === 'function' ? current.editor : null,
       selectionToken: this.selectionToken,
       parameter: current.parameter,
       liveValue: current.liveValue,
@@ -207,6 +212,19 @@ class ViewerServer {
           this.resourceTestPending = false
         }
       }
+      if (req.method === 'GET' && url.pathname === '/api/resource-list' && this.options.edit && this.options.resources) {
+        const offset = Number(url.searchParams.get('offset') || 0)
+        if (!Number.isInteger(offset) || offset < 0 || offset > 100000) return send(400,'text/plain','Invalid offset')
+        const listing = await this.options.resources(offset)
+        if (listing.revision !== this.pickerRevision) {
+          this.pickerRevision = listing.revision
+          this.thumbnails.clear()
+          this.pickerThumbnails.clear()
+        }
+        for (const item of listing.items || []) if (item.thumbnail) this.pickerThumbnails.add(item.uid)
+        while (this.pickerThumbnails.size > 512) this.pickerThumbnails.delete(this.pickerThumbnails.values().next().value)
+        return send(200,'application/json',JSON.stringify(listing))
+      }
       if (req.method === 'POST' && url.pathname === '/api/waveform/refresh') {
         if (
           req.headers['x-viewer-token'] !== this.selectionToken ||
@@ -245,7 +263,8 @@ class ViewerServer {
       }
       if (
         req.method === 'POST' &&
-        ((url.pathname === '/api/select' && this.options.select) ||
+        ((url.pathname === '/api/edit' && this.options.edit) ||
+          (url.pathname === '/api/select' && this.options.select) ||
           (url.pathname === '/api/seek' && this.options.seek))
       ) {
         if (
@@ -263,6 +282,12 @@ class ViewerServer {
           if (body.length > 1024) return send(413, 'text/plain', 'Selection too large')
         }
         const value = JSON.parse(body)
+        if (url.pathname === '/api/edit') {
+          if (!validEditRequest(value)) return send(400, 'application/json', JSON.stringify({ok:false,reason:'INVALID EDIT REQUEST'}))
+          const result = await this.options.edit(value)
+          this.updated = 0
+          return send(result.ok ? 200 : 409, 'application/json', JSON.stringify(result))
+        }
         if (url.pathname === '/api/seek') {
           if (
             !value ||
@@ -301,7 +326,9 @@ class ViewerServer {
       if (url.pathname === '/api/state')
         return send(200, 'application/json', JSON.stringify(await this.state(url.searchParams)))
       const match = /^\/api\/thumbnail\/(\d+)$/.exec(url.pathname)
-      if (match && this.allowedThumbnails.has(match[1])) {
+      if (match && (this.allowedThumbnails.has(match[1]) ||
+          (this.options.edit && this.pickerThumbnails.has(match[1])) ||
+          (this.options.edit && this.context().editor?.resources?.some(item => item.uid === match[1] && item.thumbnail)))) {
         const uid = match[1]
         if (!this.thumbnails.has(uid)) {
           if (this.thumbnails.size >= 128) this.thumbnails.delete(this.thumbnails.keys().next().value)

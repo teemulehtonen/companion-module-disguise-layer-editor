@@ -1,6 +1,6 @@
 # Timeline viewer (experimental beta)
 
-The viewer can select layers and parameters and seek the Designer playhead. It cannot edit parameter values or keyframes.
+The viewer selects layers and parameters and seeks the Designer playhead. Optional mouse editing uses the same editor and command queue as Companion.
 Enable **ENABLE TIMELINE VIEWER**, choose **VIEWER PORT**
 (default `8765`), and open `http://127.0.0.1:8765`. **ALLOW LAN ACCESS** exposes
 the track, selection and seek controls to the local network without user authentication.
@@ -13,7 +13,21 @@ Animated parameters come first, retaining Designer's order within each group.
 Click an active layer or parameter name to select it in Companion. Layers outside
 the playhead cannot be selected; selecting a name never changes time. Clicking the ruler or timecode row seeks instead. SELECT KEY locks
 and open deletion menus prevent browser selection changes. Parameter values,
-keyframes and layer timing cannot be edited in the browser.
+keyframes and layer timing can be edited only with **ALLOW VIEWER EDIT** enabled.
+
+## Optional mouse editing
+
+**ALLOW VIEWER EDIT** defaults to off. Enabling it exposes shared Companion controls in the viewer; with LAN access enabled, other LAN viewers can use them too.
+
+- Select a layer/parameter as usual. **LAYER EDIT** and **SELECT KEYFRAME** are the same modes shown on the Stream Deck, not independent browser modes.
+- In Layer Edit, drag the selected layer body for POSITION or its edges for IN/OUT. In Select Keyframe, drag the locked key horizontally for time or vertically for value. Each 12-pixel movement sends one selected encoder step. This is relative dial-style dragging, not absolute placement under the pointer. Native frame/beat steps and bounds apply.
+- Use **ADD KEYFRAME** at the playhead. Right-click the selected key for HOLD / LINEAR / CUBIC and deletion. CUBIC is Designer's native interpolation type also labelled SMOOTH by Companion.
+- **RESOURCES** opens a compact floating picker: folders at the top, scrollable file rows below, thumbnail at left. Files load in batches of 64. Selecting a file applies it using the shared REPLACE / NEW KEYFRAME mode. Source/folder/file selections are shared with Companion. BACK closes the picker. Internal resources such as mapping and output use the same native resource listing.
+- Metadata shows audio, alpha, codec, clip duration and FPS when known. Video duration uses Designer's `transportDuration`, including clip trims, rather than the unchanged source file length. Versioned content remains one Designer resource: names follow `enabledVersion` where a single file resolves. The picker refreshes native metadata every three seconds while visible. Missing metadata is omitted; multipart/proxy ambiguity does not invent a filename.
+- Bulk deletion opens the existing shared confirmation menu. A single-key delete/default does not ask for confirmation.
+- A changed selection or step invalidates an in-progress mouse gesture. Requests are serialized with Deck commands and never automatically retried after a timeout. There is no separate browser undo history.
+
+Validation: shared-action regression tests, browser fixture checks for selection/layer controls/resource paging, and native HOLD/LINEAR/CUBIC checks on an inactive temporary Video layer. Continuous physical mouse dragging and every layer/resource type have not been live-certified.
 
 Use **FIT TRACK**, **FIT LAYER**, the zoom buttons, or Ctrl+wheel to zoom.
 Shift+wheel pans horizontally and suspends **FOLLOW**. Follow pans smoothly near
@@ -41,8 +55,7 @@ with an explicit stale indicator. All project strings are rendered as text.
 
 Audio is
 currently a labelled **source preview**, not a playback-aligned waveform.
-Quantized audio sections, looping, speed, offsets and video embedded audio still
-need verified native mappings and decoder support. Direct SMB support is experimental and has not passed live compatibility checks; remote thumbnails use Designer HTTP and do not need a shared folder.
+Repeated loops, reverse ping-pong cycles, speed/offset changes and nonlinear audio warping are not fully simulated. Supported PCM MOV and authenticated SMB range reads were tested; guest SMB and all server policies remain unverified. Remote thumbnails use Designer HTTP and do not need a shared folder.
 The native waveform classes in the tested Designer API expose no sample access.
 Unsupported waveforms are labelled unavailable, never drawn as invented audio.
 

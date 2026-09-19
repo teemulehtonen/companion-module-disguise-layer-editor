@@ -6,7 +6,7 @@ Disguise layer, keyframe and resource control for Bitfocus Companion and Stream 
 
 ## Install
 
-**Downloads (beta.101):** [Companion module](../../releases/download/v0.1.0-beta.101/disguise-layer-control-0.1.0-beta.101.tgz) · [Companion page](../../releases/download/v0.1.0-beta.101/D3-Stream-Deck-Plus.companionconfig)
+**Downloads (beta.102):** [Companion module](../../releases/download/v0.1.0-beta.102/disguise-layer-control-0.1.0-beta.102.tgz) · [Companion page](../../releases/download/v0.1.0-beta.102/D3-Stream-Deck-Plus.companionconfig)
 
 Tested with Designer 32.4.17 and Companion 5.0.5.
 
@@ -34,7 +34,7 @@ Tested with Designer 32.4.17 and Companion 5.0.5.
 
 ## Timeline viewer
 
-Enable **ENABLE TIMELINE VIEWER** in module settings and open `http://127.0.0.1:8765`. Select layers/parameters, seek from timeline points, and inspect native curves and resource thumbnails. [Viewer guide and limitations](docs/TIMELINE-VIEWER.md).
+Enable **ENABLE TIMELINE VIEWER** in module settings and open `http://127.0.0.1:8765`. Select layers/parameters, seek from timeline points, and inspect native curves and resource thumbnails. Optional **ALLOW VIEWER EDIT** enables shared Companion editing and a compact resource picker; it defaults to off. [Viewer guide and limitations](docs/TIMELINE-VIEWER.md).
 
 For network audio on Raspberry Pi, enter the SMB share and credentials in module settings. No SSH or OS mount is needed. [Network audio setup](docs/RASPBERRY-PI-SMB.md).
 

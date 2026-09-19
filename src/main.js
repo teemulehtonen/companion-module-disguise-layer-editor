@@ -9,6 +9,7 @@ const { timecode, absoluteTimecode } = require('./timecode')
 const theme = require('./theme')
 const { layerTypeLabel } = require('./layer-types')
 const { ViewerServer } = require('./viewer-server')
+const { describeEditor, editFromViewer, resourceList } = require('./viewer-editor')
 
 class DisguiseLayerControl extends InstanceBase {
   async init(config, isFirstInit, secrets = {}) {
@@ -150,6 +151,14 @@ class DisguiseLayerControl extends InstanceBase {
         label: 'ALLOW LAN ACCESS',
         tooltip:
           'Allow devices on the local network to view this track without authentication. Keep disabled for this computer only.',
+        width: 8,
+        default: false,
+      },
+      {
+        type: 'checkbox',
+        id: 'viewerEditEnabled',
+        label: 'ALLOW VIEWER EDIT',
+        tooltip: 'Allow browser controls to use the shared Companion editor. LAN viewers can also edit when LAN access is enabled.',
         width: 8,
         default: false,
       },
@@ -315,9 +324,38 @@ class DisguiseLayerControl extends InstanceBase {
               this.editor?.liveTimecodeSample,
             ),
             connected: Boolean(this.connection?.connected),
+            editor: config.viewerEditEnabled === true ? describeEditor(this.editor) : null,
           }),
           {
             showAll: config.viewerShowAllParameters === true,
+            resources: config.viewerEditEnabled === true ? async offset => {
+              if (this.editor?.mediaMode && Date.now() - (this.lastViewerResourceRead || 0) > 2500) {
+                this.lastViewerResourceRead = Date.now()
+                let failed = false
+                await this.perform(async editor => {
+                  if (!editor.mediaMode) return
+                  try { await editor.loadMedia({preserve:true,preservePreview:true}) }
+                  catch { failed = true }
+                })
+                if (failed) throw new Error('Resource listing unavailable')
+              }
+              return resourceList(this.editor, offset)
+            } : undefined,
+            edit: config.viewerEditEnabled === true ? async (target) => {
+              let result = { ok: false, reason: 'EDITOR CHANGED — TRY AGAIN' }
+              await this.perform(async editor => {
+                if (!this.connection?.connected) {
+                  result = { ok: false, reason: 'DESIGNER IS NOT CONNECTED' }
+                  return
+                }
+                try { result = await editFromViewer(editor, target) }
+                catch {
+                  editor.stale = true
+                  result = { ok: false, reason: 'EDIT NOT CONFIRMED — REFRESHING DESIGNER STATE' }
+                }
+              })
+              return result
+            } : undefined,
             resourceDesignerRoot: config.resourceDesignerRoot || '',
             resourceShareRoot: config.resourceShareRoot || '',
             resourceUsername: config.resourceUsername || '',

@@ -25,6 +25,283 @@ function browserMain() {
     lastView = ''
   let displayedTime = null
   let resizingWaveform = false
+  let editPending = false
+  let mouseGesture = null
+  let suppressClickUntil = 0
+  let renderedEditor = ''
+  const editBar = document.createElement('div')
+  const resourcePanel = document.createElement('section')
+  resourcePanel.className = 'resource-picker'
+  resourcePanel.hidden = true
+  resourcePanel.setAttribute('aria-label','RESOURCE PICKER')
+  document.body.append(resourcePanel)
+  let renderedResources = ''
+  let resourceListing = {key:'',items:[],total:0,loading:false,error:false}
+  setInterval(async () => {
+    if (document.hidden || !state?.editor?.mediaMode || editPending || resourceListing.loading) return
+    try {
+      // Refresh native library/version metadata without moving the shared preview.
+      await fetch('/api/resource-list?offset=0',{signal:AbortSignal.timeout(10000)})
+    } catch {}
+  },3000)
+  async function loadResourceFiles() {
+    const list = resourceListing
+    if (list.loading) return
+    list.loading = true
+    try {
+      const response = await fetch('/api/resource-list?offset='+list.items.length,{signal:AbortSignal.timeout(10000)})
+      if (!response.ok) throw new Error('Unavailable')
+      const result = await response.json()
+      if (list !== resourceListing || result.folder !== state.editor?.folder || result.source !== state.editor?.parameter) return
+      list.items.push(...result.items)
+      list.total = result.total
+      list.error = false
+    } catch { list.error = true }
+    finally {
+      list.loading = false
+      renderedResources = ''
+      if (list === resourceListing && state?.editor?.mediaMode) updateResourcePicker()
+    }
+  }
+  let keyMenu
+  const closeKeyMenu = () => { keyMenu?.remove(); keyMenu = null }
+  document.addEventListener('pointerdown', event => { if (!keyMenu?.contains(event.target)) closeKeyMenu() })
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') { closeKeyMenu(); mouseGesture = null; rendered = '' }
+  })
+  editBar.className = 'toolbar editor-controls'
+  editBar.hidden = true
+  $('viewport').before(editBar)
+  async function sendEdit(action, options = {}) {
+    if (!state?.editEnabled || !state.editor || editPending) return false
+    editPending = true
+    updateEditorControls()
+    try {
+      const response = await fetch('/api/edit', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json','X-Viewer-Token':state.selectionToken},
+        body: JSON.stringify({action, token: state.editor.token, ...options}),
+        signal: AbortSignal.timeout(15000),
+      })
+      const result = await response.json()
+      if (result.editor) state.editor = result.editor
+      $('selectionMessage').textContent = result.ok ? '' : result.reason || 'EDIT UNAVAILABLE'
+      lastFullRead = 0
+      rendered = ''
+      return result.ok
+    } catch {
+      // A timeout does not prove that a write failed. Never replay a write.
+      $('selectionMessage').textContent = 'EDIT NOT CONFIRMED — CHECK DESIGNER'
+      return false
+    } finally { editPending = false; updateEditorControls() }
+  }
+  function updateEditorControls() {
+    editBar.hidden = !state?.editEnabled || !state.editor
+    resourcePanel.hidden = editBar.hidden || !state.editor?.mediaMode
+    if (!resourcePanel.hidden) updateResourcePicker()
+    else resourceListing = {key:'',items:[],total:0,loading:false,error:false}
+    if (editBar.hidden || mouseGesture) return
+    const e = state.editor
+    const signature = JSON.stringify([e, editPending, state.connected])
+    if (signature === renderedEditor) return
+    renderedEditor = signature
+    editBar.replaceChildren()
+    const button = (label, action, options, active = false) => {
+      const b = el('button', '', label)
+      b.title = label
+      b.disabled = editPending || !state.connected
+      b.setAttribute('aria-pressed', String(active))
+      b.onclick = () => sendEdit(action, options)
+      editBar.append(b)
+      return b
+    }
+    if (e.clearPrompt) {
+      editBar.append(el('span', '', 'CONFIRM DELETE: ' + e.clearLabel))
+      button('CONFIRM', 'pad', {slot:5})
+      button('CANCEL', 'pad', {slot:7})
+      return
+    }
+    if (e.clearMenu) {
+      editBar.append(el('span', '', e.clearLabel))
+      button('PARAMETER −','field',{direction:-1})
+      button('PARAMETER +','field',{direction:1})
+      button('DELETE ALL','pad',{slot:5})
+      button('DELETE ALL + DEFAULT','pad',{slot:6})
+      button('DEFAULT ALL PARAMETERS','pad',{slot:4})
+      button('BACK','pad',{slot:7})
+      return
+    }
+    if (!e.mediaMode) {
+      button('LAYER EDIT', 'layer_edit', {}, Boolean(e.layerEdit))
+      button('SELECT KEYFRAME', 'key_move', {}, Boolean(e.moveKey))
+    }
+    button('RESOURCES', 'media', {}, e.mediaMode)
+    if (e.mediaMode) return
+    const labels = e.layerEdit ? ['IN', 'POSITION', 'OUT', 'TIME'] : e.mediaMode
+      ? ['SOURCE', 'FOLDER', 'RESOURCE', 'TIME'] : ['LAYER', 'PARAMETER', 'VALUE', 'TIME']
+    for (const [i, action] of ['layer','field','value','time'].entries()) {
+      if (action === 'time' && (e.layerEdit || e.mediaMode)) continue
+      button(labels[i] + ' −', action, {direction:-1})
+      button(labels[i] + ' +', action, {direction:1})
+    }
+    button(e.layerEdit ? e.timeStep : e.mediaMode ? (e.mediaKeyframe ? 'NEW KEYFRAME' : 'REPLACE RESOURCE') : e.precision.toUpperCase(),
+      e.mediaMode ? 'layer_press' : 'fine', {}, e.mediaKeyframe)
+    button(e.layerEdit ? 'FIT' : e.mediaMode ? 'BACK' : e.timeStep, 'time_step', {})
+    if (!e.layerEdit) button(e.mediaMode ? 'APPLY RESOURCE' : 'ADD KEYFRAME', 'value_press', {})
+    if (!e.mediaMode && !e.clearMenu && !e.clearPrompt) {
+      button(e.canResetDefault ? 'DEFAULT' : 'DELETE KEYFRAME', 'pad', {slot:5})
+      button('DELETE ALL…','clear_menu',{})
+      for (const [type,label] of ['HOLD','LINEAR','CUBIC'].entries())
+        button(label, 'key_type', {type}, e.keyType === type).disabled ||= !e.canSelectKey
+    }
+    if (e.mediaMode) editBar.append(el('span', '', [e.folder,e.resource].filter(Boolean).join(' / ')))
+  }
+  function updateResourcePicker() {
+    const e = state.editor
+    const listKey = JSON.stringify([e.layerUid,e.parameter,e.folder,e.resourceCount,e.resourceRevision])
+    if (resourceListing.key !== listKey) {
+      resourceListing = {key:listKey,items:[],total:e.resourceCount,loading:false,error:false}
+      void loadResourceFiles()
+    }
+    const signature = JSON.stringify([e, editPending, state.connected,resourceListing.items.length,resourceListing.loading,resourceListing.error])
+    if (signature === renderedResources) return
+    renderedResources = signature
+    const scrollTop = resourcePanel.querySelector('.resource-file-grid')?.scrollTop || 0
+    resourcePanel.replaceChildren()
+    const bar = el('div','resource-picker-bar')
+    const control = (parent,label,action,options={},active=false) => {
+      const b = el('button','',label)
+      b.title = label
+      b.disabled = editPending || !state.connected
+      b.setAttribute('aria-pressed',String(active))
+      b.onclick = () => sendEdit(action,options)
+      parent.append(b)
+      return b
+    }
+    bar.append(el('strong','', e.resourceSource.toUpperCase() || 'RESOURCES'))
+    control(bar,'SOURCE −','layer',{direction:-1})
+    control(bar,'SOURCE +','layer',{direction:1})
+    control(bar,e.mediaKeyframe ? 'NEW KEYFRAME' : 'REPLACE','layer_press',{},e.mediaKeyframe)
+    control(bar,'BACK','time_step')
+    resourcePanel.append(bar)
+    const body = el('div','resource-picker-body')
+    body.style.display = 'block'
+    const folders = el('nav','resource-folders')
+    Object.assign(folders.style,{flexDirection:'row',flexWrap:'wrap',maxHeight:'100px',borderRight:'0',paddingBottom:'8px'})
+    folders.setAttribute('aria-label','RESOURCE FOLDERS')
+    const seenParents = new Set(e.folders)
+    for (const [index,folder] of e.folders.entries()) {
+      const segments = folder.split(/[\\/]+/).filter(Boolean)
+      for (let depth=1;depth<segments.length;depth++) {
+        const parent = segments.slice(0,depth).join('/')
+        if (seenParents.has(parent)) continue
+        seenParents.add(parent)
+        const label = el('span','resource-folder-parent','▱ ' + segments[depth-1])
+        label.style.flexBasis = '100%'
+        label.style.paddingLeft = (8+Math.min(6,depth-1)*12)+'px'
+        folders.append(label)
+      }
+      const b = control(folders,'▱ ' + (segments.at(-1) || 'ROOT'),'resource_folder',{index},folder === e.folder)
+      b.style.paddingLeft = (8 + Math.min(6,Math.max(0,segments.length-1))*12) + 'px'
+      b.title = folder
+    }
+    const files = el('div','resource-files')
+    const path = el('div','resource-path',e.folder || 'ROOT')
+    path.title = e.folder
+    files.append(path)
+    const grid = el('div','resource-file-grid')
+    Object.assign(grid.style,{maxHeight:'300px',overflowY:'auto',alignContent:'start',gridTemplateColumns:'1fr'})
+    grid.onscroll = () => {
+      if (grid.scrollHeight-grid.scrollTop-grid.clientHeight < 50 && resourceListing.items.length < resourceListing.total && !resourceListing.error)
+        void loadResourceFiles()
+    }
+    for (const resource of resourceListing.items) {
+      const selected = e.resources.some(item=>item.uid === resource.uid && item.selected)
+      const tile = control(grid,'','resource_choose',{index:resource.index,resourceUid:resource.uid},selected)
+      tile.className = 'resource-file'
+      tile.title = resource.name
+      tile.setAttribute('aria-label','APPLY RESOURCE · ' + resource.name)
+      Object.assign(tile.style,{display:'grid',gridTemplateColumns:'64px minmax(0,1fr)',textAlign:'left',gap:'9px'})
+      const thumb = image(resource,true)
+      Object.assign(thumb.style,{width:'64px',height:'40px'})
+      const text = el('span','resource-file-text')
+      const name = el('span','',resource.name)
+      Object.assign(name.style,{display:'block',fontSize:'11px',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'})
+      const details = []
+      if (typeof resource.audio === 'boolean') details.push(resource.audio ? 'AUDIO' : 'NO AUDIO')
+      if (Number.isFinite(resource.duration)) {
+        const seconds = Math.max(0,resource.duration)
+        details.push(Math.floor(seconds/3600).toString().padStart(2,'0')+':'+Math.floor(seconds/60%60).toString().padStart(2,'0')+':'+(seconds%60).toFixed(2).padStart(5,'0'))
+      }
+      if (typeof resource.alpha === 'boolean') details.push(resource.alpha ? 'ALPHA' : 'NO ALPHA')
+      if (Number.isFinite(resource.fps)) details.push('@ '+Number(resource.fps.toFixed(3)))
+      if (resource.codec) details.push(resource.codec)
+      const metadata = el('span','', details.join(' · ') || resource.resourceType || '')
+      Object.assign(metadata.style,{display:'block',fontSize:'10px',color:'#8baab8',lineHeight:'1.4'})
+      text.append(name,metadata)
+      tile.append(thumb,text)
+    }
+    if (!resourceListing.items.length) grid.append(el('span','', resourceListing.loading ? 'LOADING…' : resourceListing.error ? 'FILES UNAVAILABLE' : 'NO FILES IN THIS FOLDER'))
+    files.append(grid)
+    const footer = el('div','resource-picker-bar')
+    footer.append(el('span','', resourceListing.total + ' ITEMS'))
+    if (resourceListing.items.length < resourceListing.total || resourceListing.error) {
+      const more = el('button','',resourceListing.loading ? 'LOADING…' : 'LOAD MORE')
+      more.disabled = resourceListing.loading
+      more.onclick = () => { void loadResourceFiles() }
+      footer.append(more)
+    }
+    files.append(footer)
+    body.append(folders,files)
+    resourcePanel.append(body)
+    grid.scrollTop = scrollTop
+  }
+  // A mouse movement is a dial detent, not a separate absolute-time algorithm.
+  // This keeps native beat/frame steps, clamps and selected-key locks identical.
+  function mouseDial(node, layer, action, parameter, keyTime) {
+    if (!node) return
+    node.addEventListener('pointerdown', event => {
+      const e = state?.editor
+      if (event.button !== 0 || !state.editEnabled || !e || editPending || layer.uid !== e.layerUid) return
+      const layerMode = e.layerEdit === 'edit' && ['layer','field','value'].includes(action) && parameter === undefined
+      const keyMode = e.moveKey && parameter === e.parameter && Math.abs(e.moveKey.time-keyTime) < 1e-6
+      if (!layerMode && !keyMode) return
+      event.preventDefault(); event.stopPropagation()
+      node.setPointerCapture(event.pointerId)
+      mouseGesture = {node, x:event.clientX, y:event.clientY, token:e.token, action, keyMode, moved:false}
+    })
+    node.addEventListener('pointermove', event => {
+      const g = mouseGesture
+      if (!g || g.node !== node || editPending) return
+      if (state.editor?.token !== g.token) {
+        mouseGesture = null
+        $('selectionMessage').textContent = 'EDITOR CHANGED — DRAG CANCELLED'
+        return
+      }
+      const dx = event.clientX-g.x, dy = g.y-event.clientY
+      const vertical = g.keyMode && Math.abs(dy) > Math.abs(dx)
+      const delta = vertical ? dy : dx
+      if (Math.abs(delta) < 12) return
+      g.moved = true
+      g.x = event.clientX; g.y = event.clientY
+      void sendEdit(vertical ? 'value' : g.keyMode ? 'time' : g.action, {direction:delta > 0 ? 1 : -1}).then(ok => {
+        if (!ok) mouseGesture = null
+        else if (mouseGesture === g) {
+          g.token = state.editor.token
+          if (g.keyMode) node.style.left = x(state.editor.moveKey.time) + '%'
+        }
+      })
+    })
+    const end = () => {
+      if (mouseGesture?.node !== node) return
+      if (mouseGesture.moved) suppressClickUntil = performance.now()+400
+      mouseGesture = null
+      updateEditorControls(); rendered = ''
+    }
+    node.addEventListener('pointerup',end)
+    node.addEventListener('pointercancel',end)
+    node.addEventListener('lostpointercapture',end)
+  }
   document.addEventListener('pointerup', () => {
     resizingWaveform = false
   })
@@ -41,7 +318,7 @@ function browserMain() {
     if (resource?.thumbnail) {
       const img = el('img')
       img.loading = 'lazy'
-      img.src = '/api/thumbnail/' + encodeURIComponent(resource.uid)
+      img.src = '/api/thumbnail/' + encodeURIComponent(resource.uid) + '?version=' + encodeURIComponent(resource.version || '')
       img.alt = resource.name || 'Resource'
       let retries = 0
       img.onerror = () => {
@@ -72,6 +349,7 @@ function browserMain() {
       ? 'SELECTION UNAVAILABLE'
       : 'SELECT IN COMPANION'
     button.onclick = async () => {
+      if (performance.now() < suppressClickUntil) return
       button.disabled = true
       try {
         const response = await fetch('/api/select', {
@@ -103,6 +381,7 @@ function browserMain() {
     node.setAttribute('aria-label', (point === 'key' ? 'KEYFRAME ' + (parameter || '') : point.toUpperCase()) + ' · ' + layer.name)
     node.onclick = async event => {
       event.stopPropagation()
+      if (performance.now() < suppressClickUntil) return
       try {
         const response = await fetch('/api/select', {method:'POST',
           headers:{'Content-Type':'application/json','X-Viewer-Token':state.selectionToken},
@@ -114,6 +393,29 @@ function browserMain() {
       } catch { $('selectionMessage').textContent = 'Selection unavailable; connection interrupted' }
     }
     node.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); node.click() } }
+    mouseDial(node, layer, point === 'in' ? 'layer' : point === 'out' ? 'value' : 'time', parameter, keyTime)
+    if (point === 'key') node.oncontextmenu = event => {
+      if (!state.editEnabled) return
+      event.preventDefault(); closeKeyMenu()
+      const e = state.editor
+      if (e?.layerUid !== layer.uid || e.parameter !== parameter ||
+          Math.abs((e.moveKey?.time ?? e.selectedKeyTime ?? Infinity)-keyTime) > 1e-6) {
+        $('selectionMessage').textContent = 'SELECT THIS KEYFRAME FIRST'
+        return
+      }
+      keyMenu = el('div','key-edit-menu')
+      keyMenu.style.left = Math.min(event.clientX, window.innerWidth-170) + 'px'
+      keyMenu.style.top = Math.min(event.clientY, window.innerHeight-160) + 'px'
+      const item = (label, action, options={}) => {
+        const b = el('button','',label)
+        b.onclick = () => { closeKeyMenu(); void sendEdit(action,options) }
+        keyMenu.append(b)
+      }
+      item(e.moveKey ? 'RELEASE KEYFRAME' : 'SELECT KEYFRAME','key_move')
+      for (const [type,label] of ['HOLD','LINEAR','CUBIC'].entries()) item(label,'key_type',{type})
+      item('DELETE KEYFRAME','pad',{slot:5})
+      document.body.append(keyMenu)
+    }
   }
   function marker(lane, time, text, cls = '') {
     if (time < start || time > start + span) return
@@ -348,6 +650,7 @@ function browserMain() {
 
   }
   function draw() {
+    if (mouseGesture || editPending) return
     if (!state || resizingWaveform) return
     const top = viewport.scrollTop
     for (const node of sheet.querySelectorAll('[data-waveform-uid]'))
@@ -550,6 +853,7 @@ function browserMain() {
         clip.style.width = Math.max(0, x(right) - x(left)) + '%'
         clip.title = 'IN ' + layer.start + ' S · OUT ' + layer.end + ' S'
         r.lane.append(clip)
+        mouseDial(clip, layer, 'field')
         const thumb = image(resource)
         thumb.style.position = 'absolute'
         thumb.style.pointerEvents = 'none'
@@ -786,7 +1090,10 @@ function browserMain() {
           // Show confirmed selection immediately using cached rows. Native curves
           // arrive independently; no speculative edits are sent to Designer.
           const { contentRevision, tempoKey, ...live } = incoming
+          const currentEditor = state.editor
           Object.assign(state, live)
+          if (editPending) state.editor = currentEditor
+          updateEditorControls()
           if (selectionChanged && !resizingWaveform) draw()
           else updatePlayhead()
           $('status').textContent = state.connected ? 'LIVE' : 'CONNECTION LOST'
@@ -828,7 +1135,9 @@ function browserMain() {
             rendered = ''
             return
           }
+          const currentEditor = state?.editor
           state = incoming
+          if (editPending) state.editor = currentEditor
           if (latestLive?.trackUid === state.trackUid && latestLive?.focusUid === state.focusUid) {
             state.time = latestLive.time
             state.timecode = latestLive.timecode
@@ -843,6 +1152,7 @@ function browserMain() {
           span = state.length || 60
         }
         $('track').textContent = String(state.trackName || '').replace(/\.apx$/i, '').toUpperCase()
+        updateEditorControls()
         $('status').textContent = state.connected ? 'LIVE' : 'CONNECTION LOST'
         $('status').className = state.connected ? 'live' : 'error'
         $('warnings').textContent = (state.warnings || []).join(' · ')
@@ -856,7 +1166,7 @@ function browserMain() {
           rendered = signature
           draw()
         } else updatePlayhead()
-        if (follow && (state.time < start + span * 0.06 || state.time > start + span * 0.94)) {
+        if (!mouseGesture && follow && (state.time < start + span * 0.06 || state.time > start + span * 0.94)) {
           targetStart = bounds(state.time - span * (state.time < start ? 0.2 : 0.7))
           if (!frame && Math.abs(targetStart - start) > span / 2000) frame = requestAnimationFrame(animate)
         }
@@ -873,6 +1183,10 @@ function browserMain() {
 }
 
 const stylesheet = `
+.resource-folder-parent{color:#729db4;font-size:10px;padding:5px 0}.resource-file>span:last-child{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.resource-picker[hidden]{display:none}.resource-picker{position:fixed;z-index:40;right:20px;top:160px;width:min(680px,calc(100vw - 40px));max-height:calc(100vh - 180px);overflow:auto;background:#151e23;border:1px solid #237484;border-radius:9px;box-shadow:0 12px 40px #000a;padding:10px}.resource-picker-bar{display:flex;align-items:center;gap:7px;padding:4px 0}.resource-picker-bar strong{flex:1}.resource-picker button{font-size:10px;padding:4px 7px}.resource-picker-body{display:grid;grid-template-columns:180px 1fr;gap:12px;margin-top:8px}.resource-folders{display:flex;flex-direction:column;gap:3px;max-height:340px;overflow:auto;border-right:1px solid #29363d;padding-right:8px}.resource-folders button{text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-color:transparent;background:transparent}.resource-folders button[aria-pressed=true]{background:#10343d;border-color:#237484}.resource-files{min-width:0}.resource-path{color:#8bcbd6;font-size:11px;overflow-wrap:anywhere;padding-bottom:8px}.resource-file-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;min-height:150px}.resource-file{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0}.resource-file>span:last-child{max-width:100%;overflow-wrap:anywhere;line-height:1.3}.resource-file .thumb{width:100%;height:52px}.resource-picker .resource-picker-bar:last-child{justify-content:flex-end}
+.key-edit-menu{position:fixed;z-index:50;display:grid;gap:3px;padding:5px;width:165px;background:#151e23;border:1px solid #0699b2;border-radius:5px;box-shadow:0 4px 16px #0009}.key-edit-menu button{padding:3px 7px;font-size:10px;text-align:left}
+.editor-controls[hidden]{display:none}.editor-controls{gap:4px}.editor-controls span{color:#8bcbd6;font-size:10px}.timeline-target,.clip{touch-action:pan-y}
 :root{color-scheme:dark;font:12px 'Segoe UI',Arial,sans-serif;background:#101517;color:#eef4f6}*{box-sizing:border-box}body{margin:0;height:100vh;display:flex;flex-direction:column;overflow:hidden}header,.toolbar{display:flex;align-items:center;gap:14px;padding:16px 22px;border-bottom:1px solid #29363d}header{height:68px;min-height:68px;padding:5px 16px;position:relative}#status{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.08em}#status:before{content:'';width:8px;height:8px;border-radius:50%;background:#849aa5}#status.live:before{background:#43e68c;animation:live-pulse 1.4s ease-in-out infinite}#status.error:before{background:#ffc580}@keyframes live-pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 #43e68c44}50%{opacity:.45;box-shadow:0 0 0 4px #43e68c00}}@media(prefers-reduced-motion:reduce){#status.live:before{animation:none}}h1{font-size:15px;letter-spacing:.08em;margin:0}.brand-logo{position:relative;width:72px;height:41px;overflow:hidden;flex-shrink:0;align-self:center}.brand-logo img{position:absolute;top:-19px;left:-4px;width:80px;height:80px}header small{display:block;color:#849aa5;margin-top:5px;letter-spacing:.15em}.spacer{flex:1}#clockBlock{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;max-width:40%;line-height:1.2}#clock{font:24px Consolas,monospace;white-space:nowrap}#beat{font:12px Consolas,monospace;color:#8bcbd6;margin-left:10px}#clockDetails{font-size:12px;color:#9eb6c2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:15px}#sectionRemaining{font:14px Consolas,monospace;color:#8bcbd6;min-height:17px}#sectionRemaining.ending{color:#ff6268}.live{color:#43e68c}.error{color:#ffc580}.toolbar{padding:4px 16px;gap:7px;flex-wrap:wrap;min-height:32px}.toolbar button{padding:3px 7px;font-size:10px;line-height:16px;border-radius:4px}.toolbar #track{font-size:11px}button{background:#1b272d;border:1px solid #34444d;border-radius:5px;color:#d4e2e8;padding:7px 10px;cursor:pointer}button[aria-pressed=true]{border-color:#0699b2;color:#63d4e7}button:focus-visible{outline:2px solid #43e68c}#viewport{flex:1;overflow:auto;margin:7px 12px;border:1px solid #29363d;border-radius:6px;min-height:0}#sheet{position:relative;min-width:760px;overflow:clip;min-height:100%}.row{display:grid;grid-template-columns:240px 1fr;position:relative;min-height:54px;border-bottom:1px solid #26343b}.label{background:#151e23;padding:10px 12px;display:flex;gap:9px;align-items:center;z-index:3;border-right:1px solid #29363d;min-width:0;overflow:hidden}.layer{height:52px;min-height:52px}.layer>.label{position:relative;padding-top:14px;padding-bottom:4px}.layer>.lane>.clip{top:11px;height:30px;padding-top:6px;padding-bottom:6px}.layer>.lane>.key-point{top:22px}.layer>.lane>.thumb{top:14px}.label .name{overflow:hidden;text-overflow:ellipsis}.label small{margin-left:auto;color:#729db4;font-size:10px;max-width:85px;overflow:hidden;text-overflow:ellipsis}.lane{position:relative;min-width:0;overflow:hidden}.timeline-header{position:sticky;z-index:6;background:#101517;height:30px;min-height:30px}.timeline-header>.label{padding-top:5px;padding-bottom:5px}.header-playhead{position:absolute;top:0;bottom:0;width:1px;background:#43e68c;pointer-events:none;z-index:4;transform:none!important}.section-band{position:absolute;top:0;bottom:0;border-left:1px solid #4b8792;pointer-events:none;background:#16414b}.section-0{background:#293b4d;border-color:#6b8caa}.ruler{min-height:30px}.ruler>.label{font-size:10px}.annotations{min-height:30px;font-size:10px}.focused{background:#10343d}.focused .label{background:#10343d}.parameter .label{padding-left:30px;color:#91afbd}.parameter.selected{color:#43e68c}.parameter.selected .label{color:#43e68c}.parameter .lane{color:#729db4}.selected .lane{color:#43e68c}.lane svg{width:100%;height:54px}.clip{position:absolute;top:8px;height:36px;background:#1d3e49;border:1px solid #2b626f;border-radius:4px;padding:9px 42px;overflow:hidden;white-space:nowrap;color:#a9d8e3}.clip:disabled{cursor:default}.clip:not(:disabled):hover{border-color:#63d4e7;background:#26515e}.clip{min-width:0;padding:0!important;text-align:left}.playback-mode{font-size:10px;color:#8bcbd6;margin-left:5px}.playback-icon{display:inline-flex;vertical-align:middle;margin-left:5px;color:#8bcbd6}.lane .playback-icon svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.clip-label{display:block;padding:6px 42px;white-space:nowrap}.marker{position:absolute;top:7px;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;z-index:2;font-size:10px}.key{color:#72d5e8;top:20px;font-size:10px}.lane>.key-point{width:8px;height:8px;margin-left:-4px;top:23px;background:currentColor;border:1px solid #101517;transform:translateX(var(--pan,0px)) rotate(45deg)}.timeline-target{cursor:pointer}.timeline-target:focus-visible{outline:2px solid #43e68c}.layer-edge{top:11px;width:7px;height:30px;margin-left:-3px;border:1px solid #63d4e7;border-radius:2px;background:#0699b255;z-index:3}.timeline-target:hover{filter:brightness(1.6);color:#63d4e7;box-shadow:0 0 7px #63d4e7;outline:1px solid #63d4e7}.tick{color:#849aa5;font:10px Consolas,monospace}.ruler .tick{font-size:12px;color:#bdd0da}.cue-marker{top:3px;overflow:visible;max-width:220px;padding:3px 7px 3px 13px;height:22px;line-height:16px;border:0;border-radius:0;clip-path:polygon(0 50%,9px 0,100% 0,100% 100%,9px 100%);background:#29414e;font-size:10px;white-space:nowrap}.cue-marker:before{content:"";position:absolute;left:0;top:0;width:9px;height:22px;background:currentColor;clip-path:polygon(0 50%,100% 0,100% 100%)}.cue-marker.notes{max-width:260px}.cue-marker.midi{color:#b7a0dc}.cue-marker.tc{color:#74c6d8}.cue{color:#e1bf77}.notes{color:#acbfc8}.resource{display:flex;align-items:center;gap:5px;top:3px}.thumb{display:inline-flex;width:34px;height:24px;align-items:center;justify-content:center;background:#263b44;border-radius:3px;overflow:hidden;flex-shrink:0;color:#729db4}.thumb.large{width:60px;height:38px}.thumb img{width:100%;height:100%;object-fit:cover}.gridline{position:absolute;top:30px;bottom:0;width:1px;background:#88a9bb0b;pointer-events:none;z-index:1}.gridline.major{background:#88a9bb20}.playhead{position:absolute;top:0;bottom:0;width:1px;background:#43e68c;box-shadow:0 0 5px #43e68c66;z-index:4;pointer-events:none}.lane>*{transform:translateX(var(--pan,0px))}.alignment-guide.subtle{opacity:.3;pointer-events:none}.alignment-guide.matched{border-left:2px solid #ffe0a0;box-shadow:0 0 5px #e7ba6370}.alignment-guide.subtle.matched{opacity:.65}.alignment-guide{pointer-events:none;position:absolute;top:0;bottom:0;border-left:1px dashed #e7ba63;z-index:3;transform:translateX(var(--pan,0px))}.gridline,.relation{transform:translateX(var(--pan,0px))}.select-label{border:0;padding:0;background:transparent;color:inherit;text-align:left;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.select-label:disabled{cursor:default}.select-label:not(:disabled):hover{color:#63d4e7}#selectionMessage{color:#e1bf77;margin-left:12px}.wave-controls{position:absolute;right:4px;top:4px;display:flex;gap:2px;z-index:5}.wave-controls button{width:16px;height:12px;padding:0;background:#151e23;border:1px solid #34444d;border-radius:4px;color:#849aa5;display:grid;place-items:center}.wave-controls svg{width:12px;height:10px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.wave-controls button:hover,.wave-controls button[aria-pressed=true]{color:#63d4e7;border-color:#0699b2}.wave-controls .parameter-mode{font-size:10px;line-height:10px}.wave-controls button:disabled{opacity:.45}.wave-beat-line{position:absolute;top:0;bottom:0;width:1px;background:#accdd526;z-index:2;pointer-events:none}.wave-beat-line.timeline-target{pointer-events:auto;cursor:pointer}.wave-beat-line.timeline-target:before{content:"";position:absolute;left:-4px;top:0;bottom:0;width:9px}.wave-beat-line.major{background:#accdd55c}.beat-tick{background:#101517bb;padding:1px 3px;z-index:3}.track-waveform{position:sticky;z-index:6;background:#101517}.waveform .lane svg{height:100%}.waveform .label{font-size:10px}.wave-status{display:block;padding:14px;color:#849aa5}.relation{position:absolute;width:3px;margin-left:-1px;background:#bd9be0;border-radius:3px;z-index:2;pointer-events:none;box-shadow:0 0 0 1px #10151799}.relation:after{content:"";position:absolute;width:13px;height:10px;left:-5px;background:#d4b8ef;clip-path:polygon(0 0,100% 0,50% 100%)}.relation.down:after{bottom:-1px}.relation.up:after{top:-1px;transform:rotate(180deg)}.relation:before{content:"";position:absolute;left:-2px;width:7px;height:7px;background:#d4b8ef;border-radius:50%}.relation.down:before{top:-2px}.relation.up:before{bottom:-2px}footer{min-height:27px;padding:4px 22px;color:#849aa5;font-size:10px}#warnings{color:#d5b97b;margin-left:12px}
 `
 const page = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Disguise Layer Editor · Timeline</title><link rel="stylesheet" href="/viewer.css"><script src="/viewer.js" defer></script></head><body><header><span class="brand-logo"><img src="${brandLogo}" alt="VEHKA AV"></span><div><h1>DISGUISE LAYER EDITOR</h1><small>TIMELINE VIEWER</small></div><div class="spacer"></div><div id="clockBlock"><span id="clock">—</span><span id="beat"></span><div id="clockDetails"></div><div id="sectionRemaining" aria-live="off"></div></div><span id="status" role="status">CONNECTING</span></header><div class="toolbar"><strong id="track">TRACK</strong><div class="spacer"></div><button id="fitTrack" title="FIT TRACK">FIT TRACK</button><button id="fitLayer" title="CENTRE SELECTED LAYER">FIT LAYER</button><button id="follow" title="FOLLOW PLAYHEAD" aria-pressed="true">FOLLOW</button><button id="zoomOut" aria-label="ZOOM OUT" title="ZOOM OUT">−</button><button id="zoomIn" aria-label="ZOOM IN" title="ZOOM IN">+</button></div><main id="viewport" aria-label="Designer timeline"><div id="sheet"></div></main><footer>CTRL + WHEEL: ZOOM · SHIFT + WHEEL: PAN<span id="selectionMessage" role="status"></span><span id="warnings"></span></footer></body></html>`

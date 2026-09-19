@@ -1,5 +1,7 @@
 # Security and deployment
 
+ALLOW VIEWER EDIT defaults to off. When enabled, browser users can modify Designer through the shared Companion editor, including confirmed bulk deletion. ALLOW LAN ACCESS exposes these controls to the local network without user authentication. Request tokens and origin checks are not a login mechanism.
+
 This beta has not undergone an independent security audit. There is no guaranteed security support period or response time.
 
 Use the module on a trusted control network. The module sends powerful Python commands through Designer's HTTP interface. Do not expose that interface directly to the public internet. Limit access using network controls appropriate to your installation; the module does not add authentication or encryption to Designer's HTTP endpoint.

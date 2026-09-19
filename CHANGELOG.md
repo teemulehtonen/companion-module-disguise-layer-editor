@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-beta.102
+
+- Add optional mouse editing through the same Companion command queue, selection, locks and timing steps. Disabled by default.
+- Add a compact folder/file picker for media and internal resources, with native metadata and refreshed Designer version/trim information.
+- Add shared keyframe interpolation, resource write mode and bulk-delete confirmation controls.
+
 ## 0.1.0-beta.101
 
 - Highlight true timeline alignments with a brighter solid line; never snap or alter times.

@@ -482,7 +482,7 @@ class Editor {
       else if (point === 'key') {
         const field = numeric >= 0 ? layer.fields[numeric] : layer.mediaFields?.[resource]
         const key = field?.sequenced && field.keys?.find(k => Math.abs(k.time-keyTime) < 1e-6)
-        if (!key || key.time < layer.start || key.time >= layer.end) return {ok:false,reason:'Keyframe is no longer inside this layer'}
+        if (!key || key.time < layer.start || key.time > layer.end) return {ok:false,reason:'Keyframe is no longer inside this layer'}
         target = key.time
       } else return {ok:false,reason:'Invalid timeline point'}
       if (!Number.isFinite(target) || target < 0 || target > this.snapshot.length) return {ok:false,reason:'Layer is outside the track'}
@@ -634,12 +634,14 @@ class Editor {
       this.acceptLive(result)
     })
   }
-  async cycleKeyType() {
+  async cycleKeyType(type) {
+    if (type !== undefined && ![0, 1, 2].includes(type)) throw new Error('Invalid keyframe type')
     if (!this.canSelectKey) return
     this.requireField()
     await this.remote(async () =>
       this.acceptLive(
-        await this.client.execute('key_type', { ...this.liveArgs(), sourceTime: this.selectedKey?.time }),
+        await this.client.execute('key_type', { ...this.liveArgs(), sourceTime: this.selectedKey?.time,
+          expectedKey: this.moveKey || undefined, ...(type === undefined ? {} : {type}) }),
       ),
     )
     if (this.moveKey && this.selectedKey) this.moveKey = { ...this.selectedKey }
@@ -771,7 +773,7 @@ class Editor {
     if (this.mediaMode) await this.loadMedia()
     else this.selectDefaultParameter()
   }
-  async loadMedia({ preserve = false } = {}) {
+  async loadMedia({ preserve = false, preservePreview = false } = {}) {
     const previousFolder = this.mediaFolder,
       previousUid = this.currentMedia?.uid
     if (!this.mediaField) this.mediaFieldIndex = 0
@@ -781,6 +783,11 @@ class Editor {
         ...this.liveArgs(),
         field: this.mediaField.name,
       })
+      const signature = JSON.stringify(result.media)
+      if (signature !== this.mediaLibrarySignature) {
+        this.mediaLibrarySignature = signature
+        this.mediaLibraryRevision = (this.mediaLibraryRevision || 0) + 1
+      }
       this.mediaCanAnimate = result.canAnimate === true
       if (!this.mediaCanAnimate) this.mediaKeyframe = false
       this.mediaAll = result.media.map((m) => ({
@@ -792,6 +799,10 @@ class Editor {
           ? previousFolder
           : (this.mediaAll.find((m) => m.uid === result.selectedUid)?.folder ?? this.mediaFolders[0] ?? '')
       this.mediaIndex = this.mediaItems.findIndex((m) => m.uid === result.selectedUid)
+      if (preservePreview && previousUid) {
+        const previous = this.mediaItems.findIndex(m => m.uid === previousUid)
+        if (previous >= 0) this.mediaIndex = previous
+      }
       if (preserve && this.mediaIndex < 0)
         this.mediaIndex = this.mediaItems.findIndex((m) => m.uid === previousUid)
       this.mediaPage = Math.floor(Math.max(0, this.mediaIndex) / 8)

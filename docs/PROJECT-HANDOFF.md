@@ -1,4 +1,4 @@
-# Project handoff — beta.101
+# Project handoff — beta.102
 
 Read this file, DEVELOPER-MANUAL.md and VIEWER-DEVELOPMENT.md when resuming. Public source and release packages contain no development machine settings.
 
@@ -45,3 +45,7 @@ Beta.99: native keyframes may sit exactly at layer OUT. Viewer key visibility is
 Beta.100: zoom buttons and Ctrl+wheel centre on state.time (playhead), clamped to track view bounds. FIT LAYER remains layer-centred.
 
 Beta.101: alignment counts only coincidences within 1 microsecond across different layers, including group IN/OUT. Matched guides are solid and brighter; unmatched Layer Edit boundaries remain dashed. No snapping. test/viewer-alignment.test.js covers 96 boundary/key/resource/group/FPS pairs plus subframe near misses and nonmutation.
+
+Beta.102: ALLOW VIEWER EDIT is opt-in. viewer-editor.js validates a shared-state fingerprint and delegates to existing definitions.js actions inside main.perform(). Browser drags are relative encoder steps (12 px per step); never implement separate beat/frame math. Resource picker uses native resource_items for every supported resource parameter, server-owned indices, and UID equality checks. /api/resource-list batches 64 items; metadata refreshes at most once per 2.5 seconds while a picker is open. Native VideoClip.transportDuration supplies trimmed clip duration; enabledVersion selects the current version filename where unambiguous. Source files are never modified. Browser selection, file lists and native interpolation were tested; continuous physical mouse drags and all layer/device combinations were not certified.
+
+Beta.102 final verification: 142 automated tests and packaged-module smoke checks passed. Browser fixture covered a 130-item library, folder changes and selecting item 99. Native read checks covered audio, output, mapping, palette, video and CDL lists. An inactive native test layer verified HOLD/LINEAR/CUBIC; a temporary clip verified trim duration changes without modifying source frame count. Installed Companion integration verified browser-to-Companion and Companion-to-browser precision changes, native audio/output listing, and an empty last_error. No broad live playback or physical Stream Deck certification was performed.
