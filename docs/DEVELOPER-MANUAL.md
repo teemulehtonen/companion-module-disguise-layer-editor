@@ -1,6 +1,25 @@
 # Developer manual
 
-This guide explains how Disguise Layer Editor is implemented and where to make changes. It describes the 0.1.beta codebase through technical version 0.1.0-beta.52. For installation and controls, start with the [README](../README.md). For validation scope, see the [Track 6 report](TRACK-6-TESTS.md).
+This guide maps the core module architecture. For the 0.2.0-beta.1 baseline, read [PROJECT-HANDOFF](PROJECT-HANDOFF.md) and [VIEWER-DEVELOPMENT](VIEWER-DEVELOPMENT.md) alongside it: these describe the newer browser editor, shared selection, clocks and concurrency rules. Historical track reports describe only their named builds, not certification of the current release.
+
+## Continuing development
+
+1. Clone the repository or extract the source ZIP. Follow [BUILD](BUILD.md) for the supported Node runtime, dependency installation and packaging commands.
+2. Read `AGENTS.md`, the handoff and viewer development guide before changing behavior. Use the current source and tests as the implementation authority.
+3. Run `npm test` and `npm run package`. The Windows release command builds clean Plus/XL exports and source/install bundles. Private live test helpers are intentionally excluded; local unit and package checks require no personal Designer project.
+4. For hardware validation, configure your own Designer address, Companion connection and optional SMB credentials. Use a disposable track, preserve project backups, and verify only the changed behavior before wider testing.
+5. Keep Designer calls behind the existing client/native script boundary and viewer commands in the shared validated edit queue. Do not bypass tokens, expected-key checks, locks, revision checks or LINK TIME behavior.
+6. Update public documentation and changelog when changing behavior; keep personal settings and media outside Git. Inspect generated packages before publishing.
+
+The repository contains no installed dependencies, passwords, private network configuration or licensed test media. Recreate those locally. The source package includes tests, package lockfile, build scripts and development documentation; the module TGZ is for installation, not source development.
+
+### Recent viewer behavior
+
+`viewer-page.js` owns pointer/keyboard UI, transient drag and wheel previews, snap targets, FOLLOW and menu controls. `viewer-editor.js` adapts validated browser requests to the same editor used by Stream Deck. `viewer-edit-model.js` updates every serialized parameter display copy after confirmation. `viewer-curve-preview.js` throttles extra native curve sampling, not mutation validation.
+
+Wheel edits keep one guarded write in flight and accumulate the latest numeric target. Local curve deformation is approximate; Designer geometry remains authoritative. Empty timeline clicks release selected-key mode. Shortcuts are S snap, F follow, T fit track, L fit layer and Shift+L link time; text inputs and modified wheel gestures retain their own behavior. Live transport updates drive FOLLOW before the visible edge.
+
+The 0.2 baseline ran 182 local tests and package lifecycle checks. This is not a new exhaustive live test of every layer, frame rate, SMB server or Raspberry Pi performance scenario.
 
 ## 1. What runs where
 

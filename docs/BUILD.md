@@ -25,6 +25,6 @@ npm run release
 npm run release -- -Force
 ```
 
-This reruns tests and packaging, then creates source/Companion ZIPs and SHA-256 checksums in `releases/0.1.beta/`. The source archive uses an explicit allowlist in `scripts/release.ps1`; update it when adding distributable files. Node/npm must be on PATH.
+This reruns tests and packaging, then creates source/Companion ZIPs and SHA-256 checksums in `releases/0.2.beta/`. The source archive uses an explicit allowlist in `scripts/release.ps1`; update it when adding distributable files. Node/npm must be on PATH.
 
 For a new published version, update `package.json`, lockfile, `companion/manifest.json`, the release script and documented filenames together. Keep the module ID stable. Do not replace published tags. Generated outputs are ignored by Git.

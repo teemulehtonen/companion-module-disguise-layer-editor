@@ -1,4 +1,4 @@
-# Disguise Layer Editor — 0.1.beta
+# Disguise Layer Editor — 0.2.beta
 
 Disguise layer, keyframe and resource control for Bitfocus Companion and Stream Deck +.
 
@@ -39,7 +39,7 @@ npm test
 npm run package
 ```
 
-Windows: `npm run release` creates archives in `releases/0.1.beta`. To replace a local build, use `npm run release -- -Force`. Module and page files are generated outputs, excluded from Git.
+Windows: `npm run release` creates archives in `releases/0.2.beta`. To replace a local build, use `npm run release -- -Force`. Module and page files are generated outputs, excluded from Git.
 
 [Contributing](CONTRIBUTING.md) · [Architecture](docs/ARCHITECTURE.md) · [Test report](docs/TRACK-1-TESTS.md) · [GitHub setup](docs/GITHUB-SETUP.md)
 

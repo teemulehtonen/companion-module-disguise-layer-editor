@@ -1,4 +1,8 @@
-# Current release — beta.159
+# Current release — 0.2.0-beta.1
+
+The 0.2 series consolidates 0.1.0-beta.159 without runtime changes. Release bundles now live in releases/0.2.beta. Historical test reports retain their original versions.
+
+0.2.0-beta.1 consolidates 0.1.0-beta.159 without runtime changes. See the developer manual continuation checklist. Build outputs are under releases/0.2.beta. Validation: 182 local tests plus package lifecycle checks; historical live reports retain their original scope.
 
 curvePreviewDue limits additional native curve sampling to 100 ms per track/layer/field, not writes or validation. Skipped requests must not return stale samples as authoritative curves. Browser re-applies latest local preview after older acknowledgements; normal post-release geometry restores the complete native curve. Isolated 200-key native benchmark measured ~1.2 ms field snapshot versus ~3.2 ms including 490 curve samples; this excludes network/Companion/UI latency and is not an end-to-end speed claim.
 

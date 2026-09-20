@@ -2,11 +2,11 @@ param([switch]$Force)
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path $PSScriptRoot -Parent
 $version = (Get-Content -LiteralPath (Join-Path $projectRoot 'package.json') -Raw | ConvertFrom-Json).version
-if ($version -notmatch '^0\.1\.0-beta\.\d+$') { throw 'Invalid beta version.' }
-$releaseName = '0.1.beta'
+if ($version -notmatch '^0\.2\.0-beta\.\d+$') { throw 'Invalid beta version.' }
+$releaseName = '0.2.beta'
 $releaseRoot = Join-Path $projectRoot 'releases'
 $destination = Join-Path $releaseRoot $releaseName
-$staging = Join-Path $projectRoot '.tools/release-staging/0.1.beta'
+$staging = Join-Path $projectRoot '.tools/release-staging/0.2.beta'
 
 function Remove-CheckedDirectory([string]$Target, [string]$Parent) {
     $resolved = [IO.Path]::GetFullPath($Target)

@@ -1,4 +1,4 @@
-# Disguise Layer Editor — 0.1.beta
+# Disguise Layer Editor — 0.2.beta
 
 Disguise layer, keyframe and resource control for Bitfocus Companion and Stream Deck +.
 
@@ -6,7 +6,7 @@ Disguise layer, keyframe and resource control for Bitfocus Companion and Stream 
 
 ## Install
 
-**Downloads (beta.159):** [Companion module](../../releases/download/v0.1.0-beta.159/disguise-layer-control-0.1.0-beta.159.tgz) · [Stream Deck XL page](../../releases/download/v0.1.0-beta.159/D3-Stream-Deck-XL.companionconfig) · [Companion page](../../releases/download/v0.1.0-beta.159/D3-Stream-Deck-Plus.companionconfig)
+**Downloads (0.2.0-beta.1):** [Companion module](../../releases/download/v0.2.0-beta.1/disguise-layer-control-0.2.0-beta.1.tgz) · [Stream Deck XL page](../../releases/download/v0.2.0-beta.1/D3-Stream-Deck-XL.companionconfig) · [Companion page](../../releases/download/v0.2.0-beta.1/D3-Stream-Deck-Plus.companionconfig)
 
 Tested with Designer 32.4.17 and Companion 5.0.5.
 
@@ -66,7 +66,7 @@ npm test
 npm run package
 ```
 
-Windows: `npm run release` creates archives in `releases/0.1.beta`. To replace a local build, use `npm run release -- -Force`. Module and page files are generated outputs, excluded from Git.
+Windows: `npm run release` creates archives in `releases/0.2.beta`. To replace a local build, use `npm run release -- -Force`. Module and page files are generated outputs, excluded from Git.
 
 [Build details](docs/BUILD.md) · [Developer manual](docs/DEVELOPER-MANUAL.md) · [Contributing](CONTRIBUTING.md) · [Architecture](docs/ARCHITECTURE.md) · [Test report](docs/TRACK-6-TESTS.md)
 

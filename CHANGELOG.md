@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0-beta.1
+
+- Start the 0.2 beta series from 0.1.0-beta.159. No runtime behavior changes.
+- Includes shared mouse/Stream Deck editing, numeric wheel edits and curve previews, snap targeting, keyboard shortcuts, earlier FOLLOW scrolling and hover timecodes.
+- Publish the module, clean Plus/XL pages, install/source bundles and checksums.
+
 ## 0.1.0-beta.151
 
 - Split SNAP toggle from its target-only dropdown. Add S/F/T/L/Shift+L keyboard shortcuts (ignored in text inputs and with modifiers) and footer hint.
