@@ -1564,7 +1564,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       header.querySelector('.lane').append(el('i', 'header-playhead'),el('i','header-edithead'))
     }
     // A sticky divider controls display only, including in VIEW mode.
-    const displayRow = row('LAYERS', 'layer-display-bar timeline-header')
+    const displayRow = row('', 'layer-display-bar timeline-header')
     displayRow.root.style.top = headerTop + 'px'
     const displayControls = el('div', 'wave-controls')
     for (const [kind, label] of [['sequenced','SHOW SEQUENCED PARAMETERS'],['all','SHOW ALL PARAMETERS'],['none','HIDE ALL PARAMETERS']]) {
