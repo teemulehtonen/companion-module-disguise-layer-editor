@@ -512,12 +512,12 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     function preview(g) {
       g.previewFrame=0
       if (mouseGesture!==g || !g.moved) return
-      const target=snappedTime(g.originTime+(g.lastX-g.originX)*span/g.width,g.points,g.lastEvent?.altKey,g.width,!g.keyMode && action==='field' ? layer.end-layer.start : 0)
-      const time=Math.max(layer.start,Math.min(layer.end,target.time))
-      const destination=g.keyMode ? time : Math.max(0,Math.min(action==='field' ? state.length-(layer.end-layer.start) : state.length,target.time))
-      showDragTimes(!g.keyMode && action==='field' ? [{time:destination,prefix:'IN '},{time:Math.min(state.length,destination+layer.end-layer.start),prefix:'OUT ',row:1}] : [{time:destination}],g.lastY,node.parentElement)
+      const target=snappedTime(g.originTime+(g.lastX-g.originX)*span/g.width,g.points,g.lastEvent?.altKey,g.width,!g.keyMode && action==='field' ? g.layerEnd-g.layerStart : 0)
+      const time=Math.max(g.layerStart,Math.min(g.layerEnd,target.time))
+      const destination=g.keyMode ? time : Math.max(0,Math.min(action==='field' ? state.length-(g.layerEnd-g.layerStart) : state.length,target.time))
+      showDragTimes(!g.keyMode && action==='field' ? [{time:destination,prefix:'IN '},{time:Math.min(state.length,destination+g.layerEnd-g.layerStart),prefix:'OUT ',row:1}] : [{time:destination}],g.lastY,node.parentElement)
       if (g.keyMode) {
-        node.style.left=x(time)+'%'
+        for(const mark of g.keyParts) mark.style.left=x(time)+'%'
         const lo=Number(node.dataset.curveMin),hi=Number(node.dataset.curveMax)
         if (hi>lo && Number.isFinite(g.originValue)) {
           const value=Math.max(lo,Math.min(hi,g.originValue+(g.originY-g.lastY)*(hi-lo)/42))
@@ -540,8 +540,24 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
           }
         }
       } else {
-        node.style.left=x(target.time)+'%'
+        previewLayer(g,destination)
       }
+    }
+    function previewLayer(g,destination) {
+      const minimum=1/(state.fps || 25)
+      const a=action==='value' ? g.layerStart : Math.max(0,Math.min(action==='layer' ? g.layerEnd-minimum : state.length-(g.layerEnd-g.layerStart),destination))
+      const b=action==='layer' ? g.layerEnd : action==='value' ? Math.max(a+minimum,Math.min(state.length,destination)) : a+g.layerEnd-g.layerStart
+      const delta=action==='field' ? (a-g.layerStart)/span*g.width : 0
+      for(const part of g.layerParts) {
+        if(part.kind==='clip') {
+          part.node.style.left=x(Math.max(start,a))+'%'
+          part.node.style.width=Math.max(0,(Math.min(start+span,b)-Math.max(start,a))/span*100)+'%'
+        } else if(part.kind==='in' || part.kind==='out') {
+          part.node.style.left=x(part.kind==='in'?a:b)+'%'
+        } else part.node.style.translate=delta+'px 0'
+      }
+      // Trimming keeps absolute key times; clip only the visible content.
+      for(const lane of g.layerLanes) lane.style.clipPath='inset(0 max(0px, calc('+Math.max(0,100-x(b))+'% - 4px)) 0 max(0px, calc('+Math.max(0,x(a))+'% - 4px)))'
     }
     node.addEventListener('pointerdown', event => {
       if (event.button !== 0 || !state?.editEnabled || editPending || interactionBusy || event.ctrlKey || event.shiftKey) return
@@ -552,7 +568,11 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       const keys=(field?.keys || []).filter(k=>k.time>=layer.start && k.time<=layer.end).sort((a,b)=>a.time-b.time)
       const selected=keys.find(k=>Math.abs(k.time-currentKeyTime)<1e-5)
       node.setPointerCapture(event.pointerId)
-      mouseGesture = {node,x:event.clientX,y:event.clientY,lastX:event.clientX,lastY:event.clientY,originX:event.clientX,
+      const layerLanes=[...sheet.querySelectorAll('[data-owner-layer],.layer[data-uid]')]
+        .filter(row=>(row.dataset.ownerLayer || row.dataset.uid)===layer.uid).map(row=>row.querySelector('.lane')).filter(Boolean)
+      const keyParts=parameter===undefined ? [] : [...sheet.querySelectorAll('[data-key-time]')].filter(mark=>mark.dataset.keyLayer===layer.uid && mark.dataset.keyParameter===parameter && Math.abs(Number(mark.dataset.keyTime)-currentKeyTime)<1e-6)
+      const layerParts=layerLanes.flatMap(lane=>[...lane.children].map(child=>({node:child,kind:child.dataset.layerEdge || (child.classList.contains('clip')?'clip':'content')})))
+      mouseGesture = {keyParts,layerStart:layer.start,layerEnd:layer.end,layerLanes,layerParts,node,x:event.clientX,y:event.clientY,lastX:event.clientX,lastY:event.clientY,originX:event.clientX,
         originY:event.clientY,
         originValue:selected?.value,samples:field?.samples?.map(s=>({...s})),
         neighbours:[keys.filter(k=>k.time<currentKeyTime).at(-1)?.time ?? layer.start,keys.find(k=>k.time>currentKeyTime)?.time ?? layer.end],
@@ -602,7 +622,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       }
       // One shared encoder action in flight. Never build a backlog of old drags.
       g.x = g.lastX; g.y = g.lastY
-      const target = snappedTime(g.originTime+(g.lastX-g.originX)*span/g.width,g.points,event.altKey,g.width,!g.keyMode && action === 'field' ? layer.end-layer.start : 0)
+      const target = snappedTime(g.originTime+(g.lastX-g.originX)*span/g.width,g.points,event.altKey,g.width,!g.keyMode && action === 'field' ? g.layerEnd-g.layerStart : 0)
       const numeric = g.keyMode && Number.isFinite(g.originValue) && node.dataset.curveMin !== undefined && !field?.choices?.length
       let ok
       g.preparing = true
@@ -636,12 +656,12 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
         else if (!g.keyMode) {
           const e = state.editor
           node.style.left = x(action === 'value' ? e.layerEnd : e.layerStart)+'%'
-          if (action === 'field') node.style.width = (x(e.layerEnd)-x(e.layerStart))+'%'
+          previewLayer(g,action==='value'?e.layerEnd:e.layerStart)
         }
       }
       // Acknowledgement may describe an older pointer position. Keep the newest
       // local preview visible while the next guarded write is queued.
-      if(mouseGesture===g && !g.released && Math.max(Math.abs(g.lastX-g.x),Math.abs(g.lastY-g.y))>=2) preview(g)
+      if(mouseGesture===g && Math.max(Math.abs(g.lastX-g.x),Math.abs(g.lastY-g.y))>=2) preview(g)
       if (mouseGesture === g && g.released) end({type:'pointerup'})
       else if(mouseGesture===g && g.lastEvent && Math.max(Math.abs(g.lastX-g.x),Math.abs(g.lastY-g.y))>=2) void move(g.lastEvent)
     }
@@ -663,7 +683,8 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       showSnap(null)
       clearDragTimes()
       rendered = ''; lastFullRead = 0; updateEditorControls()
-      if(g.moved) draw()
+      // Keep the final preview until a revision-checked geometry read arrives.
+      // Immediate redraw would briefly restore old native curve samples.
     }
     node.addEventListener('pointerup',end)
     node.addEventListener('pointercancel',end)
@@ -1193,6 +1214,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     const playback = owner?.playback
     const suffix = playback?.endpoint === 'Loop' ? 'LOOPED' : playback?.endpoint?.toUpperCase()
     const r = row(label + (suffix ? ' - ' + suffix : ''), 'waveform')
+    if(uid) r.root.dataset.ownerLayer=uid
     if (stickyTop !== undefined) {
       r.root.classList.add('track-waveform')
       r.root.style.top = stickyTop + 'px'
@@ -1517,7 +1539,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       }
       for (const [kind, time] of [['in',layer.start],['out',layer.end]]) {
         const edge = marker(r.lane,time,'','layer-edge')
-        if (edge) { edge.title = kind.toUpperCase() + ' · ' + layer.name; pointClick(edge,layer,kind) }
+        if (edge) { edge.dataset.layerEdge=kind; edge.title = kind.toUpperCase() + ' · ' + layer.name; pointClick(edge,layer,kind) }
       }
       for (const field of [...layer.fields, ...layer.resources])
         if (field.sequenced) {
@@ -1803,7 +1825,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
           }
           if (editPending || interactionBusy || mouseGesture) state.editor = currentEditor
           updateEditorControls()
-          if (selectionChanged && !resizingWaveform) draw()
+          if (selectionChanged && !resizingWaveform && !mouseGesture && !editPending) draw()
           else updatePlayhead()
           $('status').textContent = state.connected ? 'LIVE' : 'CONNECTION LOST'
           $('status').className = state.connected ? 'live' : 'error'

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-beta.147
+
+- Keep the final drag preview until fresh geometry arrives and update every parameter display copy after confirmed edits.
+- Move layer edges, keys, curves and visible waveforms together during whole-layer previews. IN/OUT trims preserve key times and update clipping.
+
+## 0.1.0-beta.146
+
+- Increase drag timecode labels from 11 px to 13 px.
+
 ## 0.1.0-beta.145
 
 - Throttle extra native drag-curve sampling to 10 Hz per parameter while retaining validation on every write and local animation-frame previews. Reapply the newest pointer preview after delayed acknowledgements to avoid visual rollback.
