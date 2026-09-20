@@ -25,3 +25,13 @@ test('group adapter preserves native member order and refuses VIEW, stale select
  const result=await editFromViewer(e,r)
  assert.equal(result.ok,true);assert.deepEqual(result.hierarchy.memberUids,['3','2']);assert.equal(calls,1)
 })
+test('group translation only accepts movement, blocks VIEW and preserves native group identity',async()=>{
+ const c=new DemoClient();c.data.trackUid="1";const e=new Editor(c);await e.refresh();let calls=0
+ const r={action:'group_move',token:describeEditor(e).token,trackUid:e.snapshot.trackUid,layerUid:'9',targetTime:12,snap:false,members:[{uid:'9',start:0,end:20},{uid:'2',start:0,end:20}]}
+ assert.equal(validEditRequest(r),true)
+ assert.equal(validEditRequest({...r,mode:'in'}),false)
+ assert.equal(validEditRequest({...r,targetTime:NaN}),false)
+ const old=c.execute.bind(c);c.execute=async(command,args)=>{if(command==='group_move'){calls++;assert.equal(args.layerUid,'9');return {members:r.members}}return old(command,args)}
+ c.viewOnly=true;assert.equal((await editFromViewer(e,r)).ok,false);assert.equal(calls,0)
+ c.viewOnly=false;assert.equal((await editFromViewer(e,r)).ok,true);assert.equal(calls,1)
+})

@@ -2,6 +2,37 @@
 // Use Designer's native hierarchy operations. Validate the current tree before
 // mutation: a stale browser selection must never reparent unrelated layers.
 module.exports = `
+if p['command'] == 'group_move':
+    def walk(container):
+        for item in container.layers:
+            yield item
+            if isinstance(item, GroupLayer):
+                for child in walk(item): yield child
+    layer = next((item for item in walk(track) if str(item.uid)==p['layerUid']), None)
+    if layer is None or not isinstance(layer, GroupLayer): raise ValueError('Group no longer available')
+    members = [layer] + list(walk(layer))
+    expected = p['members']
+    if [str(item.uid) for item in members] != [item['uid'] for item in expected]: raise ValueError('Group contents changed')
+    for item, old in zip(members, expected):
+        if item.locked or getattr(item, 'anchored', False): raise ValueError('Group contains a locked or anchored layer')
+        if abs(float(track.beatToTime(item.tStart))-old['start'])>0.00001 or abs(float(track.beatToTime(item.tEnd))-old['end'])>0.00001: raise ValueError('Group timing changed')
+    def check_parents(container, locked=False):
+        for item in container.layers:
+            if item==layer and locked: raise ValueError('Parent group is locked')
+            if isinstance(item, GroupLayer): check_parents(item, locked or item.locked)
+    check_parents(track)
+    origin = float(track.beatToTime(layer.tStart))
+    target = pointer_time(origin)
+    duration = layer.tEnd-layer.tStart
+    limit = track.timeToBeat(float(track.lengthInSec))
+    if duration>limit: raise ValueError('Group is longer than the track')
+    new_start = max(0, min(limit-duration,track.timeToBeat(target)))
+    shift = new_start-layer.tStart
+    for item in members: markDirty(item)
+    # Native group translation moves descendant bounds and sequence offsets once.
+    # Do not run ordinary-layer key relocation afterwards: it would move keys twice.
+    layer.setExtents(new_start,new_start+duration)
+    return {'members':[{'uid':str(item.uid),'start':float(track.beatToTime(item.tStart)),'end':float(track.beatToTime(item.tEnd))} for item in members]}
 if p['command'] == 'layer_group':
     operation = p.get('operation')
     if operation not in ('group', 'ungroup'): raise ValueError('Invalid group operation')

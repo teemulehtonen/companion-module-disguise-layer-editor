@@ -15,3 +15,9 @@ test('layer previews move the complete visible content while trims retain key ti
   assert.equal(g.layerStart,10)
  }
 })
+test('group preview translates every visible descendant lane without stretching content',()=>{
+ const lanes=[{style:{}},{style:{}},{style:{}}]
+ const g={layerGroup:true,layerStart:10,width:1000,layerLanes:lanes}
+ vm.runInNewContext(source+';previewLayer(g,15)',{g,span:100})
+ assert.ok(lanes.every(l=>l.style.translate==='50px 0'))
+})

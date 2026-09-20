@@ -108,6 +108,7 @@ function validGrid(grid) {
     Object.keys(grid).every(key=>['unit','step','index'].includes(key)))
 }
 function validEditRequest(value) {
+  if(value?.action==='group_move') return /^[a-f0-9]{64}$/.test(value.token || '') && /^\d+$/.test(value.trackUid || '') && /^\d+$/.test(value.layerUid || '') && Number.isFinite(value.targetTime) && Math.abs(value.targetTime)<=1e8 && typeof value.snap==='boolean' && validGrid(value.snapGrid) && (!value.snapGrid || value.snap) && Array.isArray(value.members) && value.members.length>1 && value.members.length<=10000 && value.members.every(m=>/^\d+$/.test(m.uid || '') && Number.isFinite(m.start) && Number.isFinite(m.end) && m.end>=m.start && Object.keys(m).every(k=>['uid','start','end'].includes(k))) && Object.keys(value).every(k=>['action','token','trackUid','layerUid','targetTime','snap','snapGrid','members'].includes(k))
   if(value?.action==='key_group_select')return /^[a-f0-9]{64}$/.test(value.token || '') && Array.isArray(value.times) && value.times.length>=2 && value.times.length<=4096 && value.times.every(t=>Number.isFinite(t)&&t>=0&&t<=1e8) && new Set(value.times).size===value.times.length && Object.keys(value).every(k=>['action','token','times'].includes(k))
   if (value?.action === 'transport') return /^[a-f0-9]{64}$/.test(value.token || '') && ['play','playsection','playloopsection','stop','toggle','gotonextsection','gotoprevsection'].includes(value.operation) && Object.keys(value).every(k=>['action','token','operation'].includes(k))
   if (value?.action === 'link_time') return typeof value.enabled === 'boolean' && /^[a-f0-9]{64}$/.test(value.token || '') && Object.keys(value).every(k => ['action','token','enabled'].includes(k))
@@ -229,6 +230,14 @@ async function editFromViewerCommand(editor, request) {
     return {ok:true,editor:describeEditor(editor)}
   }
   const sharedActions = actions({ perform: (fn) => fn(editor) })
+  if (request.action === 'group_move') {
+    if(editor.viewOnly) return {ok:false,reason:'VIEW ONLY'}
+    if(editor.snapshot?.trackUid!==request.trackUid || editor.moveKey || editor.layerEdit || editor.mediaMode || editor.clearKeysBrowser) return {ok:false,reason:'RELEASE THE CURRENT EDIT FIRST'}
+    const {action,token,...args}=request
+    const groupMove=await editor.remote(()=>editor.client.execute(action,{...editor.context(),...args,delta:editor.beatMode ? editor.layerBeatStep : 1,beats:editor.beatMode,frames:!editor.beatMode}))
+    await editor.refresh({preserve:true})
+    return {ok:true,groupMove,editor:describeEditor(editor)}
+  }
   if (request.action === 'layer_group') {
     if (editor.viewOnly) return {ok:false,reason:'VIEW ONLY'}
     if (editor.moveKey || editor.mediaMode || editor.clearKeysBrowser || editor.layerEdit) return {ok:false,reason:'RELEASE THE CURRENT EDIT FIRST'}

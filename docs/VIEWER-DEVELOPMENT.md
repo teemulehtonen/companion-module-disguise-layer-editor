@@ -1,3 +1,11 @@
+## Group translation
+
+Group bars can be dragged in time; group IN/OUT handles remain read-only. The guarded group_move command uses native GroupLayer.setExtents for translation only, moving nested children and sequence offsets once. Payloads validate the complete ordered subtree and current bounds; locked/anchored descendants and locked ancestors reject before writing. VIEW blocks the operation. Snapping excludes the entire moving subtree and its ancestors. Native beat translation preserves internal beat spacing, including key positions.
+
+Groups use a muted violet tint and a folder/group icon instead of media thumbnails.
+
+Validation: 197 local tests, isolated native time and 123 BPM nested-group translation and stale-bound rejection (8 checks total). Group lock checks are implemented but were not exercised against native locked layers in this batch.
+
 ## Group-child snap correction
 
 Moving a child layer no longer offers its own ancestor groups as snap targets: their bounds can follow the same child. Unrelated group edges are validated natively alongside ordinary layer edges. This prevents a reproducible snap rejection during group-child drags without bypassing stale-target checks.

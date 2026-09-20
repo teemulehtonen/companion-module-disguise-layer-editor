@@ -83,16 +83,17 @@ def checked_snap(seconds):
     def snap_layers(container):
         for item in container.layers:
             children = list(snap_layers(item)) if isinstance(item, GroupLayer) else []
+            if p['command']=='group_move' and str(item.uid)==p.get('layerUid'): continue
             # Group bounds are legitimate landmarks, except for an edited
             # child's ancestors: those bounds can move with that same child.
             own = str(item.uid) == p.get('layerUid')
             ancestor = isinstance(item, GroupLayer) and contains_edited_layer(item)
-            if not (p['command'] == 'layer_edit' and (own or ancestor)):
+            if not (p['command'] in ('layer_edit', 'group_move') and (own or ancestor)):
                 yield item
             for child in children:
                 yield child
     for item in snap_layers(track):
-        if p['command'] == 'layer_edit' and str(item.uid) == p.get('layerUid'):
+        if p['command'] in ('layer_edit', 'group_move') and str(item.uid) == p.get('layerUid'):
             continue
         times = [float(track.beatToTime(item.tStart)), float(track.beatToTime(item.tEnd))]
         for f in ([] if isinstance(item, GroupLayer) else item.fields):
@@ -679,7 +680,7 @@ if p['command'] in ('key_clear_list', 'keys_clear', 'parameter_default', 'layer_
     for field, value in edits:
         reset_sequence_to_constant(field, value, layer.tStart)
     return {'cleared': list(p['fields'])}
-if p['command'] == 'layer_edit':
+if p['command'] in ('layer_edit', 'group_move'):
     start = float(track.beatToTime(layer.tStart))
     end = float(track.beatToTime(layer.tEnd))
     if getattr(layer, 'anchored', False) or layer.locked:
