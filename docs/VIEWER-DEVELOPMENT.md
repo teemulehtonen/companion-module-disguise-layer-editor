@@ -1,3 +1,7 @@
+## Group presentation
+
+Group rows and bars use their distinct color without an icon or thumbnail. Timing behavior is unchanged.
+
 ## Group translation
 
 Group bars can be dragged in time; group IN/OUT handles remain read-only. The guarded group_move command uses native GroupLayer.setExtents for translation only, moving nested children and sequence offsets once. Payloads validate the complete ordered subtree and current bounds; locked/anchored descendants and locked ancestors reject before writing. VIEW blocks the operation. Snapping excludes the entire moving subtree and its ancestors. Native beat translation preserves internal beat spacing, including key positions.
