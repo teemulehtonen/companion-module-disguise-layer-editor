@@ -23,6 +23,8 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
   let trackWaveHeight = 64
   let trackBars = false
   let allLayerDetails = false
+  const selectedLayers = new Set(), groupOpen = new Map()
+  let layerSelectionTrack = null, layerMarquee = null
   const parameterModes = new Map()
   const expandedLayers = () => [...parameterModes].filter(([,mode]) => mode !== 'none').map(([uid]) => uid).slice(0,16)
   const waveformOpen = new Set(),
@@ -43,7 +45,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       const rate=state.fps || 25
       const drop=anchor && timecode(anchor.probeSeconds,rate,true)===anchor.probeLabel.replace(/[.;]/g,':') && timecode(anchor.probeSeconds,rate,false)!==anchor.probeLabel.replace(/[.;]/g,':')
       const label=timecode(anchor ? anchor.seconds+entry.time-anchor.time : entry.time,rate,Boolean(drop))
-      const node=el('div','drag-time-label',(entry.prefix || '')+label)
+      const node=el('div','drag-time-label',(entry.prefix || '')+label+(entry.suffix || ''))
       Object.assign(node.style,{position:'fixed',zIndex:90,pointerEvents:'none',background:'#10232fee',color:'#bdeaff',border:'1px solid #397b94',borderRadius:'4px',padding:'4px 7px',font:'13px Consolas,monospace',whiteSpace:'nowrap',top:Math.max(4,Math.min(window.innerHeight-30,clientY-34+(entry.row || 0)*28))+'px'})
       document.body.append(node)
       node.style.left=Math.max(4,Math.min(window.innerWidth-node.offsetWidth-4,rect.left+x(entry.time)*rect.width/100))+'px'
@@ -350,6 +352,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
           path.style.opacity=''
         }
       }
+      if (result.hierarchy?.groupUid) groupOpen.set(result.hierarchy.groupUid,true)
       if (result.annotation) state.lastAnnotationEdit = result.annotation
       $('selectionMessage').textContent = result.ok ? '' : result.reason || 'EDIT UNAVAILABLE'
       lastFullRead = 0
@@ -383,7 +386,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     finally { viewModePending = false; updateEditorControls() }
   }
   function updateEditorControls() {
-    $('status').disabled = !state?.connected || viewModePending || editPending || interactionBusy || Boolean(mouseGesture || layerReorder)
+    $('status').disabled = !state?.connected || viewModePending || editPending || interactionBusy || Boolean(mouseGesture || layerReorder || layerMarquee)
 
     const selected=state?.editor
     for(const mark of sheet.querySelectorAll('[data-key-time]')) {
@@ -396,12 +399,12 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     snapGroup.hidden = Boolean(state?.viewOnly)
     snapGroup.style.display = state?.viewOnly ? 'none' : 'inline-flex'
     linkTimeButton.setAttribute('aria-pressed',String(Boolean(state?.editor?.linkTime)))
-    linkTimeButton.disabled=!state?.editEnabled || !state?.connected || editPending || interactionBusy || Boolean(mouseGesture || layerReorder)
+    linkTimeButton.disabled=!state?.editEnabled || !state?.connected || editPending || interactionBusy || Boolean(mouseGesture || layerReorder || layerMarquee)
     const enabled = state?.editEnabled && state.editor
     transportControls.hidden=!enabled
     transportControls.style.display=enabled?'flex':'none'
     for (const [operation,button] of transportButtons) {
-      button.disabled=!enabled || !state.connected || editPending || interactionBusy || Boolean(mouseGesture || layerReorder)
+      button.disabled=!enabled || !state.connected || editPending || interactionBusy || Boolean(mouseGesture || layerReorder || layerMarquee)
       if (['play','playsection','playloopsection','stop'].includes(operation)) button.setAttribute('aria-pressed',String(operation==='stop' ? !state.editor?.playing : state.editor?.playing && state.editor?.playbackMode===operation))
     }
     addLayers.hidden=!enabled
@@ -795,6 +798,85 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     sheet.append(root)
     return { root, side, lane }
   }
+  function paintLayerSelection() {
+    for (const row of sheet.querySelectorAll('.layer[data-uid]')) row.classList.toggle('layer-multi-selected', selectedLayers.has(row.dataset.uid))
+  }
+  function layerSelection(root, layer) {
+    root.addEventListener('pointerdown', event => {
+      if (!event.shiftKey || event.button !== 0 || !state.editEnabled || editPending || interactionBusy ||
+        event.target.closest('.wave-controls,.key-point,.layer-edge')) return
+      event.preventDefault(); event.stopImmediatePropagation(); clearTimeout(clickTimer)
+      const existing = state.layers.filter(l=>selectedLayers.has(l.uid))
+      if (existing.some(l=>(l.parent || null)!==(layer.parent || null))) {
+        $('selectionMessage').textContent='SELECT LAYERS IN THE SAME GROUP'; return
+      }
+      const before = new Set(selectedLayers), x0=event.clientX, y0=event.clientY
+      let moved=false, box
+      root.setPointerCapture(event.pointerId)
+      const move = e => {
+        if (!moved && Math.hypot(e.clientX-x0,e.clientY-y0)<5) return
+        moved=true
+        if (!box) {box=el('div','layer-selection-box');document.body.append(box)}
+        const top=Math.min(y0,e.clientY), bottom=Math.max(y0,e.clientY)
+        Object.assign(box.style,{left:Math.min(x0,e.clientX)+'px',top:top+'px',width:Math.max(2,Math.abs(e.clientX-x0))+'px',height:Math.max(2,bottom-top)+'px'})
+        selectedLayers.clear();for (const uid of before) selectedLayers.add(uid)
+        for (const row of sheet.querySelectorAll('.layer[data-uid]')) {
+          const item=state.layers.find(l=>l.uid===row.dataset.uid), rect=row.getBoundingClientRect()
+          if (item && (item.parent||null)===(layer.parent||null) && rect.bottom>=top && rect.top<=bottom) selectedLayers.add(item.uid)
+        }
+        paintLayerSelection()
+      }
+      const finish = e => {
+        root.removeEventListener('pointermove',move);root.removeEventListener('pointerup',finish);root.removeEventListener('pointercancel',finish)
+        box?.remove(); layerMarquee=null
+        if (e.type==='pointercancel') {selectedLayers.clear();for(const uid of before)selectedLayers.add(uid)}
+        else if (!moved) {if(selectedLayers.has(layer.uid))selectedLayers.delete(layer.uid);else selectedLayers.add(layer.uid)}
+        suppressClickUntil=performance.now()+400;paintLayerSelection()
+      }
+      layerMarquee={cancel:()=>finish({type:'pointercancel'})}
+      root.addEventListener('pointermove',move);root.addEventListener('pointerup',finish);root.addEventListener('pointercancel',finish)
+    },true)
+    root.addEventListener('click', event => {
+      if (event.shiftKey || performance.now()<suppressClickUntil) {event.stopImmediatePropagation();return}
+      if (!event.target.closest('.wave-controls')) {selectedLayers.clear();paintLayerSelection()}
+    },true)
+  }
+  function groupMenu(layer,event) {
+    event.preventDefault();event.stopPropagation();closeKeyMenu()
+    const chosen=selectedLayers.has(layer.uid) ? state.layers.filter(l=>selectedLayers.has(l.uid)) : [layer]
+    const ungroup=chosen.length===1 && chosen[0].group
+    if(!ungroup && chosen.length<2)return false
+    const parent=chosen[0].parent || null
+    const request={trackUid:state.trackUid,operation:ungroup?'ungroup':'group',
+      layers:chosen.map(l=>({uid:l.uid,name:l.name,start:l.start,end:l.end})),
+      expectedOrder:state.layers.filter(l=>(l.parent||null)===parent).map(l=>l.uid),
+      ...(ungroup?{expectedChildren:state.layers.filter(l=>l.parent===chosen[0].uid).map(l=>l.uid)}:{})}
+    const panel=el('div','key-edit-menu value-edit-menu');keyMenu=panel
+    Object.assign(panel.style,{left:Math.max(0,Math.min(event.clientX,window.innerWidth-190))+'px',top:Math.max(0,Math.min(event.clientY,window.innerHeight-140))+'px',width:'180px'})
+    const input=el('input');input.value='GROUP';input.maxLength=128;input.setAttribute('aria-label','GROUP NAME');input.style.width='100%'
+    const apply=el('button','',ungroup?'UNGROUP':'GROUP'), cancel=el('button','','CANCEL')
+    apply.onclick=()=>void interact(async()=>{
+      if(!state.editEnabled)return
+      if(!ungroup && !input.value.trim())return
+      closeKeyMenu()
+      if(await releaseViewerMode()) {
+        if(await sendEdit('layer_group',{...request,...(ungroup?{}:{name:input.value.trim()})})) {selectedLayers.clear();rendered='';lastFullRead=0}
+      }
+    })
+    cancel.onclick=closeKeyMenu
+    if(!ungroup)panel.append(input)
+    panel.append(apply,cancel);document.body.append(panel)
+    input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();apply.click()}}
+    return true
+  }
+  function inspectTimes(node, entries, lane) {
+    node.addEventListener('pointermove', event => {
+      if(mouseGesture || layerReorder || editPending || event.buttons)return
+      const target=lane || node.closest('.lane')
+      if(target)showDragTimes(entries(),event.clientY,target)
+    })
+    node.addEventListener('pointerleave',()=>{if(!mouseGesture)clearDragTimes()})
+  }
   function editClock() { return state?.editor?.linkTime === false ? state.editor.editTime : state?.time }
   function selectionButton(layer, label, parameter) {
     const button = el('button', 'select-label', label)
@@ -822,7 +904,9 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     }
   }
   function layerMenu(layer,event) {
-    if(!state.editEnabled || layer.group) return
+    if(!state.editEnabled) return
+    if(!selectedLayers.has(layer.uid)) {selectedLayers.clear();paintLayerSelection()}
+    if ((selectedLayers.has(layer.uid) && selectedLayers.size>1) || layer.group) {groupMenu(layer,event);return}
     event.preventDefault();event.stopPropagation();clearTimeout(clickTimer);closeKeyMenu()
     const trackUid=state.trackUid
     const expected={layerUid:layer.uid,expectedName:layer.name,expectedStart:layer.start,expectedEnd:layer.end}
@@ -849,11 +933,11 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     document.body.append(panel)
   }
   function reorderLabel(node,layer) {
-    if(layer.group) {node.disabled=!state.editEnabled;node.onclick=()=>{};node.dataset.reorderGroup='true'}
+    if(layer.group) {node.disabled=false;node.onclick=()=>{if(performance.now()<suppressClickUntil)return;groupOpen.set(layer.uid,!(groupOpen.get(layer.uid) ?? layer.expanded));draw()};node.dataset.reorderGroup='true'}
     node.style.touchAction='none'
     node.title='SELECT LAYER · DRAG TO REORDER · RIGHT CLICK FOR OPTIONS'
     node.onpointerdown=event=>{
-      if(event.button!==0 || !state.editEnabled || editPending || interactionBusy || mouseGesture) return
+      if(event.button!==0 || event.shiftKey || !state.editEnabled || editPending || interactionBusy || mouseGesture) return
       node.setPointerCapture(event.pointerId)
       layerReorder={node,y:event.clientY,moved:false,trackUid:state.trackUid,expectedOrder:state.layers.filter(l=>(l.parent||null)===(layer.parent||null)).map(l=>l.uid)}
     }
@@ -948,13 +1032,24 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
   },true)
 
   function pointClick(node, layer, point, parameter, keyTime) {
-    if (!node || layer.group) return
+    if (!node) return
+    if (layer.group) {
+      inspectTimes(node,()=>[{time:point==='in'?layer.start:point==='out'?layer.end:keyTime,prefix:point.toUpperCase()+' '}],node.parentElement)
+      return
+    }
     if (point === 'key') {
       node.dataset.keyTime=String(keyTime)
       node.dataset.keyLayer=layer.uid
       node.dataset.keyParameter=parameter
     }
     const currentTime = () => point === 'key' ? Number(node.dataset.keyTime) : keyTime
+    inspectTimes(node,()=>{
+      const time=point==='in'?layer.start:point==='out'?layer.end:currentTime()
+      const field=[...(layer.fields||[]),...(layer.resources||[])].find(f=>f.name===parameter)
+      const key=field?.keys?.find(k=>Math.abs(k.time-time)<1e-6)
+      const value=key?.resource?.name ?? key?.resourceName ?? field?.choices?.find(c=>c.value===key?.value)?.label ?? key?.value
+      return [{time,prefix:point==='key'?'KF ':point.toUpperCase()+' ',suffix:value===undefined?'':'  '+String(value)}]
+    },node.parentElement)
     node.classList.add('timeline-target')
     node.setAttribute('role','button')
     node.tabIndex = 0
@@ -1105,6 +1200,13 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
   }
   function constantResourceTarget(node,layer,field) {
     if(!node || field.sequenced || !state.editEnabled) return
+    inspectTimes(node,()=>{
+      const time=point==='in'?layer.start:point==='out'?layer.end:currentTime()
+      const field=[...(layer.fields||[]),...(layer.resources||[])].find(f=>f.name===parameter)
+      const key=field?.keys?.find(k=>Math.abs(k.time-time)<1e-6)
+      const value=key?.resource?.name ?? key?.resourceName ?? field?.choices?.find(c=>c.value===key?.value)?.label ?? key?.value
+      return [{time,prefix:point==='key'?'KF ':point.toUpperCase()+' ',suffix:value===undefined?'':'  '+String(value)}]
+    },node.parentElement)
     node.classList.add('timeline-target')
     node.setAttribute('role','button');node.tabIndex=0
     node.title='CHOOSE RESOURCE'
@@ -1519,9 +1621,11 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
   }
   let revealedLayer = ''
   function draw() {
-    if (mouseGesture || layerReorder || editPending || interactionBusy) return
+    if (mouseGesture || layerReorder || layerMarquee || editPending || interactionBusy) return
     if (!state || resizingWaveform) return
     clearDragTimes()
+    if(layerSelectionTrack!==state.trackUid || state.viewOnly) {selectedLayers.clear();layerSelectionTrack=state.trackUid}
+    for(const uid of selectedLayers)if(!state.layers.some(l=>l.uid===uid))selectedLayers.delete(uid)
     const top = viewport.scrollTop
     for (const node of sheet.querySelectorAll('[data-waveform-uid]'))
       waveformHeights.set(node.dataset.waveformUid, node.getBoundingClientRect().height)
@@ -1601,10 +1705,12 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
         hidden.add(layer.uid)
         continue
       }
-      if (layer.group && !layer.expanded && !parents.has(layer.uid)) hidden.add(layer.uid)
+      if (layer.group && !(groupOpen.get(layer.uid) ?? (layer.expanded || parents.has(layer.uid)))) hidden.add(layer.uid)
       const focused = layer.uid === state.focusUid
       const r = row('', 'layer' + (focused ? ' focused' : ''))
       r.root.dataset.uid = layer.uid
+      r.root.classList.toggle('layer-multi-selected',selectedLayers.has(layer.uid))
+      layerSelection(r.root,layer)
       r.side.style.paddingLeft = 12 + Math.min(6, layer.depth || 0) * 12 + 'px'
       const mode = parameterModes.get(layer.uid) || (focused ? 'sequenced' : 'none')
       const controls = el('div', 'wave-controls')
@@ -1630,6 +1736,14 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
           controls.append(button)
         }
         r.side.append(controls)
+      } else {
+        const expanded=groupOpen.get(layer.uid) ?? (layer.expanded || parents.has(layer.uid))
+        const fold=el('button','parameter-mode',expanded?'−':'+')
+        fold.title=expanded?'COLLAPSE GROUP':'EXPAND GROUP'
+        fold.setAttribute('aria-label',fold.title+' · '+layer.name)
+        fold.setAttribute('aria-expanded',String(Boolean(expanded)))
+        fold.onclick=()=>{groupOpen.set(layer.uid,!expanded);draw()}
+        controls.append(fold);r.side.append(controls)
       }
       const audioResource = (layer.resources || []).find((field) => field.current?.audio)?.current
       if (audioResource) {
@@ -1752,6 +1866,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
         clip.title = 'IN ' + layer.start + ' S · OUT ' + layer.end + ' S'
         r.lane.append(clip)
         mouseDial(clip, layer, 'field')
+        inspectTimes(clip,()=>[{time:layer.start,prefix:'IN '},{time:layer.end,prefix:'OUT ',row:1}],r.lane)
         const thumb = image(resource)
         thumb.style.position = 'absolute'
         thumb.style.pointerEvents = 'none'
@@ -1903,7 +2018,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       button.disabled =
         !state.selectionEnabled ||
         !target ||
-        (target.group && !(state.editEnabled && button.dataset.reorderGroup==='true')) ||
+        (target.group && button.dataset.reorderGroup!=='true') ||
         (!target.group && button.dataset.selectLayerStart !== 'true' && (editClock()<target.start || editClock()>=target.end))
     }
     const layer = state.layers.find((layer) => layer.uid === state.focusUid)
@@ -2050,7 +2165,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
           Object.assign(state, live)
           if (modeChanged) {
             editRevision++; lastFullRead = 0; rendered = ''
-            closeKeyMenu(); mouseGesture = null; layerReorder = null; showSnap(null)
+            closeKeyMenu(); layerMarquee?.cancel(); selectedLayers.clear(); mouseGesture = null; layerReorder = null; showSnap(null)
           }
           const command = incoming.viewerZoom
           if (command && Number.isFinite(command.steps)) {
@@ -2076,7 +2191,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
   }
   async function poll() {
     try {
-      if (!document.hidden && !mouseGesture && !editPending && !interactionBusy) {
+      if (!document.hidden && !mouseGesture && !layerMarquee && !editPending && !interactionBusy) {
         const view = JSON.stringify([start, span, viewport.clientWidth, [...waveformOpen], expandedLayers()])
         const full = !state || !rendered || view !== lastView || performance.now() - lastFullRead >= 1500
         if (!full) return
@@ -2156,7 +2271,7 @@ const stylesheet = `
 .resource-picker[hidden]{display:none}.resource-picker{position:fixed;z-index:40;right:20px;top:160px;width:min(680px,calc(100vw - 40px));max-height:calc(100vh - 180px);overflow:auto;background:#151e23;border:1px solid #237484;border-radius:9px;box-shadow:0 12px 40px #000a;padding:10px}.resource-picker-bar{display:flex;align-items:center;gap:7px;padding:4px 0}.resource-picker-bar strong{flex:1}.resource-picker button{font-size:10px;padding:4px 7px}.resource-picker-body{display:grid;grid-template-columns:180px 1fr;gap:12px;margin-top:8px}.resource-folders{display:flex;flex-direction:column;gap:3px;max-height:340px;overflow:auto;border-right:1px solid #29363d;padding-right:8px}.resource-folders button{text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-color:transparent;background:transparent}.resource-folders button[aria-pressed=true]{background:#10343d;border-color:#237484}.resource-files{min-width:0}.resource-path{color:#8bcbd6;font-size:11px;overflow-wrap:anywhere;padding-bottom:8px}.resource-file-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;min-height:150px}.resource-file{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0}.resource-file>span:last-child{max-width:100%;overflow-wrap:anywhere;line-height:1.3}.resource-file .thumb{width:100%;height:52px}.resource-picker .resource-picker-bar:last-child{justify-content:flex-end}
 .key-edit-menu{position:fixed;z-index:50;display:grid;gap:3px;padding:5px;width:165px;background:#151e23;border:1px solid #0699b2;border-radius:5px;box-shadow:0 4px 16px #0009}.key-edit-menu button{padding:3px 7px;font-size:10px;text-align:left}.value-edit-menu button{font-size:11px;padding:5px 7px;min-height:27px;width:100%;box-sizing:border-box}
 .key-point.selected-keyframe,.curve-key.selected-keyframe{scale:1.4;z-index:4}.timeline-target,.clip{touch-action:none}.key-edit-menu[hidden]{display:none}.snap-option{display:flex;align-items:center;gap:7px;padding:6px 8px;font-size:10px;white-space:nowrap;cursor:pointer}.snap-guide{position:absolute;top:0;bottom:0;width:2px;background:#ffc580;box-shadow:0 0 5px #ffc58088;z-index:8;pointer-events:none}.key-edit-menu input{background:#101a20;color:#eef4f6;border:1px solid #44616f;border-radius:3px;padding:5px}.key-edit-menu strong{font-size:11px}
-:root{color-scheme:dark;font:12px 'Segoe UI',Arial,sans-serif;background:#101517;color:#eef4f6}*{box-sizing:border-box}body{margin:0;height:100vh;display:flex;flex-direction:column;overflow:hidden}header,.toolbar{display:flex;align-items:center;gap:14px;padding:16px 22px;border-bottom:1px solid #29363d}header{height:82px;min-height:82px;padding:5px 16px;position:relative}#status{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.08em}#status:before{content:'';width:8px;height:8px;border-radius:50%;background:#849aa5}#status.live:before{background:#43e68c;animation:live-pulse 1.4s ease-in-out infinite}#status.error:before{background:#ffc580}@keyframes live-pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 #43e68c44}50%{opacity:.45;box-shadow:0 0 0 4px #43e68c00}}@media(prefers-reduced-motion:reduce){#status.live:before{animation:none}}h1{font-size:15px;letter-spacing:.08em;margin:0}.brand-logo{position:relative;width:72px;height:41px;overflow:hidden;flex-shrink:0;align-self:center}.brand-logo img{position:absolute;top:-19px;left:-4px;width:80px;height:80px}header small{display:block;color:#849aa5;margin-top:5px;letter-spacing:.15em}.spacer{flex:1}#clockBlock{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;max-width:40%;line-height:1.2}#editClock{font:14px Consolas,monospace;color:#4aaaff;line-height:16px}#clock{color:#43e68c;font:24px Consolas,monospace;white-space:nowrap}#beat{font:12px Consolas,monospace;color:#8bcbd6;margin-left:10px}#clockDetails{font-size:12px;color:#9eb6c2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:15px}#sectionRemaining{font:14px Consolas,monospace;color:#8bcbd6;min-height:17px}#sectionRemaining.ending{color:#ff6268}.live{color:#43e68c}.error{color:#ffc580}.toolbar{padding:4px 16px;gap:7px;flex-wrap:wrap;min-height:32px}.toolbar button{padding:3px 7px;font-size:10px;line-height:16px;border-radius:4px}.toolbar #track{font-size:11px}button{background:#1b272d;border:1px solid #34444d;border-radius:5px;color:#d4e2e8;padding:7px 10px;cursor:pointer}button[aria-pressed=true]{border-color:#0699b2;color:#63d4e7}button:focus-visible{outline:2px solid #43e68c}#viewport{flex:1;overflow:auto;margin:7px 12px;border:1px solid #29363d;border-radius:6px;min-height:0}#sheet{position:relative;min-width:760px;overflow:clip;min-height:100%}.row{display:grid;grid-template-columns:240px 1fr;position:relative;min-height:54px;border-bottom:1px solid #26343b}.label{background:#151e23;padding:10px 12px;display:flex;gap:9px;align-items:center;z-index:3;border-right:1px solid #29363d;min-width:0;overflow:hidden}.layer{height:52px;min-height:52px}.layer>.label{position:relative;padding-top:14px;padding-bottom:4px}.layer>.lane>.clip{top:11px;height:30px;padding-top:6px;padding-bottom:6px}.layer>.lane>.key-point{top:22px}.layer>.lane>.thumb{top:14px}.label .name{overflow:hidden;text-overflow:ellipsis}.label small{margin-left:auto;color:#729db4;font-size:10px;max-width:85px;overflow:hidden;text-overflow:ellipsis}.lane{position:relative;min-width:0;overflow:hidden}.timeline-header{position:sticky;z-index:6;background:#101517;height:30px;min-height:30px}.timeline-header>.label{padding-top:5px;padding-bottom:5px}.header-edithead,.edithead{position:absolute;top:0;bottom:0;width:2px;background:#4aaaff;box-shadow:0 0 5px #4aaaff66;pointer-events:none;z-index:5;transform:none!important}.header-playhead{position:absolute;top:0;bottom:0;width:1px;background:#43e68c;pointer-events:none;z-index:4;transform:none!important}.section-band{position:absolute;top:0;bottom:0;border-left:1px solid #4b8792;pointer-events:none;background:#16414b}.section-0{background:#293b4d;border-color:#6b8caa}.ruler{min-height:30px}.ruler>.label{font-size:10px}.annotations{min-height:30px;font-size:10px}.focused{background:#10343d}.focused .label{background:#10343d}.parameter .label{padding-left:30px;color:#91afbd}.parameter.selected{color:#43e68c}.parameter.selected .label{color:#43e68c}.parameter .lane{color:#729db4}.selected .lane{color:#43e68c}.lane svg{width:100%;height:54px}.clip{position:absolute;top:8px;height:36px;background:#1d3e49;border:1px solid #2b626f;border-radius:4px;padding:9px 42px;overflow:hidden;white-space:nowrap;color:#a9d8e3}.clip:disabled{cursor:default}.clip:not(:disabled):hover{border-color:#63d4e7;background:#26515e}.clip{min-width:0;padding:0!important;text-align:left}.playback-mode{font-size:10px;color:#8bcbd6;margin-left:5px}.playback-icon{display:inline-flex;vertical-align:middle;margin-left:5px;color:#8bcbd6}.lane .playback-icon svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.clip-label{display:block;padding:6px 42px;white-space:nowrap}.marker{position:absolute;top:7px;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;z-index:2;font-size:10px}.key{color:#72d5e8;top:20px;font-size:10px}.lane>.key-point{width:8px;height:8px;margin-left:-4px;top:23px;background:currentColor;border:1px solid #101517;transform:translateX(var(--pan,0px)) rotate(45deg)}.timeline-target{cursor:pointer}.timeline-target:focus-visible{outline:2px solid #43e68c}.layer-edge{top:11px;width:7px;height:30px;margin-left:-3px;border:1px solid #63d4e7;border-radius:2px;background:#0699b255;z-index:3}.timeline-target:hover{filter:brightness(1.6);color:#63d4e7;box-shadow:0 0 7px #63d4e7;outline:1px solid #63d4e7}.tick{color:#849aa5;font:10px Consolas,monospace}.ruler .tick{font-size:12px;color:#bdd0da}.cue-marker{top:3px;overflow:visible;max-width:220px;padding:3px 7px 3px 13px;height:22px;line-height:16px;border:0;border-radius:0;clip-path:polygon(0 50%,9px 0,100% 0,100% 100%,9px 100%);background:#29414e;font-size:10px;white-space:nowrap}.cue-marker:before{content:"";position:absolute;left:0;top:0;width:9px;height:22px;background:currentColor;clip-path:polygon(0 50%,100% 0,100% 100%)}.cue-marker.notes{max-width:260px}.cue-marker.midi{color:#b7a0dc}.cue-marker.tc{color:#74c6d8}.cue{color:#e1bf77}.notes{color:#acbfc8}.resource{display:flex;align-items:center;gap:5px;top:3px}.thumb{display:inline-flex;width:34px;height:24px;align-items:center;justify-content:center;background:#263b44;border-radius:3px;overflow:hidden;flex-shrink:0;color:#729db4}.thumb.large{width:60px;height:38px}.thumb img{width:100%;height:100%;object-fit:cover}.gridline{position:absolute;top:30px;bottom:0;width:1px;background:#88a9bb0b;pointer-events:none;z-index:1}.gridline.major{background:#88a9bb20}.playhead{position:absolute;top:0;bottom:0;width:1px;background:#43e68c;box-shadow:0 0 5px #43e68c66;z-index:4;pointer-events:none}.lane>*{transform:translateX(var(--pan,0px))}.alignment-guide.subtle{opacity:.3;pointer-events:none}.alignment-guide.matched{border-left:2px solid #ffe0a0;box-shadow:0 0 5px #e7ba6370}.alignment-guide.subtle.matched{opacity:.65}.alignment-guide{pointer-events:none;position:absolute;top:0;bottom:0;border-left:1px dashed #e7ba63;z-index:3;transform:translateX(var(--pan,0px))}.gridline,.relation{transform:translateX(var(--pan,0px))}.select-label{border:0;padding:0;background:transparent;color:inherit;text-align:left;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.select-label:disabled{cursor:default}.select-label:not(:disabled):hover{color:#63d4e7}#selectionMessage{color:#e1bf77;margin-left:12px}.wave-controls{position:absolute;right:4px;top:4px;display:flex;gap:2px;z-index:5}.wave-controls button{width:16px;height:12px;padding:0;background:#151e23;border:1px solid #34444d;border-radius:4px;color:#849aa5;display:grid;place-items:center}.wave-controls svg{width:12px;height:10px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.wave-controls button:hover,.wave-controls button[aria-pressed=true]{color:#63d4e7;border-color:#0699b2}.wave-controls .parameter-mode{font-size:10px;line-height:10px}.wave-controls button:disabled{opacity:.45}.wave-beat-line{position:absolute;top:0;bottom:0;width:1px;background:#accdd526;z-index:2;pointer-events:none}.wave-beat-line.timeline-target{pointer-events:auto;cursor:pointer}.wave-beat-line.timeline-target:before{content:"";position:absolute;left:-4px;top:0;bottom:0;width:9px}.wave-beat-line.major{background:#accdd55c}.beat-tick{background:#101517bb;padding:1px 3px;z-index:3}.track-waveform{position:sticky;z-index:6;background:#101517}.waveform .lane svg{height:100%}.waveform .label{font-size:10px}.wave-status{display:block;padding:14px;color:#849aa5}.relation{position:absolute;width:3px;margin-left:-1px;background:#bd9be0;border-radius:3px;z-index:2;pointer-events:none;box-shadow:0 0 0 1px #10151799}.relation:after{content:"";position:absolute;width:13px;height:10px;left:-5px;background:#d4b8ef;clip-path:polygon(0 0,100% 0,50% 100%)}.relation.down:after{bottom:-1px}.relation.up:after{top:-1px;transform:rotate(180deg)}.relation:before{content:"";position:absolute;left:-2px;width:7px;height:7px;background:#d4b8ef;border-radius:50%}.relation.down:before{top:-2px}.relation.up:before{bottom:-2px}.layer-display-bar{height:22px;min-height:22px;background:#19262d;border-bottom:2px solid #35505e}.layer-display-bar>.label{background:#19262d;font-size:9px;padding:2px 12px;position:relative}.layer-display-bar .wave-controls{top:4px}.layer-display-bar>.lane{background:#19262d}footer{min-height:27px;padding:4px 22px;color:#849aa5;font-size:10px}#warnings{color:#d5b97b;margin-left:12px}
+:root{color-scheme:dark;font:12px 'Segoe UI',Arial,sans-serif;background:#101517;color:#eef4f6}*{box-sizing:border-box}body{margin:0;height:100vh;display:flex;flex-direction:column;overflow:hidden}header,.toolbar{display:flex;align-items:center;gap:14px;padding:16px 22px;border-bottom:1px solid #29363d}header{height:82px;min-height:82px;padding:5px 16px;position:relative}#status{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.08em}#status:before{content:'';width:8px;height:8px;border-radius:50%;background:#849aa5}#status.live:before{background:#43e68c;animation:live-pulse 1.4s ease-in-out infinite}#status.error:before{background:#ffc580}@keyframes live-pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 #43e68c44}50%{opacity:.45;box-shadow:0 0 0 4px #43e68c00}}@media(prefers-reduced-motion:reduce){#status.live:before{animation:none}}h1{font-size:15px;letter-spacing:.08em;margin:0}.brand-logo{position:relative;width:72px;height:41px;overflow:hidden;flex-shrink:0;align-self:center}.brand-logo img{position:absolute;top:-19px;left:-4px;width:80px;height:80px}header small{display:block;color:#849aa5;margin-top:5px;letter-spacing:.15em}.spacer{flex:1}#clockBlock{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;max-width:40%;line-height:1.2}#editClock{font:14px Consolas,monospace;color:#4aaaff;line-height:16px}#clock{color:#43e68c;font:24px Consolas,monospace;white-space:nowrap}#beat{font:12px Consolas,monospace;color:#8bcbd6;margin-left:10px}#clockDetails{font-size:12px;color:#9eb6c2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:15px}#sectionRemaining{font:14px Consolas,monospace;color:#8bcbd6;min-height:17px}#sectionRemaining.ending{color:#ff6268}.live{color:#43e68c}.error{color:#ffc580}.toolbar{padding:4px 16px;gap:7px;flex-wrap:wrap;min-height:32px}.toolbar button{padding:3px 7px;font-size:10px;line-height:16px;border-radius:4px}.toolbar #track{font-size:11px}button{background:#1b272d;border:1px solid #34444d;border-radius:5px;color:#d4e2e8;padding:7px 10px;cursor:pointer}button[aria-pressed=true]{border-color:#0699b2;color:#63d4e7}button:focus-visible{outline:2px solid #43e68c}#viewport{flex:1;overflow:auto;margin:7px 12px;border:1px solid #29363d;border-radius:6px;min-height:0}#sheet{position:relative;min-width:760px;overflow:clip;min-height:100%}.row{display:grid;grid-template-columns:240px 1fr;position:relative;min-height:54px;border-bottom:1px solid #26343b}.label{background:#151e23;padding:10px 12px;display:flex;gap:9px;align-items:center;z-index:3;border-right:1px solid #29363d;min-width:0;overflow:hidden}.layer{height:52px;min-height:52px}.layer>.label{position:relative;padding-top:14px;padding-bottom:4px}.layer>.lane>.clip{top:11px;height:30px;padding-top:6px;padding-bottom:6px}.layer>.lane>.key-point{top:22px}.layer>.lane>.thumb{top:14px}.label .name{overflow:hidden;text-overflow:ellipsis}.label small{margin-left:auto;color:#729db4;font-size:10px;max-width:85px;overflow:hidden;text-overflow:ellipsis}.lane{position:relative;min-width:0;overflow:hidden}.timeline-header{position:sticky;z-index:6;background:#101517;height:30px;min-height:30px}.timeline-header>.label{padding-top:5px;padding-bottom:5px}.header-edithead,.edithead{position:absolute;top:0;bottom:0;width:2px;background:#4aaaff;box-shadow:0 0 5px #4aaaff66;pointer-events:none;z-index:5;transform:none!important}.header-playhead{position:absolute;top:0;bottom:0;width:1px;background:#43e68c;pointer-events:none;z-index:4;transform:none!important}.section-band{position:absolute;top:0;bottom:0;border-left:1px solid #4b8792;pointer-events:none;background:#16414b}.section-0{background:#293b4d;border-color:#6b8caa}.ruler{min-height:30px}.ruler>.label{font-size:10px}.annotations{min-height:30px;font-size:10px}.focused{background:#10343d}.focused .label{background:#10343d}.parameter .label{padding-left:30px;color:#91afbd}.parameter.selected{color:#43e68c}.parameter.selected .label{color:#43e68c}.parameter .lane{color:#729db4}.selected .lane{color:#43e68c}.lane svg{width:100%;height:54px}.clip{position:absolute;top:8px;height:36px;background:#1d3e49;border:1px solid #2b626f;border-radius:4px;padding:9px 42px;overflow:hidden;white-space:nowrap;color:#a9d8e3}.clip:disabled{cursor:default}.clip:not(:disabled):hover{border-color:#63d4e7;background:#26515e}.clip{min-width:0;padding:0!important;text-align:left}.playback-mode{font-size:10px;color:#8bcbd6;margin-left:5px}.playback-icon{display:inline-flex;vertical-align:middle;margin-left:5px;color:#8bcbd6}.lane .playback-icon svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.clip-label{display:block;padding:6px 42px;white-space:nowrap}.marker{position:absolute;top:7px;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;z-index:2;font-size:10px}.key{color:#72d5e8;top:20px;font-size:10px}.lane>.key-point{width:8px;height:8px;margin-left:-4px;top:23px;background:currentColor;border:1px solid #101517;transform:translateX(var(--pan,0px)) rotate(45deg)}.timeline-target{cursor:pointer}.timeline-target:focus-visible{outline:2px solid #43e68c}.layer-edge{top:11px;width:7px;height:30px;margin-left:-3px;border:1px solid #63d4e7;border-radius:2px;background:#0699b255;z-index:3}.timeline-target:hover{filter:brightness(1.6);color:#63d4e7;box-shadow:0 0 7px #63d4e7;outline:1px solid #63d4e7}.tick{color:#849aa5;font:10px Consolas,monospace}.ruler .tick{font-size:12px;color:#bdd0da}.cue-marker{top:3px;overflow:visible;max-width:220px;padding:3px 7px 3px 13px;height:22px;line-height:16px;border:0;border-radius:0;clip-path:polygon(0 50%,9px 0,100% 0,100% 100%,9px 100%);background:#29414e;font-size:10px;white-space:nowrap}.cue-marker:before{content:"";position:absolute;left:0;top:0;width:9px;height:22px;background:currentColor;clip-path:polygon(0 50%,100% 0,100% 100%)}.cue-marker.notes{max-width:260px}.cue-marker.midi{color:#b7a0dc}.cue-marker.tc{color:#74c6d8}.cue{color:#e1bf77}.notes{color:#acbfc8}.resource{display:flex;align-items:center;gap:5px;top:3px}.thumb{display:inline-flex;width:34px;height:24px;align-items:center;justify-content:center;background:#263b44;border-radius:3px;overflow:hidden;flex-shrink:0;color:#729db4}.thumb.large{width:60px;height:38px}.thumb img{width:100%;height:100%;object-fit:cover}.gridline{position:absolute;top:30px;bottom:0;width:1px;background:#88a9bb0b;pointer-events:none;z-index:1}.gridline.major{background:#88a9bb20}.playhead{position:absolute;top:0;bottom:0;width:1px;background:#43e68c;box-shadow:0 0 5px #43e68c66;z-index:4;pointer-events:none}.lane>*{transform:translateX(var(--pan,0px))}.alignment-guide.subtle{opacity:.3;pointer-events:none}.alignment-guide.matched{border-left:2px solid #ffe0a0;box-shadow:0 0 5px #e7ba6370}.alignment-guide.subtle.matched{opacity:.65}.alignment-guide{pointer-events:none;position:absolute;top:0;bottom:0;border-left:1px dashed #e7ba63;z-index:3;transform:translateX(var(--pan,0px))}.gridline,.relation{transform:translateX(var(--pan,0px))}.select-label{border:0;padding:0;background:transparent;color:inherit;text-align:left;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.select-label:disabled{cursor:default}.select-label:not(:disabled):hover{color:#63d4e7}#selectionMessage{color:#e1bf77;margin-left:12px}.wave-controls{position:absolute;right:4px;top:4px;display:flex;gap:2px;z-index:5}.wave-controls button{width:16px;height:12px;padding:0;background:#151e23;border:1px solid #34444d;border-radius:4px;color:#849aa5;display:grid;place-items:center}.wave-controls svg{width:12px;height:10px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.wave-controls button:hover,.wave-controls button[aria-pressed=true]{color:#63d4e7;border-color:#0699b2}.wave-controls .parameter-mode{font-size:10px;line-height:10px}.wave-controls button:disabled{opacity:.45}.wave-beat-line{position:absolute;top:0;bottom:0;width:1px;background:#accdd526;z-index:2;pointer-events:none}.wave-beat-line.timeline-target{pointer-events:auto;cursor:pointer}.wave-beat-line.timeline-target:before{content:"";position:absolute;left:-4px;top:0;bottom:0;width:9px}.wave-beat-line.major{background:#accdd55c}.beat-tick{background:#101517bb;padding:1px 3px;z-index:3}.track-waveform{position:sticky;z-index:6;background:#101517}.waveform .lane svg{height:100%}.waveform .label{font-size:10px}.wave-status{display:block;padding:14px;color:#849aa5}.relation{position:absolute;width:3px;margin-left:-1px;background:#bd9be0;border-radius:3px;z-index:2;pointer-events:none;box-shadow:0 0 0 1px #10151799}.relation:after{content:"";position:absolute;width:13px;height:10px;left:-5px;background:#d4b8ef;clip-path:polygon(0 0,100% 0,50% 100%)}.relation.down:after{bottom:-1px}.relation.up:after{top:-1px;transform:rotate(180deg)}.relation:before{content:"";position:absolute;left:-2px;width:7px;height:7px;background:#d4b8ef;border-radius:50%}.relation.down:before{top:-2px}.relation.up:before{bottom:-2px}.layer-selection-box{position:fixed;z-index:80;pointer-events:none;border:1px solid #63d4e7;background:#0699b22b}.layer-multi-selected>.label,.layer-multi-selected>.lane{background-color:#123e49;box-shadow:inset 0 0 0 1px #0699b2}.layer-display-bar{height:22px;min-height:22px;background:#19262d;border-bottom:2px solid #35505e}.layer-display-bar>.label{background:#19262d;font-size:9px;padding:2px 12px;position:relative}.layer-display-bar .wave-controls{top:4px}.layer-display-bar>.lane{background:#19262d}footer{min-height:27px;padding:4px 22px;color:#849aa5;font-size:10px}#warnings{color:#d5b97b;margin-left:12px}
 `
 const page = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Disguise Layer Editor · Timeline</title><link rel="stylesheet" href="/viewer.css"><script src="/viewer.js" defer></script></head><body><header><span class="brand-logo"><img src="${brandLogo}" alt="VEHKA AV"></span><div><h1>DISGUISE LAYER EDITOR</h1><small>TIMELINE VIEWER</small></div><div class="spacer"></div><div id="clockBlock"><span id="clock">—</span><span id="beat"></span><div id="editClock" hidden></div><div id="clockDetails"></div><div id="sectionRemaining" aria-live="off"></div></div><button id="status" type="button" title="LIVE / VIEW" disabled>CONNECTING</button></header><div class="toolbar"><strong id="track">TRACK</strong><div class="spacer"></div><button id="fitTrack" title="FIT TRACK">FIT TRACK</button><button id="fitLayer" title="CENTRE SELECTED LAYER">FIT LAYER</button><button id="follow" title="FOLLOW PLAYHEAD" aria-pressed="true">FOLLOW</button><button id="zoomOut" aria-label="ZOOM OUT" title="ZOOM OUT">−</button><button id="zoomIn" aria-label="ZOOM IN" title="ZOOM IN">+</button></div><main id="viewport" aria-label="Designer timeline"><div id="sheet"></div></main><footer>CTRL + WHEEL: ZOOM · SHIFT + WHEEL: PAN · S: SNAP ON/OFF · F: FOLLOW · T: FIT TRACK · L: FIT LAYER · SHIFT+L: LINK TIME · WHEEL: SELECTED KEY VALUE · SHIFT+DRAG: SELECT KEYS<span id="selectionMessage" role="status"></span><span id="warnings"></span></footer></body></html>`
 

@@ -1,4 +1,16 @@
-# Current release — 0.2.0-beta.5
+# Current release — 0.2.0-beta.7
+
+## Layer grouping and inspection
+
+Shift-click layer headers/bars to toggle a selection, or Shift-drag across layer rows to select multiple siblings. Right-click a selected layer, enter a name and choose GROUP. Right-click a group and choose UNGROUP. The native Designer commands preserve layer UIDs, timings, keys and hierarchy; click order does not affect composition order. The group occupies the highest selected layer's position. Mixed parent selections, locked descendants and stale structure/bounds are rejected before mutation. Nested groups are supported. Group collapse/expand is local presentation and works in VIEW; grouping/ungrouping never does.
+
+The browser sends bounded layer snapshots plus the exact sibling/child order through layer_group. designer-layer-groups.js owns native preflight and calls Track.groupLayers / Track.ungroupLayer; viewer-editor.js validates schema, current shared token and track. Hover readouts reuse the existing TC formatter for IN/OUT and key times; keys also show numeric values, choices or resource names. No write is sent for a tooltip.
+
+Validation: 191 local tests; 11 isolated native grouping checks on a time track and 18 on a quantized track with 60/120/123 BPM. Browser fixture checks covered Shift selection, group/ungroup, local collapse/expand and VIEW. No exhaustive physical Deck test or large-track performance matrix was run.
+
+Designer workflow reference: https://help.disguise.one/designer/layers/editing-layers/grouping-layers
+
+# Previous release — 0.2.0-beta.5
 
 Sticky 22px LAYERS divider below NOTES controls sequenced/all/hidden parameter rows for all layers, using the existing icons. Display only, available in VIEW. Bulk expansion requests allDetails so native metadata/curves are not limited to the ordinary 16 explicitly expanded rows. Track waveform stays sticky below the divider.
 

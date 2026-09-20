@@ -48,3 +48,7 @@ MIT licensed. The internal module ID remains `disguise-layer-control` for compat
 ## LIVE / VIEW
 
 Click the connected viewer status to switch the module to VIEW. VIEW disables all Designer writes and transport controls, forces LINK TIME off, and keeps local time, layer/parameter browsing and zoom. Returning to LIVE leaves LINK TIME off. Connection errors disable this switch. VIEW applies to this module only; already dispatched commands cannot be recalled.
+
+## Group layers
+
+In LIVE, Shift-click or Shift-drag layer rows to select siblings. Right-click the selection, enter a name and choose GROUP. Right-click a group for UNGROUP. Groups occupy the highest selected row; layer order and timing are preserved. Collapse/expand and hover time/value readouts are also available in VIEW.

@@ -1,5 +1,6 @@
 'use strict'
 const viewerScript = require('./viewer-script')
+const layerGroupsScript = require('./designer-layer-groups')
 const waveformScript = require('./viewer-waveform-script')
 
 // ASCII-only transport prevents Python 2 source-encoding and quoting problems.
@@ -493,6 +494,7 @@ if p['command'] in ('seek', 'nudge_time'):
     result.update(clock_info())
     return result
 
+${layerGroupsScript}
 if p['command'] == 'layer_reorder':
     def find_siblings(container):
         if any(str(item.uid)==p['layerUid'] for item in container.layers): return container

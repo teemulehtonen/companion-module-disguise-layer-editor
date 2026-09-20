@@ -306,7 +306,7 @@ class ViewerServer {
         let body = ''
         for await (const chunk of req) {
           body += chunk
-          if (body.length > 1024) return send(413, 'text/plain', 'Selection too large')
+          if (body.length > 65536) return send(413, 'text/plain', 'Selection too large')
         }
         const value = JSON.parse(body)
         if (url.pathname === '/api/view-mode') {

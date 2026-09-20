@@ -115,6 +115,18 @@ function validEditRequest(value) {
     const {keepPlayhead,...command}=value
     return typeof keepPlayhead==='boolean' && validEditRequest(command)
   }
+  if (value?.action === 'layer_group') return Boolean(
+    /^[a-f0-9]{64}$/.test(value.token || '') && /^\d+$/.test(value.trackUid || '') &&
+    ['group','ungroup'].includes(value.operation) && Array.isArray(value.layers) &&
+    value.layers.length >= (value.operation === 'group' ? 2 : 1) && value.layers.length <= 256 &&
+    (value.operation !== 'ungroup' || value.layers.length === 1) &&
+    value.layers.every(l => l && typeof l.uid === 'string' && /^\d+$/.test(l.uid) && typeof l.name === 'string' &&
+      Number.isFinite(l.start) && Number.isFinite(l.end) && l.end >= l.start && Object.keys(l).every(k=>['uid','name','start','end'].includes(k))) &&
+    new Set(value.layers.map(l=>l.uid)).size === value.layers.length &&
+    Array.isArray(value.expectedOrder) && value.expectedOrder.length <= 10000 && value.expectedOrder.every(uid=>typeof uid==='string' && /^\d+$/.test(uid)) &&
+    (value.operation === 'group' ? typeof value.name === 'string' && value.name.trim().length>0 && value.name.length<=128 && !/[\x00-\x1f]/.test(value.name) && value.expectedChildren===undefined
+      : value.name===undefined && Array.isArray(value.expectedChildren) && value.expectedChildren.length<=10000 && value.expectedChildren.every(uid=>typeof uid==='string' && /^\d+$/.test(uid))) &&
+    Object.keys(value).every(k=>['action','token','trackUid','operation','layers','expectedOrder','expectedChildren','name'].includes(k)))
   if (value?.action === 'layer_reorder') return Boolean(
     /^[a-f0-9]{64}$/.test(value.token || '') && /^\d+$/.test(value.trackUid || '') && /^\d+$/.test(value.layerUid || '') &&
     /^\d+$/.test(value.targetUid || '') && value.targetUid!==value.layerUid && typeof value.after==='boolean' &&
@@ -217,6 +229,15 @@ async function editFromViewerCommand(editor, request) {
     return {ok:true,editor:describeEditor(editor)}
   }
   const sharedActions = actions({ perform: (fn) => fn(editor) })
+  if (request.action === 'layer_group') {
+    if (editor.viewOnly) return {ok:false,reason:'VIEW ONLY'}
+    if (editor.moveKey || editor.mediaMode || editor.clearKeysBrowser || editor.layerEdit) return {ok:false,reason:'RELEASE THE CURRENT EDIT FIRST'}
+    if (editor.snapshot?.trackUid !== request.trackUid) return {ok:false,reason:'TRACK CHANGED'}
+    const {action,token,...args}=request
+    const hierarchy = await editor.remote(()=>editor.client.execute(action,{...editor.context(),...args}))
+    await editor.refresh({preserve:true})
+    return {ok:true,hierarchy,editor:describeEditor(editor)}
+  }
   if (request.action === 'layer_manage' || request.action === 'layer_reorder') {
     if (editor.moveKey || editor.mediaMode || editor.clearKeysBrowser || editor.layerEdit) return {ok:false,reason:'RELEASE THE CURRENT EDIT FIRST'}
     if (editor.snapshot?.trackUid !== request.trackUid) return {ok:false,reason:'TRACK CHANGED'}

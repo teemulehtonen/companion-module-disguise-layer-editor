@@ -17,7 +17,7 @@ function client() {
 test('VIEW fails closed for every write and unknown native operations, allowing only audited reads and local seeks',async()=>{
   const {c,requests}=client();c.viewOnly=true
   for(const command of ['key_set','key_move','key_delete','key_group','constant_set','adjust_value','key_type','keys_clear',
-    'parameter_default','parameter_sequence','layer_default','layer_edit','layer_manage','layer_reorder','media_set','media_key_set',
+    'parameter_default','parameter_sequence','layer_default','layer_edit','layer_manage','layer_reorder','layer_group','media_set','media_key_set',
     'section_edit','annotation_edit','select_key','future_operation','seek','nudge_time','jump_key']) {
     await assert.rejects(c.execute(command,{}),{code:'VIEW_ONLY'})
   }
