@@ -683,15 +683,16 @@ function browserMain(applyEditPatch, discreteSegments) {
   function selectionButton(layer, label, parameter) {
     const button = el('button', 'select-label', label)
     button.dataset.selectLayer = layer.uid
+    if (parameter === undefined) button.dataset.selectLayerStart = 'true'
     button.disabled =
-      !state.selectionEnabled || layer.group || editClock() < layer.start || editClock() >= layer.end
+      !state.selectionEnabled || layer.group || (parameter !== undefined && (editClock() < layer.start || editClock() >= layer.end))
     button.title = button.disabled
       ? 'SELECTION UNAVAILABLE'
       : 'SELECT IN COMPANION'
     button.onclick = () => {
       if (performance.now() < suppressClickUntil) return
       void interact(async () => {
-        try { await selectTarget(layer,parameter) }
+        try { await selectTarget(layer,parameter,parameter === undefined ? 'in' : undefined) }
         catch { $('selectionMessage').textContent = 'SELECTION UNAVAILABLE' }
       })
     }
@@ -1542,7 +1543,7 @@ function browserMain(applyEditPatch, discreteSegments) {
         !state.selectionEnabled ||
         !target ||
         (target.group && !(state.editEnabled && button.dataset.reorderGroup==='true')) ||
-        (!target.group && (editClock()<target.start || editClock()>=target.end))
+        (!target.group && button.dataset.selectLayerStart !== 'true' && (editClock()<target.start || editClock()>=target.end))
     }
     const layer = state.layers.find((layer) => layer.uid === state.focusUid)
     for (const node of sheet.querySelectorAll('[data-parameter-value]')) {

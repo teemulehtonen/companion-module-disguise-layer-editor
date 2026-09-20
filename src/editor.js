@@ -3,9 +3,47 @@ const { orderLayerParameters } = require('./parameter-order')
 
 // Shared order for the time encoder and layer timing controls. Frame uses the
 // current transport FPS; the remaining steps are expressed in seconds.
-const TIME_STEPS = ['frame', 'half', 'second', 'two', 'five', 'ten', 'thirty', 'minute', 'twoMinutes', 'fiveMinutes']
-const TIME_STEP_SECONDS = { frame: 1, half: 0.5, second: 1, two: 2, five: 5, ten: 10, thirty: 30, minute: 60, twoMinutes: 120, fiveMinutes: 300 }
-const TIME_STEP_LABELS = { frame: '1 FRAME', half: '0.5 SEC', second: '1 SEC', two: '2 SEC', five: '5 SEC', ten: '10 SEC', thirty: '30 SEC', minute: '1 MIN', twoMinutes: '2 MIN', fiveMinutes: '5 MIN' }
+const TIME_STEPS = [
+  'frame',
+  'half',
+  'second',
+  'two',
+  'five',
+  'ten',
+  'thirty',
+  'minute',
+  'twoMinutes',
+  'fiveMinutes',
+]
+const TIME_STEP_SECONDS = {
+  frame: 1,
+  half: 0.5,
+  second: 1,
+  two: 2,
+  five: 5,
+  ten: 10,
+  thirty: 30,
+  minute: 60,
+  twoMinutes: 120,
+  fiveMinutes: 300,
+}
+const TIME_STEP_LABELS = {
+  frame: '1 FRAME',
+  half: '0.5 SEC',
+  second: '1 SEC',
+  two: '2 SEC',
+  five: '5 SEC',
+  ten: '10 SEC',
+  thirty: '30 SEC',
+  minute: '1 MIN',
+  twoMinutes: '2 MIN',
+  fiveMinutes: '5 MIN',
+}
+const BEAT_STEPS = [0.25, 1, 2, 4, 8, 16, 32]
+const LAYER_BEAT_STEPS = [0.25, 1, 4, 8, 16, 32]
+const KEY_BEAT_STEPS = [1 / 128, 1 / 64, 1 / 32, 1 / 16, 1 / 8, 1 / 4, 1 / 2, 1, 4, 8]
+const beatStepLabel = (value) =>
+  (value < 1 ? '1/' + Math.round(1 / value) : String(value)) + (value > 1 ? ' BEATS' : ' BEAT')
 const CLEAR_MENU = { resetLayer: 4, clearParameter: 5, resetParameter: 6, back: 7 }
 
 function number(value, label = 'Value') {
@@ -374,34 +412,51 @@ class Editor {
     const decimals = { coarse: 1, fine: 2, ultra: 3 }[this.precision] ?? 1
     return Number(this.value.toFixed(decimals)).toFixed(decimals)
   }
-  get beatMode() { return this.snapshot?.beatMode === true }
-  get usesBeatSteps() { return this.beatMode }
-  get timeStepAmount() { return this.usesBeatSteps ? (this.layerEdit ? this.layerBeatStep : this.moveKey ? (this.keyBeatStep ?? 1/128) : this.beatStep) : TIME_STEP_SECONDS[this.timeStep] }
+  get beatMode() {
+    return this.snapshot?.beatMode === true
+  }
+  get usesBeatSteps() {
+    return this.beatMode
+  }
+  get timeStepAmount() {
+    return this.usesBeatSteps
+      ? this.layerEdit
+        ? this.layerBeatStep
+        : this.moveKey
+          ? (this.keyBeatStep ?? 1 / 128)
+          : this.beatStep
+      : TIME_STEP_SECONDS[this.timeStep]
+  }
   get timeStepChoices() {
     const values = this.beatMode
-      ? this.layerEdit ? [0.25,1,4,8,16,32] : this.moveKey ? [1/128,1/64,1/32,1/16,1/8,1/4,1/2,1,4,8] : [0.25,1,2,4,8,16,32]
+      ? this.layerEdit
+        ? LAYER_BEAT_STEPS
+        : this.moveKey
+          ? KEY_BEAT_STEPS
+          : BEAT_STEPS
       : TIME_STEPS
     const selected = this.beatMode ? this.timeStepAmount : this.timeStep
-    return values.map(value => ({value,selected:value===selected,label:this.beatMode
-      ? (value<1 ? '1/'+Math.round(1/value) : String(value))+' BEAT'+(value>1?'S':'')
-      : TIME_STEP_LABELS[value]}))
+    return values.map((value) => ({
+      value,
+      selected: value === selected,
+      label: this.beatMode ? beatStepLabel(value) : TIME_STEP_LABELS[value],
+    }))
   }
   setTimeStep(index) {
     this.local()
-    if (!Number.isInteger(index) || index<0 || index>=10) throw new Error('Invalid timing step slot')
+    if (!Number.isInteger(index) || index < 0 || index >= 10)
+      throw new Error('Invalid timing step slot')
     if (this.mediaMode || this.clearKeysBrowser || this.clearKeysPrompt) return
-    const choice=this.timeStepChoices[index]
+    const choice = this.timeStepChoices[index]
     if (!choice) return
-    if (!this.beatMode) this.timeStep=choice.value
-    else if (this.layerEdit) this.layerBeatStep=choice.value
-    else if (this.moveKey) this.keyBeatStep=choice.value
-    else this.beatStep=choice.value
+    if (!this.beatMode) this.timeStep = choice.value
+    else if (this.layerEdit) this.layerBeatStep = choice.value
+    else if (this.moveKey) this.keyBeatStep = choice.value
+    else this.beatStep = choice.value
   }
   get timeStepLabel() {
-    if (this.usesBeatSteps) return this.timeStepAmount < 1 ? '1/' + Math.round(1 / this.timeStepAmount) + ' BEAT' : this.timeStepAmount + (this.timeStepAmount === 1 ? ' BEAT' : ' BEATS')
-    return TIME_STEP_LABELS[
-      this.timeStep
-    ]
+    if (this.usesBeatSteps) return beatStepLabel(this.timeStepAmount)
+    return TIME_STEP_LABELS[this.timeStep]
   }
   cycleTimeStep() {
     if (this.layerEdit) {
@@ -410,12 +465,12 @@ class Editor {
       return
     }
     if (this.usesBeatSteps && this.moveKey) {
-      const steps = [1/128, 1/64, 1/32, 1/16, 1/8, 1/4, 1/2, 1, 4, 8]
-      this.keyBeatStep = steps[(steps.indexOf(this.keyBeatStep ?? 1/128) + 1) % steps.length]
+      const steps = KEY_BEAT_STEPS
+      this.keyBeatStep = steps[(steps.indexOf(this.keyBeatStep ?? 1 / 128) + 1) % steps.length]
       return
     }
     if (this.usesBeatSteps) {
-      const steps = [0.25, 1, 2, 4, 8, 16, 32]
+      const steps = BEAT_STEPS
       this.beatStep = steps[(steps.indexOf(this.beatStep) + 1) % steps.length]
       return
     }
@@ -522,7 +577,7 @@ class Editor {
     if (this.moveKey) return { ok: false, reason: 'Exit SELECT KEY before changing selection' }
     if (this.clearKeysBrowser) return { ok: false, reason: 'Close the DELETE menu before changing selection' }
     // Refresh before accepting a browser click: the layer may have moved or
-    // disappeared since rendering. An inactive layer selection seeks to its IN.
+    // disappeared since rendering. Layer clicks explicitly request their IN point.
     this.viewerPinnedLayerUid=this.keepEditPlayhead ? layerUid : null
     const pendingTime = this.pendingJump && Date.now() < this.pendingJump.until ? this.pendingJump.time : this.time
     await this.refresh({ preserve: true })
@@ -846,7 +901,7 @@ class Editor {
   }
   cycleLayerStep() {
     if (this.beatMode) {
-      const steps = [0.25, 1, 4, 8, 16, 32]
+      const steps = LAYER_BEAT_STEPS
       this.layerBeatStep = steps[(steps.indexOf(this.layerBeatStep) + 1) % steps.length]
       return
     }

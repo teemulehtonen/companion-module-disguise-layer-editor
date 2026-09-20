@@ -131,7 +131,7 @@ class DisguiseLayerControl extends InstanceBase {
         id: 'info',
         label: 'Designer 32.4.17 / Companion 5.0.5',
         value:
-          'VALUE rotation edits the selected key or constant; press VALUE to add a key at the playhead. LAYER EDIT opens IN / POSITION (centre time) / OUT / FIT (length). Press a timing dial to change its step. Time presses cycle 1 frame / 1 s / 2 s / 5 s / 10 s / 1 min, including while SELECT KEY is active. Press SELECT KEY again to unlock. Layers at the playhead update automatically. Float steps: 0.1 / 0.01 / 0.001.',
+          'VALUE rotation edits the selected key or constant; press VALUE to add a key at the playhead. LAYER EDIT opens IN / POSITION (centre time) / OUT / FIT (length). Press a timing dial to change its step. Time presses cycle 1 frame / 0.5 / 1 / 2 / 5 / 10 / 30 seconds / 1 / 2 / 5 minutes, including while SELECT KEY is active. Press SELECT KEY again to unlock. Layers at the playhead update automatically. Float steps: 0.1 / 0.01 / 0.001.',
       },
       { type: 'textinput', id: 'host', label: 'Designer IP / hostname', width: 8, default: '127.0.0.1' },
       {

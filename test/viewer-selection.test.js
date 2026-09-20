@@ -5,6 +5,34 @@ const { Editor } = require('../src/editor')
 const { DemoClient } = require('../src/demo')
 const { ViewerServer } = require('../src/viewer-server')
 
+test('layer IN clicks route to the linked or independent edit clock without changing content', async () => {
+  for (const linked of [true, false]) {
+    const client = new DemoClient(),
+      editor = new Editor(client)
+    client.data.layers[0].start = 10
+    client.data.time = 15
+    await editor.refresh()
+    editor.setLinkTime(linked)
+    const original = JSON.stringify(client.data.layers),
+      seeks = []
+    const execute = client.execute.bind(client)
+    client.execute = async (command, args) => {
+      if (command === 'seek') seeks.push(args)
+      return execute(command, args)
+    }
+    const result = await editor.selectFromViewer({
+      trackUid: editor.snapshot.trackUid,
+      layerUid: client.data.layers[0].uid,
+      point: 'in',
+    })
+    assert.equal(result.ok, true)
+    assert.equal(editor.time, 10)
+    assert.equal(seeks.length, 1)
+    assert.equal(Boolean(seeks[0].keepPlayhead), !linked)
+    assert.equal(JSON.stringify(client.data.layers), original)
+  }
+})
+
 test('browser selection preserves active time, rejects inactive layers and respects key locks', async () => {
   const client = new DemoClient(),
     editor = new Editor(client)
@@ -22,8 +50,8 @@ test('browser selection preserves active time, rejects inactive layers and respe
   client.data.layers.find((l) => l.uid === layer.uid).start = time + 10
   assert.equal((await editor.selectFromViewer(target)).ok, false)
   assert.equal(editor.time, time)
-  assert.equal((await editor.selectFromViewer({...target,point:'in'})).ok,true)
-  assert.equal(editor.time,time+10)
+  assert.equal((await editor.selectFromViewer({ ...target, point: 'in' })).ok, true)
+  assert.equal(editor.time, time + 10)
 })
 
 test('selection route accepts only authenticated selection data, never a value or seek', async (t) => {
@@ -92,29 +120,55 @@ test('seek route checks token, origin and exact payload', async (t) => {
 })
 
 test('timeline points seek and select the intended layer/parameter without modifying keys', async () => {
-  const client = new DemoClient(), editor = new Editor(client)
+  const client = new DemoClient(),
+    editor = new Editor(client)
   await editor.refresh()
-  const layer = editor.layer, trackUid = editor.snapshot.trackUid
+  const layer = editor.layer,
+    trackUid = editor.snapshot.trackUid
   const original = JSON.stringify(client.data.layers)
-  const target = {trackUid,layerUid:layer.uid}
-  assert.equal((await editor.selectFromViewer({...target,point:'out'})).ok,true)
-  assert.equal(editor.time,layer.end-1/editor.snapshot.fps)
-  assert.equal((await editor.selectFromViewer({...target,point:'key',parameter:layer.fields[0].name,keyTime:5})).ok,true)
-  assert.equal(editor.time,5)
-  assert.equal(editor.field.name,layer.fields[0].name)
-  assert.equal((await editor.selectFromViewer({...target,point:'key',parameter:layer.fields[0].name,keyTime:999})).ok,false)
-  assert.equal(JSON.stringify(client.data.layers),original)
+  const target = { trackUid, layerUid: layer.uid }
+  assert.equal((await editor.selectFromViewer({ ...target, point: 'out' })).ok, true)
+  assert.equal(editor.time, layer.end - 1 / editor.snapshot.fps)
+  assert.equal(
+    (
+      await editor.selectFromViewer({
+        ...target,
+        point: 'key',
+        parameter: layer.fields[0].name,
+        keyTime: 5,
+      })
+    ).ok,
+    true,
+  )
+  assert.equal(editor.time, 5)
+  assert.equal(editor.field.name, layer.fields[0].name)
+  assert.equal(
+    (
+      await editor.selectFromViewer({
+        ...target,
+        point: 'key',
+        parameter: layer.fields[0].name,
+        keyTime: 999,
+      })
+    ).ok,
+    false,
+  )
+  assert.equal(JSON.stringify(client.data.layers), original)
 })
 
 test('inactive selection uses a pending seek instead of delayed native feedback', async () => {
-  const client = new DemoClient(), editor = new Editor(client)
+  const client = new DemoClient(),
+    editor = new Editor(client)
   await editor.refresh()
   const layer = client.data.layers[0]
   layer.start = 10
   client.data.time = 15
   await editor.refresh()
   editor.pendingJump = { time: 0, until: Date.now() + 1500 }
-  const result = await editor.selectFromViewer({trackUid:editor.snapshot.trackUid,layerUid:layer.uid})
-  assert.equal(result.ok,false)
-  assert.notEqual(editor.time,10)
+  const result = await editor.selectFromViewer({
+    trackUid: editor.snapshot.trackUid,
+    layerUid: layer.uid,
+  })
+  assert.equal(result.ok, false)
+  assert.notEqual(editor.time, 10)
 })

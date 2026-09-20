@@ -8,7 +8,7 @@ Enable **ENABLE TIMELINE VIEWER** and open `http://127.0.0.1:8765` (configurable
 - **LINK TIME**, on by default: editing follows Designer. The viewer and Stream Deck button share this setting.
 - Unlinked: blue cursor and smaller blue clock show independent edit time. Timeline/marker clicks, PREV/NEXT KEYFRAME and the time dial move edit time without seeking Designer. Layer/key timing edits follow that same clock.
 - Relinking adopts Designer time and clears key/layer/resource/delete edit modes; it never seeks playback to edit time.
-- Layer selection is limited to the active editing time. Clicking an explicit IN/OUT/key point moves that active clock. Designer playback cannot steal the unlinked edit target.
+- Clicking a layer name or bar selects it and moves the active clock to its IN, including inactive layers. Parameter selection remains limited to active edit time. Clicking an explicit IN/OUT/key point moves that active clock. Designer playback cannot steal the unlinked edit target.
 - FOLLOW and zoom use the active clock. CTRL+wheel zooms; SHIFT+wheel pans. FIT LAYER leaves 4% space at the edges.
 
 ## Transport

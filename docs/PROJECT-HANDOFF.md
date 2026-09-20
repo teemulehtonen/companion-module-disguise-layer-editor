@@ -1,3 +1,9 @@
+# Current release — beta.132
+
+Validation: 169 local tests and packaged lifecycle checks passed. This release consolidates timing catalogs and labels; no broad native layer or playback matrix was run.
+
+Plain layer name/bar clicks explicitly select point=in, including inactive layers. Parameter labels remain restricted to active edit time. The existing shared seek path routes to Designer while linked or blue edit time while unlinked; drag preparation remains unchanged.
+
 # Beta.131 — clearer LCD labels
 
 Companion headings use 90% of the text element height; primary values use 78%. Value title shows only precision, and time title only step plus FPS, including selected-key mode. The larger keyframe dot sits next to PARAMETER in normal mode. Existing installed pages need the corresponding style update or a clean page import; module updates alone only change variable text. Ten time steps from beta.130 are included.
@@ -18,7 +24,7 @@ Viewer transport controls use the shared queue and guarded native transport iden
 
 Targeted client/editor tests passed; Designer live playback was not exercised as part of this small UI update.
 
-# Current release — beta.127
+# Historical release — beta.127
 
 Authorized for GitHub publication. Installed on Raspberry Pi: beta.127. Uses separate editing/transport clocks, green Designer time and smaller blue edit time. Stale unlinked refresh no longer calls a write-context guard; background timecode samples retain the edit-time label. 165 local tests pass, including updated expectations for LINK TIME and active-time layer selection. Source/package publication excludes private probes, credentials and local media. Final browser check verified a Deck time step at blue 00:00:00:01 independently of the real transport, idle guides absent, browser errors empty and Companion last_error empty. LINK TIME restored ON after verification. Read the beta.125 notes below as the current timing specification; beta.122–124 policies are superseded.
 

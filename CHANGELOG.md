@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.0-beta.132
+
+- Consolidate beat-step catalogs and labels, tidy timing code/tests and update developer handoff. 169 local tests and packaged lifecycle checks pass.
+
+- Clicking a layer name or timeline bar selects it and seeks to IN. LINK TIME moves Designer transport; unlinked mode moves only the editing cursor. Parameter selection and drag gestures retain their existing behavior.
+
 ## 0.1.0-beta.131
 
 - Enlarge Companion display headings and primary values. Remove VALUE /, TIME / and MOVE KEYFRAME / prefixes to leave room for precision and timing steps.
