@@ -1,3 +1,9 @@
+## Ordinary VALUE fast feedback
+
+Ordinary VALUE encoder edits now emit the same confirmed geometry patches as SELECT KEY and LAYER EDIT. This path was previously missing when moveKey was null, leaving key/curve updates waiting for a full snapshot. Sequenced VALUE edits request throttled native curve samples, and pending same-direction VALUE turns can batch without an explicit key-selection mode. Mouse preview behavior is unchanged.
+
+Validation: 203 local tests, including the regression that a plain VALUE change emits a geometry patch with neither key nor layer edit active.
+
 ## Incremental viewer geometry
 
 Confirmed encoder patches now update existing layer bars, IN/OUT markers, key markers and curve paths instead of reconstructing the entire timeline. Geometry uses a short 65 ms visual interpolation; native destinations remain authoritative. Heavy state requests wait until 400 ms after the last applied patch; stale in-flight reads cannot replace a newer patch. Cached curve sample times translate with ordinary layer moves and remain absolute when trimming.

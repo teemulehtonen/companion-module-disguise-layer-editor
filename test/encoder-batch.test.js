@@ -14,3 +14,12 @@ test('context invalidation discards pending batched turns',async()=>{
  const h=host();let calls=0
  h.performDetents('time+',()=>calls++);h.queueGeneration++;await h.actionTail;assert.equal(calls,0)
 })
+test('ordinary VALUE edits publish confirmed geometry even without SELECT KEY or LAYER EDIT',async()=>{
+ const body=source.slice(source.indexOf('  async performNow('),source.indexOf('  connectionStatus()'))
+ const C=vm.runInNewContext('(class Host {'+body+'})',{structuredClone,Date})
+ const h=new C();h.publish=()=>{};h.connectionStatus=()=>{};h.editor={snapshot:{trackUid:'1'},layer:{uid:'2',start:0,end:10},field:{name:'v',keys:[{time:1,value:0.2}]},valueEditRevision:0};
+ await h.performNow(e=>{e.field.keys[0].value=0.7;e.valueEditRevision++})
+ assert.equal(h.viewerLivePatch.layer.fields[0].keys[0].value,0.7)
+ assert.equal(h.viewerLivePatch.revision,1)
+ assert.equal(h.editor.moveKey,undefined)
+})

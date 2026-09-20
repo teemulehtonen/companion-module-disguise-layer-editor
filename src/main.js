@@ -540,10 +540,11 @@ class DisguiseLayerControl extends InstanceBase {
           return
         }
       }
+      const valueEditBefore=editor.valueEditRevision || 0
       await fn(editor)
       if (!scrub || editor.moveKey || editor.layerEdit) this.viewerEditRevision = (this.viewerEditRevision || 0) + 1
       if (editor !== this.editor) return
-      if(editor.layer && (editor.moveKey || editor.layerEdit)) {
+      if(editor.layer && (editor.moveKey || editor.layerEdit || (editor.valueEditRevision || 0)!==valueEditBefore)) {
         this.viewerLivePatchAt=Date.now()
         this.viewerLivePatch={revision:this.viewerEditRevision,trackUid:editor.snapshot.trackUid,layer:structuredClone({uid:editor.layer.uid,start:editor.layer.start,end:editor.layer.end,fields:editor.layerEdit ? editor.layer.fields : editor.field ? [editor.field] : []})}
       }

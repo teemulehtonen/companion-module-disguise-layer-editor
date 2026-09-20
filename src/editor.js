@@ -693,6 +693,7 @@ class Editor {
         }),
       ),
     )
+    this.valueEditRevision=(this.valueEditRevision || 0)+1
     if (this.moveKey && this.selectedKey) this.moveKey = { ...this.selectedKey }
   }
   get viewOnly() { return this.client.viewOnly === true }

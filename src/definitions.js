@@ -31,7 +31,7 @@ function actions(instance) {
     callback: (event) => {
       const dial=['Select active layer','Select parameter / media folder','Adjust live value / preview media','Scrub live / move selected key'].includes(name)
       const e=instance.editor
-      const batch=dial && !e?.mediaMode && !e?.clearKeysBrowser && (e?.layerEdit==='edit' || (e?.moveKey && !e.moveKey.group)) && instance.performDetents
+      const batch=dial && !e?.mediaMode && !e?.clearKeysBrowser && (e?.layerEdit==='edit' || (e?.moveKey && !e.moveKey.group) || (name==='Adjust live value / preview media' && e?.field && !e.moveKey?.group)) && instance.performDetents
       const run=batch ? (fn,opts)=>instance.performDetents(name+JSON.stringify(event.options),fn,opts) : (fn,opts)=>instance.perform(fn,opts)
       return run((editor,detents=1) => {
         if (editor.viewOnly) {
@@ -92,7 +92,7 @@ function actions(instance) {
           ? e.adjustLayerTiming('out', Number(o.direction),{detents:o.detents})
           : e.mediaMode
             ? e.browseMedia(Number(o.direction))
-            : e.adjustLiveValue(Number(o.direction)*(o.detents || 1), Number(o.step),{previewCurve:Boolean(e.moveKey)&&curvePreviewDue(e)}),
+            : e.adjustLiveValue(Number(o.direction)*(o.detents || 1), Number(o.step),{previewCurve:Boolean(e.field?.sequenced)&&curvePreviewDue(e)}),
     ),
     time: action(
       'Scrub live / move selected key',
