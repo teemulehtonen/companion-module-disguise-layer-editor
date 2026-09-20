@@ -1,5 +1,26 @@
 # Current release - 0.2.0-beta.43
 
+## Deferred Designer diagnostics (operator decision, 2026-09-20)
+
+The operator requested postponing investigation/fixes for both issues below. Their
+severity and root causes are not established; do not assume they are minor or fixed.
+
+- Native ThumbnailSystem / ImageIO::copy ACCESS_VIOLATION (null read): initially
+  reported once, then associated by the operator with an intermittently flickering
+  VIDEO layer. The exact layer was not identified. Two VIDEO layers referenced the
+  same PNG test pattern; metadata confirmed the file existed, not that thumbnail
+  decoding was healthy. No layer/media was changed during diagnosis.
+- Native duplicateLayer triggered TrackWidget.refresh with "Access to object of
+  type 'Widget' is not allowed" during the installed integration run. Independent
+  data readback passed despite this native GUI callback error. Do not bypass Widget
+  access restrictions or claim duplication is free of native UI errors.
+
+When investigation resumes, separate thumbnail generation from resource rendering
+and inspect native GUI diagnostics alongside data assertions. Reproduce only in an
+authorized disposable test environment. Numeric suite success cannot certify absence
+of asynchronous Designer renderer/GUI errors. No corrective build was made for these
+reports; beta.43 remains the installed/published version.
+
 Supersedes the local-only publication status in older entries below. The user
 authorized Companion installation and GitHub publication after testing.
 
