@@ -1,3 +1,7 @@
+## OUT boundary semantics
+
+Treat layer playback as ending at OUT: the last displayed frame begins one frame earlier. Editing bounds include exact OUT for numeric, choice and resource keys, and layer/parameter focus must survive an exact OUT seek. NEXT falls back to exact OUT, never OUT minus one frame; otherwise repeated NEXT at an OUT key can move backwards. LINK TIME can move the native playhead to OUT, where ended playback is expected. Do not extend layer duration or alter key time to hide this distinction.
+
 ## Ordinary VALUE fast feedback
 
 Ordinary VALUE encoder edits now emit the same confirmed geometry patches as SELECT KEY and LAYER EDIT. This path was previously missing when moveKey was null, leaving key/curve updates waiting for a full snapshot. Sequenced VALUE edits request throttled native curve samples, and pending same-direction VALUE turns can batch without an explicit key-selection mode. Mouse preview behavior is unchanged.

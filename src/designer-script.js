@@ -886,16 +886,16 @@ if command == 'read_field':
     return {'field': field_snapshot(layer, field, seconds), 'time': seconds}
 if command == 'jump_key':
     start, end = float(track.beatToTime(layer.tStart)), float(track.beatToTime(layer.tEnd))
-    last_visible = max(start, end - 1.0 / fps())
+    # OUT ends the last displayed frame; it is still a valid editing boundary.
     # A disabled sequence still stores its constant in a key, possibly mid-layer.
     # That carrier is not an animation key and must not attract NEXT/PREV.
     times = [] if field.disableSequencing else sorted(float(track.beatToTime(seq.t(i))) for i in range(seq.nKeys()) if layer.tStart <= seq.t(i) <= layer.tEnd)
     cursor = p.get('navigationTime')
-    if cursor is not None and not any(abs(t - cursor) < 0.00001 for t in times + [start, last_visible]):
+    if cursor is not None and not any(abs(t - cursor) < 0.00001 for t in times + [start, end]):
         cursor = None
     cursor = seconds if cursor is None else float(cursor)
     candidates = [t for t in times if t < cursor - 0.00001] if p['direction'] < 0 else [t for t in times if t > cursor + 0.00001]
-    target = (max(candidates) if p['direction'] < 0 else min(candidates)) if candidates else (start if p['direction'] < 0 else last_visible)
+    target = (max(candidates) if p['direction'] < 0 else min(candidates)) if candidates else (start if p['direction'] < 0 else end)
     seconds = max(start, min(end, target))
     if not p.get('keepPlayhead'): manager.addCommand(TransportCommand.makeJumpToTime(state, manager, seconds))
     key_time = next((t for t in times if abs(t - seconds) < 0.00001), None)

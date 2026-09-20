@@ -350,10 +350,10 @@ test('key navigation ignores trimmed-out keys and visits layer bounds without cr
   await e.keyLive(1)
   assert.equal(e.selectedKeyTime, 5)
   await e.keyLive(1)
-  assert.equal(e.time, 8 - 1 / e.snapshot.fps)
+  assert.equal(e.time, 8)
   assert.equal(e.selectedKeyTime, null)
   await e.keyLive(1)
-  assert.equal(e.time, 8 - 1 / e.snapshot.fps)
+  assert.equal(e.time, 8)
   await e.keyLive(-1)
   assert.equal(e.time, 5)
   assert.deepEqual(
@@ -372,7 +372,7 @@ test('an acknowledged jump followed by a Designer seek resets the navigation anc
   assert.equal(e.selectedKeyTime, 5)
 })
 
-test('empty-key NEXT ends one actual frame before OUT and PREV returns to IN', async () => {
+test('empty-key NEXT reaches exact OUT and PREV returns to IN', async () => {
   for (const fps of [24, 25, 30, 50, 60, 120, 24000 / 1001, 30000 / 1001, 60000 / 1001]) {
     const e = await ready()
     e.client.data.fps = fps
@@ -382,9 +382,9 @@ test('empty-key NEXT ends one actual frame before OUT and PREV returns to IN', a
     e.client.data.time = 4
     await e.refresh()
     await e.keyLive(1)
-    assert.equal(e.time, 8 - 1 / fps)
+    assert.equal(e.time, 8)
     await e.keyLive(1)
-    assert.equal(e.time, 8 - 1 / fps)
+    assert.equal(e.time, 8)
     await e.keyLive(-1)
     assert.equal(e.time, 2)
   }
@@ -588,7 +588,7 @@ test('PREV at own IN never jumps into another overlapping Designer-highlighted l
     assert.equal(e.layer.uid, second.uid)
     assert.equal(e.time, target)
   }
-  for (const target of [8, 12, 18, 20 - 1 / e.snapshot.fps]) {
+  for (const target of [8, 12, 18, 20]) {
     await e.keyLive(1)
     assert.equal(e.layer.uid, second.uid)
     assert.equal(e.time, target)
@@ -831,14 +831,14 @@ test('constant carriers inside a layer never attract NEXT/PREV, including stale 
     await e.refresh()
     e.navigationTime = 92
     await e.keyLive(1)
-    assert.equal(e.time, 128 - 1 / fps)
+    assert.equal(e.time, 128)
     assert.equal(e.selectedKeyTime, null)
     await e.keyLive(-1)
     assert.equal(e.time, 74)
     await e.keyLive(-1)
     assert.equal(e.time, 74)
     await e.keyLive(1)
-    assert.equal(e.time, 128 - 1 / fps)
+    assert.equal(e.time, 128)
     assert.deepEqual(layer.fields[0].keys, [{ time: 92, value: 0.6 }])
   }
 })

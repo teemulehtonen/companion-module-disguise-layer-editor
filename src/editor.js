@@ -1401,8 +1401,7 @@ class Editor {
       direction < 0
         ? keys.filter((k) => k.time < this.time - 1e-5).at(-1)
         : keys.find((k) => k.time > this.time + 1e-5)
-    const lastVisible = Math.max(start, end - 1 / this.snapshot.fps)
-    this.time = Math.max(start, Math.min(end, key?.time ?? (direction < 0 ? start : lastVisible)))
+    this.time = Math.max(start, Math.min(end, key?.time ?? (direction < 0 ? start : end)))
     this.selectedKeyTime = key?.time ?? null
     this.loadValue()
     if (key) this.value = key.value // Local preview only; live navigation reads Designer.

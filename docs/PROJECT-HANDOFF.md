@@ -1,4 +1,10 @@
-# Current release - 0.2.0-beta.22
+# Current release - 0.2.0-beta.23
+
+OUT is the end of the final displayed frame, not its start. Editing and key selection include exact OUT; playback visibility does not. NEXT with no later key now targets exact OUT in native and local navigation, preventing a backward one-frame jump after an OUT key. Do not move OUT keys earlier to compensate for black playback at that boundary. Existing OUT focus retention remains in effect.
+
+Validation: 11 focused local tests (including 25, 30, 29.97 and 59.94 navigation cases) and an isolated native Designer OUT-key navigation check. No user track was modified. The full local suite passes (204 tests).
+
+# Previous release - 0.2.0-beta.22
 
 Ordinary VALUE encoder edits now emit the same confirmed geometry patches as SELECT KEY and LAYER EDIT. This path was previously missing when moveKey was null, leaving key/curve updates waiting for a full snapshot. Sequenced VALUE edits request throttled native curve samples, and pending same-direction VALUE turns can batch without an explicit key-selection mode. Mouse preview behavior is unchanged.
 

@@ -189,20 +189,19 @@ class DemoClient {
     if (command === 'jump_key') {
       const start = layer.start ?? 0,
         end = layer.end ?? this.data.length
-      const lastVisible = Math.max(start, end - 1 / this.data.fps)
       const keys = (field.sequenced ? field.keys : [])
         .filter((k) => k.time >= start && k.time <= end)
         .sort((a, b) => a.time - b.time)
       const anchor = args.navigationTime
       const validAnchor =
         anchor != null &&
-        [...keys.map((k) => k.time), start, lastVisible].some((t) => Math.abs(t - anchor) < 1e-5)
+        [...keys.map((k) => k.time), start, end].some((t) => Math.abs(t - anchor) < 1e-5)
       const cursor = validAnchor ? anchor : this.data.time
       const k =
         args.direction < 0
           ? keys.filter((k) => k.time < cursor - 1e-5).at(-1)
           : keys.find((k) => k.time > cursor + 1e-5)
-      this.data.time = Math.max(start, Math.min(end, k?.time ?? (args.direction < 0 ? start : lastVisible)))
+      this.data.time = Math.max(start, Math.min(end, k?.time ?? (args.direction < 0 ? start : end)))
       const exact = keys.find((k) => Math.abs(k.time - this.data.time) < 1e-5)
       if (exact) field.value = exact.value
       return { ...result(), keyTime: exact?.time ?? null, atBoundary: !exact }
