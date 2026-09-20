@@ -141,6 +141,11 @@ class Editor {
     const modes = ['coarse', 'fine', 'ultra']
     this.precision = modes[(modes.indexOf(this.precision) + 1) % modes.length]
   }
+  get viewerTransportTime() {
+    // Linked editing has one clock. Raw transport feedback can lag a confirmed
+    // editor seek; only the unlinked viewer needs that independent clock.
+    return this.linkTime ? this.time : this.transportTime
+  }
   get activeLayers() {
     return (
       this.snapshot?.layers.filter(
@@ -245,6 +250,10 @@ class Editor {
   }
   receiveTransportTime(seconds, force = false) {
     if (!Number.isFinite(seconds)) return
+    // A delayed transport sample must not roll back the viewer's confirmed seek
+    // while followTime already protects the independent editor state.
+    if (!force && this.pendingJump && Date.now() < this.pendingJump.until &&
+      Math.abs(seconds-this.pendingJump.time) > 0.51/(this.snapshot?.fps || 25)) return
     this.transportTime = seconds
     if (this.linkTime) this.followTime(seconds, force)
   }
@@ -313,9 +322,13 @@ class Editor {
       const next = validateSnapshot(await this.client.execute('refresh', this.snapshot && !this.linkTime ? {time:this.time,editTime:this.time,editTrackUid:this.snapshot.trackUid,keepPlayhead:true} : {}))
       next.layers.forEach(orderLayerParameters)
       const keep = preserve && next.trackUid === trackUid && next.transportUid === transportUid
+      const waitingForSeek = keep && this.pendingJump && Date.now() < this.pendingJump.until &&
+        Math.abs(next.time-this.pendingJump.time) > 0.51/(next.fps || 25)
       this.snapshot = next
-      this.transportTime = next.time
-      if (!keep || this.linkTime) this.time = next.time
+      if (!waitingForSeek) {
+        this.transportTime = next.time
+        if (!keep || this.linkTime) this.time = next.time
+      }
       this.timecodeSamples = next.timecodeSamples
       this.liveTimecodeSample = null
       if (!keep) {
@@ -547,12 +560,11 @@ class Editor {
     this.viewerPinnedLayerUid = null
     this.local()
     if (!Number.isFinite(time)) return { ok: false, reason: 'Invalid time' }
-    await this.refresh({ preserve: true })
+    if (!this.snapshot || this.stale) await this.refresh({ preserve: true })
     if (this.snapshot.trackUid !== trackUid) return { ok: false, reason: 'Track changed; try again' }
-    const fps = this.snapshot.fps || 25
-    const target = Math.max(0, Math.min(this.snapshot.length, Math.round(time * fps) / fps))
+    const target = time
     // Move the active clock, never the selected key. Native transport stays put when unlinked.
-    const result = await this.remote(() => this.client.execute('seek', { ...this.context(), time: target }))
+    const result = await this.remote(() => this.client.execute('seek', { ...this.context(), time: target, frameSnap: true }))
     this.moveKey = null
     this.selectedKeyTime = null
     this.layerEdit = ''
@@ -565,6 +577,7 @@ class Editor {
     this.loadValue()
     this.acceptTimecodes(result)
     this.pendingJump = this.keepEditPlayhead ? null : { time: result.time, until: Date.now() + 1500 }
+    if (!this.keepEditPlayhead) this.transportTime = result.time
     return { ok: true, time: result.time }
   }
   async selectFromViewer(target) {
@@ -651,8 +664,15 @@ class Editor {
       }
     }
     if (point === 'insert' && resource < 0) {
-      await this.writeLive('key_set',insertTime)
-      await this.toggleMoveKey(insertTime)
+      await this.writeLive('key_set',insertTime,{evaluateCurrent:true})
+      // Select from the authoritative write response, not a second native read.
+      const inserted=this.field.keys.find(key=>Math.abs(key.time-insertTime)<1e-5)
+      if(!inserted)throw new Error('Inserted keyframe was not returned by Designer')
+      this.moveKey={...inserted}
+      this.selectedKeyTime=inserted.time
+      this.navigationTime=inserted.time
+      this.pendingJump=this.keepEditPlayhead ? null : {time:inserted.time,until:Date.now()+1500}
+      this.loadValue()
     }
     return { ok: true, ...(point === 'insert' && this.linkTime ? {time:insertTime} : {}) }
   }
@@ -869,7 +889,7 @@ class Editor {
     )
     if (this.moveKey && this.selectedKey) this.moveKey = { ...this.selectedKey }
   }
-  async writeLive(command, targetTime) {
+  async writeLive(command, targetTime, {evaluateCurrent=false}={}) {
     if(this.moveKey?.group) {if(command==='key_delete')await this.editKeyGroup('delete');return}
     this.requireField()
     // Some Designer settings (for example Web dimensions) are constants by
@@ -880,8 +900,9 @@ class Editor {
     this.pendingJump = null
     await this.remote(async () => {
       const pinned = Number.isFinite(targetTime) ? {live:false,time:targetTime} : {}
-      this.acceptLive(await this.client.execute('read_field', {...this.liveArgs(),...pinned}))
-      const result = await this.client.execute(command, { ...this.liveArgs(), ...pinned, value: this.field.value, expectedKey })
+      const atomicValue=command==='key_set' && evaluateCurrent
+      if(!atomicValue)this.acceptLive(await this.client.execute('read_field', {...this.liveArgs(),...pinned}))
+      const result = await this.client.execute(command, { ...this.liveArgs(), ...pinned, value: this.field.value, expectedKey, ...(atomicValue?{evaluateCurrent:true}:{}) })
       this.moveKey = null
       this.selectedKeyTime = command === 'key_set' ? result.time : null
       this.acceptLive(result)

@@ -76,8 +76,8 @@ class DemoClient {
         },
       })
     if (command === 'seek') {
-      this.data.time = args.time
-      return { time: args.time }
+      this.data.time = args.frameSnap ? Math.max(0, Math.min(this.data.length, Math.round(args.time * this.data.fps) / this.data.fps)) : args.time
+      return { time: this.data.time }
     }
     if (command === 'nudge_time') {
       const current = args.cursor ?? this.data.time
@@ -297,6 +297,7 @@ class DemoClient {
       if (field.sequenced) throw new Error('Animated parameter: use Save keyframe instead')
       field.keys[0].value = args.value
     } else if (command === 'key_set') {
+      if(args.evaluateCurrent)args={...args,value:field.value}
       const key = {
         time: args.time,
         value: args.value,

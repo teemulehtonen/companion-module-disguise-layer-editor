@@ -1,6 +1,6 @@
 {
   "name": "companion-module-disguise-layer-control",
-  "version": "0.2.0-beta.26",
+  "version": "0.2.0-beta.43",
   "private": true,
   "description": "Disguise Designer layer and keyframe programming for Companion and Stream Deck +",
   "main": "src/entry.mjs",
@@ -10,6 +10,7 @@
   },
   "scripts": {
     "test": "node --test",
+    "test:regression": "node scripts/regression.cjs",
     "package": "companion-module-build --prerelease && node scripts/verify-package.mjs && node scripts/build-page.cjs",
     "release": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/release.ps1",
     "format": "prettier --write \"src/**/*.{js,mjs}\" \"test/**/*.js\"",

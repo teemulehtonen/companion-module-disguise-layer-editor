@@ -15,6 +15,14 @@ class ViewerClock {
     this.retryAt = 0
   }
   read(context) {
+    const {clockSeek,clockFps=25,...visible}=context
+    context=visible
+    // This display subscription is independent of the editor subscription.
+    // Discard cached pre-command samples and fence delayed ones until the seek
+    // reaches Designer (or the bounded editor timeout releases the fence).
+    const revision=context.editRevision || 0
+    if(revision!==this.editRevision){this.sample=null;this.editRevision=revision}
+
     const uid = context.transportUid
     if (!this.closed && context.connected && /^\d+$/.test(uid || '')) {
       if (uid !== this.uid) {
@@ -26,7 +34,8 @@ class ViewerClock {
     } else this.stop()
     // A stalled socket must never override fresh HTTP feedback indefinitely.
     context = { ...context, externalTimecode: Date.now() - this.externalReceived < 2000 ? this.externalTimecode : undefined }
-    return this.sample?.trackUid === context.trackUid && Date.now() - this.received < 2000
+    const waiting=clockSeek && Date.now()<clockSeek.until && (!this.sample || Math.abs(this.sample.time-clockSeek.time)>0.51/clockFps)
+    return !waiting && this.sample?.trackUid === context.trackUid && Date.now() - this.received < 2000
       ? { ...context, time: this.sample.time, timecode: this.sample.timecode, ...(Number.isFinite(this.sample.beat) ? { beat: this.sample.beat, quantized: this.sample.quantized, tempoKey: this.sample.tempoKey } : {}) }
       : context
   }

@@ -6,12 +6,16 @@ const { discreteSegments } = require('./viewer-discrete')
 const { selectionScroll } = require('./viewer-selection-scroll')
 const { timecode } = require('./timecode')
 const { duplicateMarkerKeys } = require('./viewer-marker-duplicates')
+const { createPresentationQueue } = require('./viewer-presentation')
 
 // Embedded at bundle time: the packaged module needs no external web runtime.
 // All project strings reach the DOM through textContent, never HTML parsing.
-function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode, duplicateMarkerKeys, createUiGeometry) {
+function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode, duplicateMarkerKeys, createUiGeometry, createPresentationQueue) {
   const $ = (id) => document.getElementById(id)
   let uiScale = 1
+  let preserveGestureScroll=null
+  const pendingGroupGeometry=new Set()
+  const presentation=createPresentationQueue()
   const {x:clientX,y:clientY,rect:uiRect,width:uiWidth,height:uiHeight}=createUiGeometry(()=>uiScale,window)
   const viewport = $('viewport'),
     sheet = $('sheet')
@@ -34,6 +38,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     waveformHeights = new Map()
   let lastFullRead = 0,
     lastView = ''
+  let seekPreview=null
   let displayedTime = null
   let resizingWaveform = false
   let editPending = false
@@ -41,18 +46,25 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
   const dragLabels = []
   function clearDragTimes() { for(const node of dragLabels) node.remove(); dragLabels.length=0 }
   function showDragTimes(times, clientY, lane) {
-    clearDragTimes()
     const rect=uiRect(lane)
-    for(const entry of times) {
+    while(dragLabels.length>times.length) dragLabels.pop().remove()
+    for(const [index,entry] of times.entries()) {
       const anchor=(state.dragTimecodes || []).filter(a=>a.time<=entry.time+1e-7).at(-1)
       const rate=state.fps || 25
       const drop=anchor && timecode(anchor.probeSeconds,rate,true)===anchor.probeLabel.replace(/[.;]/g,':') && timecode(anchor.probeSeconds,rate,false)!==anchor.probeLabel.replace(/[.;]/g,':')
       const label=timecode(anchor ? anchor.seconds+entry.time-anchor.time : entry.time,rate,Boolean(drop))
-      const node=el('div','drag-time-label',(entry.prefix || '')+label+(entry.suffix || ''))
-      Object.assign(node.style,{position:'fixed',zIndex:90,pointerEvents:'none',background:'#10232fee',color:'#bdeaff',border:'1px solid #397b94',borderRadius:'4px',padding:'4px 7px',font:'13px Consolas,monospace',whiteSpace:'nowrap',top:Math.max(4,Math.min(uiHeight()-30,clientY-34+(entry.row || 0)*28))+'px'})
-      document.body.append(node)
-      node.style.left=Math.max(4,Math.min(uiWidth()-node.offsetWidth-4,rect.left+x(entry.time)*rect.width/100))+'px'
-      dragLabels.push(node)
+      let node=dragLabels[index]
+      if(!node) {
+        node=el('div','drag-time-label')
+        Object.assign(node.style,{position:'fixed',zIndex:90,pointerEvents:'none',background:'#10232fee',color:'#bdeaff',border:'1px solid #397b94',borderRadius:'4px',padding:'4px 7px',font:'13px Consolas,monospace',whiteSpace:'nowrap'})
+        document.body.append(node);dragLabels.push(node)
+      }
+      const text=(entry.prefix || '')+label+(entry.suffix || '')
+      if(node.textContent!==text) node.textContent=text
+      // Monospace time labels retain their width while the digits change.
+      if(node._labelLength!==text.length) {node._labelWidth=node.offsetWidth;node._labelLength=text.length}
+      node.style.top=Math.max(4,Math.min(uiHeight()-30,clientY-34+(entry.row || 0)*28))+'px'
+      node.style.left=Math.max(4,Math.min(uiWidth()-node._labelWidth-4,rect.left+x(entry.time)*rect.width/100))+'px'
     }
   }
   document.addEventListener('pointerup',clearDragTimes)
@@ -309,7 +321,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     editRevision++
     try { return await fn() }
     catch { $('selectionMessage').textContent = 'ACTION NOT CONFIRMED — CHECK DESIGNER'; return false }
-    finally { interactionBusy = false; rendered = ''; lastFullRead = 0; updateEditorControls() }
+    finally { interactionBusy = false; rendered = ''; lastFullRead = 0; updateEditorControls(); draw() }
   }
   function adoptEditor(editor) {
     if (!editor) return
@@ -349,10 +361,140 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     if (state.editor.layerEdit && !await sendEdit('layer_edit')) return false
     return true
   }
+  function previewValueSet(action,options) {
+    if(action!=='value_set' || !Number.isFinite(options.targetValue))return ()=>{}
+    const e=state.editor, layer=state.layers.find(l=>l.uid===e.layerUid),field=layer?.fields?.find(f=>f.name===e.parameter)
+    if(!field || field.resource)return ()=>{}
+    const saved=[]
+    for(const node of sheet.querySelectorAll('[data-parameter-value]')) {
+      if(node.dataset.parameterLayer!==e.layerUid || node.dataset.parameterValue!==e.parameter)continue
+      const label=node.querySelector('small');if(!label)continue
+      const old=label.textContent;saved.push(()=>{if(label.isConnected)label.textContent=old})
+      label.textContent=field.choices?.find(c=>c.value===options.targetValue)?.label ?? String(Number(options.targetValue.toFixed(3)))
+    }
+    return ()=>{for(const restore of saved)restore()}
+  }
+  function sameEditContext(context) {
+    return state?.trackUid===context.trackUid && state?.selectionToken===context.selectionToken && state?.editEnabled===true
+  }
+  function previewAction(action,options) {
+    // Capture identity before the request. DOM-only changes cannot become
+    // expected native values, UIDs, timing rules or another command's input.
+    if(!['value_set','key_delete','parameter_sequence','key_type','resource_choose','layer_manage','layer_reorder','layer_group','annotation','transport','link_time'].includes(action))return ()=>{}
+    const e=state.editor,uid=options.layerUid || e.layerUid,parameter=options.parameter || e.parameter
+    const keys=(e.moveKey?.group || (e.moveKey?[e.moveKey]:[])).map(k=>k.time)
+    const layer=state.layers.find(l=>l.uid===uid)
+    const field=[...(layer?.fields || []),...(layer?.resources || [])].find(f=>f.name===parameter)
+    const resource=action==='resource_choose'?resourceListing.items.find(r=>r.uid===options.resourceUid):null
+    const affected=new Set(options.layers?.map(l=>l.uid) || [uid])
+    if((action==='layer_group' && options.operation==='delete') || (action==='layer_manage' && options.operation==='delete')) {
+      for(const item of state.layers) {
+        let parent=item.parent
+        while(parent){if(affected.has(parent)){affected.add(item.uid);break}parent=state.layers.find(l=>l.uid===parent)?.parent}
+      }
+    }
+    return presentation.begin(()=>{
+      const restores=[]
+      const style=(node,property,value)=>{if(!node)return;const old=node.style[property];node.style[property]=value;restores.push(()=>{node.style[property]=old})}
+      const text=(node,value)=>{if(!node)return;const old=node.textContent;node.textContent=value;attr(node,'data-presentation-pending','true');restores.push(()=>{node.textContent=old})}
+      const attr=(node,key,value)=>{if(!node)return;const old=node.getAttribute(key);node.setAttribute(key,value);restores.push(()=>{if(old===null)node.removeAttribute(key);else node.setAttribute(key,old)})}
+      const pending=node=>{if(!node)return;style(node,'opacity','.65');style(node,'pointerEvents','none');attr(node,'data-presentation-pending','true')}
+      const rows=[...sheet.querySelectorAll('.layer[data-uid],[data-owner-layer]')]
+      const own=rows.filter(row=>affected.has(row.dataset.uid || row.dataset.ownerLayer))
+      const parameterRows=rows.filter(row=>row.dataset.ownerLayer===uid && row.dataset.parameter===parameter)
+      const marks=[...sheet.querySelectorAll('[data-key-time]')].filter(n=>n.dataset.keyLayer===uid && n.dataset.keyParameter===parameter)
+      if(action==='key_delete') {
+        for(const node of marks)if(keys.some(t=>Math.abs(t-Number(node.dataset.keyTime))<1e-6))style(node,'display','none')
+        for(const row of parameterRows)pending(row.querySelector('svg'))
+      } else if(action==='parameter_sequence') {
+        if(options.mode!=='enable') {
+          for(const node of marks)style(node,'display','none')
+          for(const row of parameterRows)style(row.querySelector('svg'),'visibility','hidden')
+        }
+        for(const row of parameterRows)pending(row)
+      } else if(action==='key_type') {
+        for(const row of parameterRows)pending(row.querySelector('svg'))
+      } else if(action==='value_set' && Number.isFinite(options.targetValue)) {
+        const value=field?.choices?.find(c=>c.value===options.targetValue)?.label ?? String(Number(options.targetValue.toFixed(3)))
+        for(const row of parameterRows)text(row.querySelector('.label > small'),value)
+      } else if(action==='resource_choose' && resource) {
+        for(const row of parameterRows) {
+          text(row.querySelector('.label > small'),resource.name)
+          const lane=row.querySelector('.lane')
+          const target=e.moveKey?.time ?? (e.mediaKeyframe?e.editTime:layer?.start)
+          if(lane && Number.isFinite(target)) {
+            for(const node of lane.querySelectorAll('.resource')) {
+              if(!field?.sequenced || Math.abs(Number(node.dataset.keyTime)-target)<1e-6)style(node,'display','none')
+            }
+            const ghost=marker(lane,target,resource.name,'resource')
+            if(ghost){ghost.prepend(image(resource,true));pending(ghost);restores.push(()=>ghost.remove())}
+          }
+          pending(row)
+        }
+        for(const tile of resourcePanel.querySelectorAll('.resource-file')) {
+          attr(tile,'aria-pressed',String(tile.dataset.resourceUid===resource.uid))
+        }
+      } else if(action==='layer_manage') {
+        if(options.operation==='delete')for(const row of own)style(row,'display','none')
+        else if(options.operation==='rename')for(const row of own.filter(r=>r.dataset.uid===uid)) {
+          text(row.querySelector('.select-label'),options.name)
+          text(row.querySelector('.clip-label'),options.name)
+          pending(row)
+        }
+        else if(options.operation==='create' || options.operation==='duplicate') {
+          // No speculative UID or duration: the new native layer may differ.
+          const ghost=el('div','row layer pending-layer'),label=el('div','label'),lane=el('div','lane')
+          label.textContent=options.operation==='duplicate'?(layer?.name || 'LAYER')+' COPY':String(options.kind || 'LAYER').toUpperCase()
+          lane.textContent='PENDING DESIGNER';lane.style.padding='16px';ghost.append(label,lane);pending(ghost)
+          const anchor=own.at(-1);if(anchor)anchor.after(ghost);else sheet.append(ghost)
+          restores.push(()=>ghost.remove())
+        } else for(const row of own)pending(row)
+      } else if(action==='layer_reorder') {
+        const target=rows.filter(r=>(r.dataset.uid || r.dataset.ownerLayer)===options.targetUid)
+        const anchor=options.after?target.at(-1):target[0]
+        if(anchor && own.length) {
+          const positions=own.map(node=>({node,parent:node.parentNode,next:node.nextSibling}))
+          let previous=anchor
+          for(const row of own){if(options.after){previous.after(row);previous=row}else anchor.before(row);pending(row)}
+          restores.push(()=>{for(const p of positions.reverse())if(p.parent.isConnected)p.parent.insertBefore(p.node,p.next?.parentNode===p.parent?p.next:null)})
+        }
+      } else if(action==='layer_group') {
+        for(const row of own) {
+          if(options.operation==='delete')style(row,'display','none')
+          else {pending(row);style(row,'background',options.operation==='group'?'#24213a':'#151e23')}
+        }
+      } else if(action==='annotation') {
+        const lane=[...sheet.querySelectorAll('[data-marker-kind]')].find(n=>n.dataset.markerKind===options.kind)
+        const old=lane && [...lane.querySelectorAll('[data-marker-time]')].find(n=>Math.abs(Number(n.dataset.markerTime)-options.sourceTime)<1e-6 && n.dataset.markerText===options.sourceText)
+        if(options.mode==='delete')style(old,'display','none')
+        else if(old) {
+          text(old,options.text);pending(old)
+          // Native TC/beat conversion remains authoritative for typed times.
+          if(!options.targetLabel)style(old,'left',x(options.targetTime)+'%')
+        } else if(lane && !options.targetLabel) {
+          const ghost=marker(lane,options.targetTime,options.text,'cue-marker '+options.kind)
+          if(ghost){pending(ghost);restores.push(()=>ghost.remove())}
+        }
+      } else if(action==='transport') {
+        const operation=options.operation==='toggle'?(e.playing?'stop':e.playbackMode || 'play'):options.operation
+        for(const [name,button] of transportButtons) {
+          if(['play','playsection','playloopsection','stop'].includes(operation)){attr(button,'aria-pressed',String(name===operation));attr(button,'data-presentation-pending','true')}
+          if(name===operation)pending(button)
+        }
+      } else if(action==='link_time'){attr(linkTimeButton,'aria-pressed',String(options.enabled));pending(linkTimeButton)}
+      else if(!['value_set','key_insert','resource_folder'].includes(action))for(const row of parameterRows)pending(row)
+      return ()=>{for(const restore of restores.reverse())restore()}
+    })
+  }
   async function sendEdit(action, options = {}) {
     if (!state?.editEnabled || !state.editor || editPending) return false
+    const requestContext={trackUid:state.trackUid,selectionToken:state.selectionToken}
+    const restorePreview=previewValueSet(action,options)
     editPending = true
     updateEditorControls()
+    let finishPreview=()=>{}
+    try { finishPreview=previewAction(action,options) } catch { presentation.clear() }
+    let accepted=false
     try {
       const response = await fetch('/api/edit', {
         method: 'POST',
@@ -361,6 +503,13 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
         signal: AbortSignal.timeout(15000),
       })
       const result = await response.json()
+      if(!sameEditContext(requestContext) || (Number.isFinite(result.editRevision) && result.editRevision<confirmedRevision)) {
+        lastFullRead=0;rendered='';return false
+      }
+      if(!result.ok){
+        $('selectionMessage').textContent=result.reason || 'EDIT UNAVAILABLE'
+        lastFullRead=0;rendered='';return false
+      }
       adoptEditor(result.editor)
       if (result.ok && Number.isFinite(result.editRevision)) confirmedRevision=Math.max(confirmedRevision,result.editRevision)
       applyEditPatch(state,result.patch)
@@ -369,9 +518,8 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
         if(current) Object.assign(current,item)
       }
       if (Number.isFinite(result.time) && state.editor?.linkTime !== false) { state.time=result.time;updatePlayhead() }
-      if (result.curve && mouseGesture?.keyMode) {
-        const node=mouseGesture.node, path=node.parentElement.querySelector('svg path')
-        const lo=Number(node.dataset.curveMin),hi=Number(node.dataset.curveMax)
+      if (result.curve && mouseGesture?.keyMode && !mouseGesture.group) {
+        const {path,lo,hi}=mouseGesture.keyCurve || {}
         if(path && hi>lo) {
           path.setAttribute('d',result.curve.map((s,i)=>(i?'L':'M')+x(s.time)*10+','+(48-(s.value-lo)/(hi-lo)*42)).join(' '))
           path.style.opacity=''
@@ -382,12 +530,14 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       $('selectionMessage').textContent = result.ok ? '' : result.reason || 'EDIT UNAVAILABLE'
       lastFullRead = 0
       rendered = ''
+      accepted=true
       return result.ok
     } catch {
       // A timeout does not prove that a write failed. Never replay a write.
       $('selectionMessage').textContent = 'EDIT NOT CONFIRMED — CHECK DESIGNER'
+      lastFullRead=0;rendered=''
       return false
-    } finally { editPending = false; updateEditorControls() }
+    } finally { finishPreview(accepted);restorePreview();editPending = false; updateEditorControls();draw();presentation.paint() }
   }
   let viewModePending = false
   $('status').onclick = async () => {
@@ -401,6 +551,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       const result = await response.json()
       if (!response.ok || !result.ok) throw new Error(result.reason || 'MODE UNAVAILABLE')
       state.viewOnly = result.viewOnly
+      presentation.clear()
       $('status').textContent = result.viewOnly ? 'VIEW' : 'LIVE'
       state.editor = result.editor
       state.editEnabled = false // A fresh server read enables editing again.
@@ -410,27 +561,51 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     } catch (error) { $('selectionMessage').textContent = error.message }
     finally { viewModePending = false; updateEditorControls() }
   }
+  let keySelectionIndex=null,keySelectionSignature='',highlightedKeys=[]
+  function updateKeySelection() {
+    const selected=state?.editor
+    const keys=selected?.moveKey ? selected.moveKey.group || [selected.moveKey] : []
+    const signature=JSON.stringify([selected?.layerUid,selected?.parameter,keys.map(k=>k.time)])
+    if(keySelectionIndex && signature===keySelectionSignature) return
+    if(!keySelectionIndex) {
+      keySelectionIndex=new Map()
+      for(const mark of sheet.querySelectorAll('[data-key-time]')) {
+        const id=JSON.stringify([mark.dataset.keyLayer,mark.dataset.keyParameter])
+        if(!keySelectionIndex.has(id))keySelectionIndex.set(id,[])
+        keySelectionIndex.get(id).push(mark)
+      }
+    }
+    for(const mark of highlightedKeys)mark.classList.remove('selected-keyframe')
+    highlightedKeys=[]
+    const times=keys.map(k=>k.time).sort((a,b)=>a-b)
+    const near=time=>{
+      let lo=0,hi=times.length
+      while(lo<hi){const mid=(lo+hi)>>>1;if(times[mid]<time-1e-6)lo=mid+1;else hi=mid}
+      return lo<times.length && Math.abs(times[lo]-time)<1e-6
+    }
+    if(times.length)for(const mark of keySelectionIndex.get(JSON.stringify([selected.layerUid,selected.parameter])) || []) {
+      if(near(Number(mark.dataset.keyTime))){mark.classList.add('selected-keyframe');highlightedKeys.push(mark)}
+    }
+    keySelectionSignature=signature
+  }
   function updateEditorControls() {
     $('status').disabled = !state?.connected || viewModePending || editPending || interactionBusy || Boolean(mouseGesture || layerReorder || layerMarquee)
 
-    const selected=state?.editor
-    for(const mark of sheet.querySelectorAll('[data-key-time]')) {
-      const active=Boolean(selected?.moveKey && mark.dataset.keyLayer===selected.layerUid && mark.dataset.keyParameter===selected.parameter && (selected.moveKey.group || [selected.moveKey]).some(k=>Math.abs(Number(mark.dataset.keyTime)-k.time)<1e-6))
-      mark.classList.toggle('selected-keyframe',active)
-    }
+    updateKeySelection()
+    if(!state?.editor?.moveKey)clearWheelValue()
 
     linkTimeButton.hidden = Boolean(state?.viewOnly)
     linkTimeButton.style.display = state?.viewOnly ? 'none' : ''
     snapGroup.hidden = Boolean(state?.viewOnly)
     snapGroup.style.display = state?.viewOnly ? 'none' : 'inline-flex'
-    linkTimeButton.setAttribute('aria-pressed',String(Boolean(state?.editor?.linkTime)))
+    if(!linkTimeButton.hasAttribute('data-presentation-pending'))linkTimeButton.setAttribute('aria-pressed',String(Boolean(state?.editor?.linkTime)))
     linkTimeButton.disabled=!state?.editEnabled || !state?.connected || editPending || interactionBusy || Boolean(mouseGesture || layerReorder || layerMarquee)
     const enabled = state?.editEnabled && state.editor
     transportControls.hidden=!enabled
     transportControls.style.display=enabled?'flex':'none'
     for (const [operation,button] of transportButtons) {
       button.disabled=!enabled || !state.connected || editPending || interactionBusy || Boolean(mouseGesture || layerReorder || layerMarquee)
-      if (['play','playsection','playloopsection','stop'].includes(operation)) button.setAttribute('aria-pressed',String(operation==='stop' ? !state.editor?.playing : state.editor?.playing && state.editor?.playbackMode===operation))
+      if (!button.hasAttribute('data-presentation-pending') && ['play','playsection','playloopsection','stop'].includes(operation)) button.setAttribute('aria-pressed',String(operation==='stop' ? !state.editor?.playing : state.editor?.playing && state.editor?.playbackMode===operation))
     }
     addLayers.hidden=!enabled
     addLayers.style.display=enabled?'flex':'none'
@@ -544,6 +719,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       const selected = e.resources.some(item=>item.uid === resource.uid && item.selected)
       const tile = control(grid,'','resource_choose',{index:resource.index,resourceUid:resource.uid},selected)
       tile.className = 'resource-file'
+      tile.dataset.resourceUid=resource.uid
       tile.title = resource.name
       tile.setAttribute('aria-label','APPLY RESOURCE · ' + resource.name)
       Object.assign(tile.style,{display:'grid',gridTemplateColumns:'64px minmax(0,1fr)',textAlign:'left',gap:'9px'})
@@ -586,6 +762,68 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     grid.scrollTop = scrollTop
     for (const row of folders.children) row.scrollLeft = folderScroll.find(([label])=>label === row.getAttribute('aria-label'))?.[1] || 0
   }
+  // Warp native samples between key anchors for presentation only. Selected
+  // anchors travel together; stationary keys retain their exact position.
+  function previewGroupSamples(samples, anchors, delta) {
+    let index=0
+    return samples.map(sample=>{
+      while(index+1<anchors.length && anchors[index+1].time<sample.time) index++
+      const a=anchors[index], b=anchors[Math.min(index+1,anchors.length-1)]
+      if(!a) return sample
+      const fraction=b.time>a.time ? Math.max(0,Math.min(1,(sample.time-a.time)/(b.time-a.time))) : 0
+      const weight=Number(a.selected)+(Number(b.selected)-Number(a.selected))*fraction
+      return {...sample,time:sample.time+delta*weight}
+    })
+  }
+  function cancelCurveAnimation(path) {
+    if(path?._liveFrame){cancelAnimationFrame(path._liveFrame);path._liveFrame=null}
+  }
+  function keyCurveTarget(marks,field) {
+    if(!field || field.discrete || field.choices?.length || field.resource || 'current' in field)return null
+    const mark=marks.find(node=>node.dataset.curveMin!==undefined)
+    const path=mark?.parentElement.querySelector('svg path')
+    const lo=Number(mark?.dataset.curveMin),hi=Number(mark?.dataset.curveMax)
+    return path && hi>lo ? {mark,path,lo,hi} : null
+  }
+  function previewKeySamples(samples,originTime,originValue,time,value,before,after,start,end) {
+    return samples.map(sample=>{
+      const left=sample.time<=originTime, neighbour=left?before:after
+      const hasNeighbour=Number.isFinite(neighbour)
+      const edge=hasNeighbour?neighbour:left?start:end
+      const inSegment=left?sample.time>=edge:sample.time<=edge
+      const weight=inSegment?(Math.abs(originTime-edge)>1e-9?(sample.time-edge)/(originTime-edge):1):0
+      // A layer boundary is not a key: outside the first/last key the value
+      // follows that key completely, while time geometry still ends at IN/OUT.
+      return {...sample,time:inSegment?edge+(time-edge)*weight:sample.time,
+        value:sample.value+(value-originValue)*(hasNeighbour?weight:1)}
+    })
+  }
+  function retainFieldCurve(layerUid,parameter,samples) {
+    if(!samples?.length)return
+    const original=state.layers.find(layer=>layer.uid===layerUid)
+    const originalStart=original?.start,originalEnd=original?.end
+    presentation.begin(()=>{
+      for(const row of sheet.querySelectorAll('[data-owner-layer]')) {
+        if(row.dataset.ownerLayer!==layerUid || row.dataset.parameter!==parameter)continue
+        const path=row.querySelector('.lane svg path'),mark=row.querySelector('[data-curve-min]')
+        const lo=Number(mark?.dataset.curveMin),hi=Number(mark?.dataset.curveMax)
+        if(!path || !(hi>lo))continue
+        cancelCurveAnimation(path)
+        const old=path.getAttribute('d')
+        const previous=path._previewSamples
+        const current=state.layers.find(layer=>layer.uid===layerUid)
+        const shifted=current && Math.abs((current.end-current.start)-(originalEnd-originalStart))<1e-7
+          ? samples.map(s=>({...s,time:s.time+current.start-originalStart})) : samples
+        path._previewSamples=shifted
+        path.setAttribute('d',shifted.map((s,i)=>(i?'L':'M')+x(s.time)*10+','+(48-(s.value-lo)/(hi-lo)*42)).join(' '))
+        return ()=>{path.setAttribute('d',old);path._previewSamples=previous}
+      }
+    })(true)
+  }
+  function visibleCurveSamples(layerUid,field) {
+    const row=[...sheet.querySelectorAll('[data-owner-layer]')].find(row=>row.dataset.ownerLayer===layerUid && row.dataset.parameter===field?.name)
+    return (row?.querySelector('.lane svg path')?._previewSamples || field?.samples)?.map(s=>({...s}))
+  }
   // Mouse distance is resolved by the same native timing operation as a dial.
   // Keep only the latest pointer position while a shared command is in flight.
   function mouseDial(node, layer, action, parameter, keyTime) {
@@ -593,35 +831,34 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     function preview(g) {
       g.previewFrame=0
       if (mouseGesture!==g || !g.moved) return
+      preserveGestureScroll={trackUid:state.trackUid,layerUid:layer.uid}
       const target=snappedTime(g.originTime+(g.lastX-g.originX)*span/g.width,g.points,g.lastEvent?.altKey,g.width,!layer.group && !g.keyMode && action==='field' ? g.layerEnd-g.layerStart : 0)
       const time=g.group ? Math.max(g.originTime+g.layerStart-g.group[0].time,Math.min(g.originTime+g.layerEnd-g.group.at(-1).time,target.time)) : Math.max(g.layerStart,Math.min(g.layerEnd,target.time))
       const destination=g.keyMode ? time : Math.max(0,Math.min(action==='field' ? state.length-(g.layerEnd-g.layerStart) : state.length,target.time))
       showDragTimes(!g.keyMode && action==='field' ? [{time:destination,prefix:'IN '},{time:Math.min(state.length,destination+g.layerEnd-g.layerStart),prefix:'OUT ',row:1}] : [{time:destination}],g.lastY,node.parentElement)
       if(g.group) {
         const delta=time-g.originTime
-        for(const part of g.groupParts)part.node.style.left=x(part.time+delta)+'%'
+        for(const part of g.groupParts){part.node.style.transition='none';part.node.style.left=x(part.time+delta)+'%'}
+        if(g.groupCurve && g.samples?.length) {
+          const {path,lo,hi}=g.groupCurve
+          cancelCurveAnimation(path)
+          const d=previewGroupSamples(g.samples,g.curveAnchors,delta).map((s,i)=>(i?'L':'M')+x(s.time)*10+','+(48-(s.value-lo)/(hi-lo)*42)).join(' ')
+          path.setAttribute('d',d);path.style.opacity='.65'
+        }
         return
       }
       if (g.keyMode) {
-        for(const mark of g.keyParts) mark.style.left=x(time)+'%'
-        const lo=Number(node.dataset.curveMin),hi=Number(node.dataset.curveMax)
+        for(const mark of g.keyParts){mark.style.transition='none';mark.style.left=x(time)+'%'}
+        const {mark:curveMark,path,lo,hi}=g.keyCurve || {}
         if (hi>lo && Number.isFinite(g.originValue)) {
-          const value=Math.max(lo,Math.min(hi,g.originValue+(g.originY-g.lastY)*(hi-lo)/42))
-          node.style.top=(44-(value-lo)/(hi-lo)*42)+'px'
-          const path=node.parentElement.querySelector('svg path')
+          const value=node.dataset.curveMin===undefined ? g.originValue : Math.max(lo,Math.min(hi,g.originValue+(g.originY-g.lastY)*(hi-lo)/42))
+          curveMark.style.top=(44-(value-lo)/(hi-lo)*42)+'px'
           if(path && g.samples?.length) {
+            cancelCurveAnimation(path)
             // Transient deformation of native samples, never project data.
             // The confirmed Designer-evaluated curve replaces this preview.
-            const before=g.neighbours[0],after=g.neighbours[1]
-            const d=g.samples.map((s,i)=>{
-              let t=s.time,v=s.value
-              if(t>=before && t<=after) {
-                const left=t<=g.originTime,edge=left?before:after
-                const weight=Math.abs(g.originTime-edge)>1e-9 ? (t-edge)/(g.originTime-edge) : 1
-                t=edge+(time-edge)*weight;v+=(value-g.originValue)*weight
-              }
-              return (i?'L':'M')+x(t)*10+','+(48-(v-lo)/(hi-lo)*42)
-            }).join(' ')
+            const d=previewKeySamples(g.samples,g.originTime,g.originValue,time,value,...g.neighbours,g.layerStart,g.layerEnd)
+              .map((s,i)=>(i?'L':'M')+x(s.time)*10+','+(48-(s.value-lo)/(hi-lo)*42)).join(' ')
             path.setAttribute('d',d);path.style.opacity='.65'
           }
         }
@@ -640,6 +877,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       const b=action==='layer' ? g.layerEnd : action==='value' ? Math.max(a+minimum,Math.min(state.length,destination)) : a+g.layerEnd-g.layerStart
       const delta=action==='field' ? (a-g.layerStart)/span*g.width : 0
       for(const part of g.layerParts) {
+        part.node.style.transition='none'
         if(part.kind==='clip') {
           part.node.style.left=x(Math.max(start,a))+'%'
           part.node.style.width=Math.max(0,(Math.min(start+span,b)-Math.max(start,a))/span*100)+'%'
@@ -652,6 +890,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     }
     node.addEventListener('pointerdown', event => {
       if (event.button !== 0 || !state?.editEnabled || editPending || interactionBusy || event.ctrlKey || event.shiftKey) return
+      if(pendingGroupGeometry.has(layer.uid)){lastFullRead=0;return}
       event.stopPropagation()
       clearTimeout(clickTimer)
       const currentKeyTime = parameter === undefined ? undefined : Number(node.dataset.keyTime)
@@ -670,11 +909,17 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
         .filter(row=>movingIds.has(row.dataset.ownerLayer || row.dataset.uid)).map(row=>row.querySelector('.lane')).filter(Boolean)
       const keyParts=parameter===undefined ? [] : [...sheet.querySelectorAll('[data-key-time]')].filter(mark=>mark.dataset.keyLayer===layer.uid && mark.dataset.keyParameter===parameter && Math.abs(Number(mark.dataset.keyTime)-currentKeyTime)<1e-6)
       const layerParts=layerLanes.flatMap(lane=>[...lane.children].map(child=>({node:child,kind:child.dataset.layerEdge || (child.classList.contains('clip')?'clip':'content')})))
+      for(const lane of layerLanes)for(const path of lane.querySelectorAll('svg path'))cancelCurveAnimation(path)
       const groupParts=group?[...sheet.querySelectorAll('[data-key-time]')].filter(mark=>mark.dataset.keyLayer===layer.uid && mark.dataset.keyParameter===parameter && group.some(k=>Math.abs(k.time-Number(mark.dataset.keyTime))<1e-6)).map(node=>({node,time:Number(node.dataset.keyTime)})):[]
-      mouseGesture = {layerGroup:layer.group,movingIds,group,anchor,groupParts,keyParts,layerStart:layer.start,layerEnd:layer.end,layerLanes,layerParts,node,x:clientX(event),y:clientY(event),lastX:clientX(event),lastY:clientY(event),originX:clientX(event),
+      const keyCurve=keyCurveTarget(keyParts,field)
+      const groupCurve=keyCurveTarget(groupParts.map(p=>p.node),field)
+      const curveAnchors=keys.map(k=>({time:k.time,selected:!!group?.some(g=>Math.abs(g.time-k.time)<1e-6)}))
+      if(!curveAnchors.length || curveAnchors[0].time>layer.start)curveAnchors.unshift({time:layer.start,selected:false})
+      if(curveAnchors.at(-1).time<layer.end)curveAnchors.push({time:layer.end,selected:false})
+      mouseGesture = {keyCurve,groupCurve,curveAnchors,layerGroup:layer.group,movingIds,group,anchor,groupParts,keyParts,layerStart:layer.start,layerEnd:layer.end,layerLanes,layerParts,node,x:clientX(event),y:clientY(event),lastX:clientX(event),lastY:clientY(event),originX:clientX(event),
         originY:clientY(event),
-        originValue:selected?.value,samples:field?.samples?.map(s=>({...s})),
-        neighbours:[keys.filter(k=>k.time<currentKeyTime).at(-1)?.time ?? layer.start,keys.find(k=>k.time>currentKeyTime)?.time ?? layer.end],
+        originValue:selected?.value,samples:visibleCurveSamples(layer.uid,field),
+        neighbours:[keys.filter(k=>k.time<currentKeyTime).at(-1)?.time,keys.find(k=>k.time>currentKeyTime)?.time],
         originTime:group ? currentKeyTime : parameter !== undefined ? currentKeyTime : action === 'value' ? layer.end : layer.start,
         width:uiRect(node.parentElement).width,points:snapPoints(layer.uid,parameter,currentKeyTime),
         alignmentPoints:snapPoints(layer.uid,undefined,undefined,undefined,{edges:true,keys:true}),
@@ -742,7 +987,17 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
         g.token = state.editor.token
         if(g.group && state.editor.moveKey?.group) {
           const shift=state.editor.moveKey.group[0].time-g.group[0].time
-          for(const part of g.groupParts){part.node.dataset.keyTime=String(part.time+shift);part.node.style.left=x(part.time+shift)+'%'}
+          g.confirmedShift=shift
+          for(const part of g.groupParts)part.node.dataset.keyTime=String(part.time+shift)
+          // A previous native reply must not repaint an older pointer position.
+          // If this is the final reply, use the native (possibly clamped) shift.
+          if(Math.max(Math.abs(g.lastX-g.x),Math.abs(g.lastY-g.y))<2) {
+            for(const part of g.groupParts)part.node.style.left=x(part.time+shift)+'%'
+            if(g.groupCurve && g.samples?.length) {
+              const {path,lo,hi}=g.groupCurve
+              path.setAttribute('d',previewGroupSamples(g.samples,g.curveAnchors,shift).map((s,i)=>(i?'L':'M')+x(s.time)*10+','+(48-(s.value-lo)/(hi-lo)*42)).join(' '))
+            }
+          }
         } else if (g.keyMode && state.editor.moveKey) {
           const oldTime=Number(node.dataset.keyTime), newTime=state.editor.moveKey.time
           for(const mark of sheet.querySelectorAll('[data-key-time]')) {
@@ -784,10 +1039,19 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       }
       if (mouseGesture.moved) suppressClickUntil = performance.now()+400
       if(g.previewFrame)cancelAnimationFrame(g.previewFrame)
+      if(g.group && g.groupCurve && Number.isFinite(g.confirmedShift))retainFieldCurve(layer.uid,parameter,previewGroupSamples(g.samples || [],g.curveAnchors,g.confirmedShift))
+      if(g.moved && g.ready && g.keyMode && !g.group && g.samples?.length && Number.isFinite(g.originValue) && Number.isFinite(state.editor.moveKey?.value)) {
+        const key=state.editor.moveKey
+        retainFieldCurve(layer.uid,parameter,previewKeySamples(g.samples,g.originTime,g.originValue,key.time,key.value,...g.neighbours,g.layerStart,g.layerEnd))
+      }
       mouseGesture = null
       showSnap(null)
       clearDragTimes()
       rendered = ''; lastFullRead = 0; updateEditorControls()
+      if(g.moved && !g.keyMode) {
+        if(g.layerGroup)for(const uid of g.movingIds)pendingGroupGeometry.add(uid)
+        else draw()
+      }
       // Keep the final preview until a revision-checked geometry read arrives.
       // Immediate redraw would briefly restore old native curve samples.
     }
@@ -933,7 +1197,18 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     })
     node.addEventListener('pointerleave',()=>{if(!mouseGesture)clearDragTimes()})
   }
-  function editClock() { return state?.editor?.linkTime === false ? state.editor.editTime : state?.time }
+  function activeSeekPreview() {
+    return seekPreview && state?.connected!==false && seekPreview.trackUid===state?.trackUid &&
+      seekPreview.token===state?.selectionToken && seekPreview.linked===(state?.editor?.linkTime!==false) ? seekPreview : null
+  }
+  function playbackClock() { const preview=activeSeekPreview(); return preview?.linked ? preview.time : state?.time }
+  function editClock() { return activeSeekPreview()?.time ?? (state?.editor?.linkTime === false ? state.editor.editTime : state?.time) }
+  function previewTimecode(seconds) {
+    const anchor=(state.dragTimecodes || []).filter(a=>a.time<=seconds+1e-7).at(-1)
+    const rate=state.fps || 25
+    const drop=anchor && timecode(anchor.probeSeconds,rate,true)===anchor.probeLabel.replace(/[.;]/g,':') && timecode(anchor.probeSeconds,rate,false)!==anchor.probeLabel.replace(/[.;]/g,':')
+    return timecode(anchor ? anchor.seconds+seconds-anchor.time : seconds,rate,Boolean(drop))
+  }
   function selectionButton(layer, label, parameter) {
     const button = el('button', 'select-label', label)
     button.dataset.selectLayer = layer.uid
@@ -1019,6 +1294,23 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     node.onpointerup=finish;node.onpointercancel=finish;node.onlostpointercapture=finish
   }
   // One wheel write in flight and at most one newer direction, never a backlog.
+  let wheelValueNode=null,wheelValueTimer=null
+  function clearWheelValue() {
+    clearTimeout(wheelValueTimer)
+    wheelValueNode?.remove();wheelValueNode=null
+  }
+  function showWheelValue(value,point) {
+    if(!Number.isFinite(value) || !point)return
+    if(!wheelValueNode){
+      wheelValueNode=el('div','wheel-value-label')
+      Object.assign(wheelValueNode.style,{position:'fixed',zIndex:90,pointerEvents:'none',background:'#10232fee',color:'#bdeaff',border:'1px solid #397b94',borderRadius:'4px',padding:'5px 8px',font:'14px Consolas,monospace',whiteSpace:'nowrap'})
+      document.body.append(wheelValueNode)
+    }
+    wheelValueNode.textContent=String(Number(value.toFixed(3)))
+    wheelValueNode.style.left=Math.max(4,Math.min(uiWidth()-wheelValueNode.offsetWidth-4,point.x+14))+'px'
+    wheelValueNode.style.top=Math.max(4,Math.min(uiHeight()-32,point.y-36))+'px'
+    clearTimeout(wheelValueTimer);wheelValueTimer=setTimeout(clearWheelValue,900)
+  }
   let wheelEdit=null
   function wheelIdentity() {
     const e=state?.editor
@@ -1029,15 +1321,13 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       if(mark.dataset.keyLayer!==job.layer.uid || mark.dataset.keyParameter!==job.field.name || Math.abs(Number(mark.dataset.keyTime)-job.time)>1e-6)continue
       const lo=Number(mark.dataset.curveMin),hi=Number(mark.dataset.curveMax)
       if(hi>lo) {
+        mark.style.transition='none'
         mark.style.top=(44-(job.value-lo)/(hi-lo)*42)+'px'
         const path=mark.parentElement.querySelector('svg path')
         if(path && job.samples?.length) {
-          path.setAttribute('d',job.samples.map((sample,index)=>{
-            const edge=sample.time<=job.time?job.before:job.after
-            const weight=sample.time<job.before || sample.time>job.after ? 0 : Math.abs(job.time-edge)>1e-9 ? (sample.time-edge)/(job.time-edge) : 1
-            const value=sample.value+(job.value-job.originValue)*weight
-            return (index?'L':'M')+x(sample.time)*10+','+(48-(value-lo)/(hi-lo)*42)
-          }).join(' '))
+          cancelCurveAnimation(path)
+          path.setAttribute('d',previewKeySamples(job.samples,job.time,job.originValue,job.time,job.value,job.before,job.after,job.layer.start,job.layer.end)
+            .map((s,i)=>(i?'L':'M')+x(s.time)*10+','+(48-(s.value-lo)/(hi-lo)*42)).join(' '))
         }
       }
     }
@@ -1060,20 +1350,30 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     event.preventDefault();event.stopPropagation()
     if(wheelEdit && wheelEdit.identity!==identity)return
     const job=wheelEdit || {identity,layer,field,time:e.moveKey.time,value:e.moveKey.value,pending:false,originValue:e.moveKey.value,
-      samples:field.samples?.map(sample=>({...sample})),
-      before:(field.keys || []).filter(k=>k.time<e.moveKey.time).sort((a,b)=>a.time-b.time).at(-1)?.time ?? layer.start,
-      after:(field.keys || []).filter(k=>k.time>e.moveKey.time).sort((a,b)=>a.time-b.time)[0]?.time ?? layer.end}
+      samples:visibleCurveSamples(layer.uid,field),
+      before:(field.keys || []).filter(k=>k.time<e.moveKey.time).sort((a,b)=>a.time-b.time).at(-1)?.time,
+      after:(field.keys || []).filter(k=>k.time>e.moveKey.time).sort((a,b)=>a.time-b.time)[0]?.time}
     const step=field.integer ? Math.max(1,Math.round(field.step || 1)) : ({coarse:0.1,fine:0.01,ultra:0.001}[e.precision] || 0.1)
     job.value=Number(Math.max(Number.isFinite(field.min)?field.min:-Infinity,Math.min(Number.isFinite(field.max)?field.max:Infinity,job.value+(event.deltaY<0?step:-step))).toFixed(9))
-    job.pending=true;previewWheel(job)
+    job.point={x:clientX(event),y:clientY(event)}
+    job.pending=true;previewWheel(job);showWheelValue(job.value,job.point)
     if(wheelEdit)return
     wheelEdit=job
     void interact(async()=>{
       try {
         while(job.pending && wheelIdentity()===identity) {
           job.pending=false
-          if(!await sendEdit('drag_value',{targetValue:job.value}))break
-          if(wheelIdentity()===identity && job.pending)previewWheel(job)
+          if(!await sendEdit('drag_value',{targetValue:job.value})){clearWheelValue();break}
+          if(wheelIdentity()===identity){
+            if(job.pending)previewWheel(job)
+            else {
+              job.value=state.editor.moveKey.value
+              previewWheel(job)
+              const samples=job.samples && previewKeySamples(job.samples,job.time,job.originValue,job.time,job.value,job.before,job.after,job.layer.start,job.layer.end)
+              retainFieldCurve(layer.uid,field.name,samples)
+            }
+            showWheelValue(job.pending?job.value:state.editor.moveKey.value,job.point)
+          } else clearWheelValue()
         }
       } finally {wheelEdit=null;lastFullRead=0;rendered=''}
     })
@@ -1214,9 +1514,11 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     })
   }
   function marqueeKeys(lane,layer,field) {
+    lane.style.userSelect='none'
     lane.addEventListener('pointerdown',event=>{
       if(event.button!==0 || !event.shiftKey || event.ctrlKey || event.altKey || !state.editEnabled || editPending || interactionBusy || mouseGesture)return
       event.preventDefault();event.stopPropagation();clearTimeout(clickTimer)
+      window.getSelection()?.removeAllRanges()
       const rect=uiRect(lane), origin=clientX(event)
       const overlay=el('div','key-marquee')
       Object.assign(overlay.style,{position:'absolute',top:'0',bottom:'0',background:'#0699b244',border:'1px solid #63d4e7',pointerEvents:'none',zIndex:8})
@@ -1224,8 +1526,11 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       const g={marquee:true,node:lane};mouseGesture=g
       let endX=origin
       const move=e=>{endX=clientX(e);overlay.style.left=Math.max(0,Math.min(origin,endX)-rect.left)+'px';overlay.style.width=Math.abs(endX-origin)+'px'}
+      let finished=false
       const finish=e=>{
-        lane.removeEventListener('pointermove',move);lane.removeEventListener('pointerup',finish);lane.removeEventListener('pointercancel',finish)
+        if(finished)return
+        finished=true
+        lane.removeEventListener('pointermove',move);lane.removeEventListener('pointerup',finish);lane.removeEventListener('pointercancel',finish);lane.removeEventListener('lostpointercapture',finish)
         overlay.remove();if(mouseGesture===g)mouseGesture=null
         suppressClickUntil=performance.now()+400
         if(e.type!=='pointerup')return
@@ -1238,20 +1543,34 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
           else await sendEdit('key_group_select',{times:keys.map(k=>k.time)})
         })
       }
-      lane.addEventListener('pointermove',move);lane.addEventListener('pointerup',finish);lane.addEventListener('pointercancel',finish);move(event)
+      lane.addEventListener('pointermove',move);lane.addEventListener('pointerup',finish);lane.addEventListener('pointercancel',finish);lane.addEventListener('lostpointercapture',finish);move(event)
     },true)
+  }
+  function pendingKeyMarker(lane,time,field) {
+    const node=marker(lane,time,'','curve-key')
+    if(!node)return ()=>{}
+    const samples=(field.samples || []).filter(s=>Number.isFinite(s.value))
+    const before=samples.filter(s=>s.time<=time).at(-1),after=samples.find(s=>s.time>=time)
+    const value=before && after ? before.value+(after.value-before.value)*(time-before.time)/Math.max(1e-9,after.time-before.time) : before?.value ?? after?.value ?? field.value
+    const existing=lane.querySelector('[data-curve-min]')
+    const lo=existing ? Number(existing.dataset.curveMin) : Number.isFinite(field.min)?field.min:value-0.5
+    const hi=existing ? Number(existing.dataset.curveMax) : Number.isFinite(field.max)?field.max:value+0.5
+    Object.assign(node.style,{top:(hi>lo && Number.isFinite(value)?44-(value-lo)/(hi-lo)*42:24)+'px',width:'8px',height:'8px',marginLeft:'-4px',background:'#63d4e7',opacity:'.65',border:'1px solid #bdeaff',transform:'translateX(var(--pan,0px)) rotate(45deg)',pointerEvents:'none'})
+    node.title='PENDING DESIGNER'
+    return ()=>node.remove()
   }
   function addKeyAtPointer(lane,layer,field) {
     lane.ondblclick = event => {
-      if (!state.editEnabled || field.unsupported || field.canAnimate === false || event.target.closest('.timeline-target')) return
+      if (interactionBusy || editPending || mouseGesture || !state.editEnabled || field.unsupported || field.canAnimate === false || event.target.closest('.timeline-target')) return
       event.preventDefault(); event.stopPropagation(); clearTimeout(clickTimer)
       const rect = uiRect(lane)
       const time = start + (clientX(event)-rect.left)/rect.width*span
       if (time < layer.start || time > layer.end) return
+      const removePreview=field.resource || 'current' in field ? ()=>{} : pendingKeyMarker(lane,time,field)
       void interact(async () => {
         if (!await releaseViewerMode()) return
-        await sendEdit('key_insert',{trackUid:state.trackUid,layerUid:layer.uid,parameter:field.name,targetTime:time})
-      })
+        return sendEdit('key_insert',{trackUid:state.trackUid,layerUid:layer.uid,parameter:field.name,targetTime:time})
+      }).finally(()=>{removePreview();draw()})
     }
   }
   function constantResourceTarget(node,layer,field) {
@@ -1416,6 +1735,8 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     const ruler = row('TIME', 'ruler')
     const enableSeek = (lane) => {
       if (!state.seekEnabled) return
+      // Let the seek handler clear key selection and jump in one transaction.
+      lane.classList.add('timeline-target')
       lane.style.cursor = 'crosshair'
       lane.title = 'SEEK TO TIME'
       let hoverFrame=0,hoverPoint=null
@@ -1441,19 +1762,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
         if (event.ctrlKey || event.shiftKey || event.altKey) return
         const rect = uiRect(lane)
         const time = start + Math.max(0, Math.min(1, (clientX(event) - rect.left) / rect.width)) * span
-        try {
-          const response = await fetch('/api/seek', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-Viewer-Token': state.selectionToken },
-            body: JSON.stringify({ trackUid: state.trackUid, time }),
-            signal: AbortSignal.timeout(10000),
-          })
-          const result = await response.json()
-          $('selectionMessage').textContent = result.ok ? '' : result.reason || 'Seek unavailable'
-          rendered = ''
-        } catch {
-          $('selectionMessage').textContent = 'Seek unavailable; connection interrupted'
-        }
+        void seekTimeline(time)
       }
     }
     enableSeek(ruler.lane)
@@ -1497,7 +1806,6 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     }
     if (!field.sequenced || !field.keys?.length) return
     const samples = (field.samples || []).filter((s) => Number.isFinite(s.value))
-    if (!samples.length) return
     const values = samples.map((s) => s.value)
     values.push(
       ...(field.keys || [])
@@ -1544,6 +1852,52 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
         pointClick(point, layer, 'key', field.name, key.time)
       }
   }
+  let pendingSeek=null, seeking=false
+  async function seekTimeline(time) {
+    if (!state?.seekEnabled || !Number.isFinite(time)) return
+    // Retain a deliberate click until the final drag write completes. Coalesce
+    // further clicks, never reorder a seek ahead of an unfinished edit.
+    pendingSeek={time,trackUid:state.trackUid,token:state.selectionToken}
+    const rate=state.fps || 25
+    seekPreview={...pendingSeek,time:Math.max(0,Math.min(state.length ?? Infinity,Math.round(time*rate)/rate)),linked:state.editor?.linkTime!==false}
+    displayedTime=null
+    updatePlayhead()
+    if(seeking)return
+    seeking=true
+    try {
+      while(pendingSeek){
+        const deadline=performance.now()+15000
+        while(mouseGesture || editPending || interactionBusy){
+          if(performance.now()>deadline)throw new Error('Edit still pending')
+          await new Promise(resolve=>setTimeout(resolve,16))
+        }
+        const target=pendingSeek;pendingSeek=null
+        if(!state.seekEnabled || target.trackUid!==state.trackUid || target.token!==state.selectionToken)continue
+        await interact(async()=>{
+          const response=await fetch('/api/seek',{method:'POST',
+            headers:{'Content-Type':'application/json','X-Viewer-Token':target.token},
+            body:JSON.stringify({trackUid:target.trackUid,time:target.time}),signal:AbortSignal.timeout(10000)})
+          const result=await response.json()
+          if(target.trackUid!==state.trackUid)return
+          $('selectionMessage').textContent=result.ok?'':result.reason||'SEEK UNAVAILABLE'
+          if(result.ok){
+            adoptEditor(result.editor)
+            if(Number.isFinite(result.editRevision))confirmedRevision=Math.max(confirmedRevision,result.editRevision)
+            if(Number.isFinite(result.time) && state.editor?.linkTime!==false){
+              state.time=result.time
+              if(result.editor?.editTimecode)state.timecode=result.editor.editTimecode
+            }
+            // A seek is a discontinuity, never a short playback animation.
+            displayedTime=null
+            updatePlayhead()
+          }
+        })
+      }
+    } catch {
+      pendingSeek=null
+      $('selectionMessage').textContent='SEEK NOT CONFIRMED — TRY AGAIN AFTER THE EDIT COMPLETES'
+    } finally {seeking=false;seekPreview=null;displayedTime=null;updatePlayhead()}
+  }
   function seekTarget(node, time, label) {
     if (!node || !state.seekEnabled) return
         node.classList.add('timeline-target')
@@ -1551,21 +1905,13 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
         node.tabIndex = 0
         node.setAttribute('aria-label', label.toUpperCase())
         node.title = label.toUpperCase()
+        let down=null,dragged=false
+        node.addEventListener('pointerdown',e=>{down={x:e.clientX,y:e.clientY};dragged=false})
+        node.addEventListener('pointerup',e=>{dragged=Boolean(down && Math.hypot(e.clientX-down.x,e.clientY-down.y)>3);down=null})
         node.onclick = async event => {
           event.stopPropagation()
-          if (performance.now() < suppressClickUntil) return
-          try {
-            const response = await fetch('/api/seek', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', 'X-Viewer-Token': state.selectionToken },
-              body: JSON.stringify({ trackUid: state.trackUid, time: time }),
-              signal: AbortSignal.timeout(10000),
-            })
-            const result = await response.json()
-            $('selectionMessage').textContent = result.ok ? '' : result.reason || 'Seek unavailable'
-          } catch {
-            $('selectionMessage').textContent = 'Seek unavailable; connection interrupted'
-          }
+          if (dragged) { dragged=false; return }
+          void seekTimeline(time)
         }
         node.onkeydown = event => {
           if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); node.click() }
@@ -1679,6 +2025,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
   function draw() {
     if (mouseGesture || layerReorder || layerMarquee || editPending || interactionBusy) return
     if (!state || resizingWaveform) return
+    keySelectionIndex=null;keySelectionSignature='';highlightedKeys=[]
     clearDragTimes()
     if(layerSelectionTrack!==state.trackUid || state.viewOnly) {selectedLayers.clear();layerSelectionTrack=state.trackUid}
     for(const uid of selectedLayers)if(!state.layers.some(l=>l.uid===uid))selectedLayers.delete(uid)
@@ -1686,6 +2033,8 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     for (const node of sheet.querySelectorAll('[data-waveform-uid]'))
       waveformHeights.set(node.dataset.waveformUid, uiRect(node).height)
     sheet.style.setProperty('--pan', '0px')
+    presentation.unpaint()
+    playheadNodes=null
     sheet.replaceChildren()
     sheet.dataset.origin = start
     grid()
@@ -1699,6 +2048,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       ['NOTES', 'notes'],
     ]) {
       const r = row(title, 'annotations')
+      r.lane.dataset.markerKind=kind
       annotationMouse(r.lane,kind)
       const entries =
         kind === 'notes'
@@ -1706,6 +2056,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
           : (annotations.tags || []).filter((t) => String(t.type).toLowerCase().includes(kind))
       for (const item of entries) {
         const node = marker(r.lane, item.time, String(item.text ?? item.value ?? ''), 'cue-marker ' + kind)
+        if(node){node.dataset.markerTime=String(item.time);node.dataset.markerText=String(item.text ?? item.value ?? '')}
         if (node && kind!=='notes' && duplicates.has(item)) {
           Object.assign(node.style,{background:'#76252d',borderColor:'#ff6268',color:'#fff0f1'})
           node.title='DUPLICATE '+title+' VALUE: '+node.textContent
@@ -2033,7 +2384,10 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     }
     viewport.scrollTop = top
     const focus = JSON.stringify([state.trackUid, state.focusUid, state.parameter])
-    if (state.focusUid && focus !== revealedLayer) {
+    const preserveScroll=preserveGestureScroll?.trackUid===state.trackUid && preserveGestureScroll.layerUid===state.focusUid
+    preserveGestureScroll=null
+    if(preserveScroll)revealedLayer=focus
+    if (!preserveScroll && state.focusUid && focus !== revealedLayer) {
       const selected = [...sheet.querySelectorAll('.layer[data-uid]')].find(node => node.dataset.uid === state.focusUid)
       if (selected) {
         revealedLayer = focus
@@ -2045,18 +2399,33 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
         viewport.scrollTop = selectionScroll(top, viewport.clientHeight, headers, block, parameter ? bounds(parameter) : bounds(selected))
       }
     }
+    updateKeySelection()
     updatePlayhead()
+    if(presentation.size)presentation.paint()
   }
+  // DOM references live for one draw only; live data is resolved anew on each update.
+  let playheadNodes=null
+  function timelineNodes() {
+    if(!playheadNodes)playheadNodes={
+      selects:[...sheet.querySelectorAll('[data-select-layer]')],
+      values:[...sheet.querySelectorAll('[data-parameter-value]')].map(node=>({node,label:node.querySelector('small')})),
+      heads:[...sheet.querySelectorAll('.header-playhead, #playhead')],
+      editHeads:[...sheet.querySelectorAll('.header-edithead, #edithead')],
+    }
+    return playheadNodes
+  }
+  function setText(node,text) { if(!node.hasAttribute?.('data-presentation-pending') && node.textContent!==text)node.textContent=text }
   function updatePlayhead() {
     if (!state) return
     const external = state.externalTimecode
     $('externalTc').hidden = !external
-    $('externalTc').textContent = external ? ' \u00b7 TC IN: ' + (external.value || '\u2014') : ''
+    setText($('externalTc'),external ? ' \u00b7 TC IN: ' + (external.value || '\u2014') : '')
     $('externalTc').title = external ? String(external.status || '').toUpperCase() : ''
-    $('clock').textContent = state.timecode || '—'
+    const preview=activeSeekPreview()
+    setText($('clock'),preview?.linked ? previewTimecode(preview.time) : state.timecode || '—')
     $('editClock').hidden = state.editor?.linkTime !== false
-    $('editClock').textContent = state.editor?.editTimecode || '—'
-    $('beat').textContent = state.quantized && Number.isFinite(state.beat) ? 'BEAT ' + Number(state.beat.toFixed(2)) : ''
+    setText($('editClock'),preview && !preview.linked ? previewTimecode(preview.time) : state.editor?.editTimecode || '—')
+    setText($('beat'),state.quantized && Number.isFinite(state.beat) ? 'BEAT ' + Number(state.beat.toFixed(2)) : '')
     const annotations = state.annotations || {}
     const latest = items => items.filter(item => item.time <= state.time).reduce((a, b) => !a || b.time >= a.time ? b : a, null)
     const details = []
@@ -2066,7 +2435,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     }
     const note = latest(annotations.notes || [])
     if (note?.text) details.push(note.text)
-    $('clockDetails').textContent = details.join(' · ')
+    setText($('clockDetails'),details.join(' · '))
     $('clockDetails').title = details.join(' · ')
     const section = (state.sections || []).find(item => state.time >= item.start && state.time < item.end)
     // Section OUT is exclusive; playback stops on the last frame inside it.
@@ -2075,48 +2444,57 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     const remaining = section ? Math.max(0, lastFrame - state.time - 1e-7) : null
     const whole = remaining === null ? 0 : Math.ceil(remaining)
     const duration = [Math.floor(whole / 3600), Math.floor(whole / 60) % 60, whole % 60].map(n => String(n).padStart(2, '0')).join(':')
-    $('sectionRemaining').textContent = section ? duration : ''
+    setText($('sectionRemaining'),section ? duration : '')
     $('sectionRemaining').className = remaining !== null && remaining <= 10 ? 'ending' : ''
-    for (const button of sheet.querySelectorAll('[data-select-layer]')) {
-      const target = state.layers.find((layer) => layer.uid === button.dataset.selectLayer)
+    const nodes=timelineNodes()
+    const layersByUid=new Map(state.layers.map(layer=>[layer.uid,layer]))
+    const fieldsByLayer=new Map()
+    const cursor=editClock()
+    for (const button of nodes.selects) {
+      const target = layersByUid.get(button.dataset.selectLayer)
       button.title = 'SELECT IN COMPANION'
       button.disabled =
         !state.selectionEnabled ||
         !target ||
         (target.group && button.dataset.reorderGroup!=='true') ||
-        (!target.group && button.dataset.selectLayerStart !== 'true' && (editClock()<target.start-1e-7 || editClock()>target.end+1e-7))
+        (!target.group && button.dataset.selectLayerStart !== 'true' && (cursor<target.start-1e-7 || cursor>target.end+1e-7))
     }
-    const layer = state.layers.find((layer) => layer.uid === state.focusUid)
-    for (const node of sheet.querySelectorAll('[data-parameter-value]')) {
-      const owner = state.layers.find(item => item.uid === node.dataset.parameterLayer)
-      const field = owner?.fields.find((field) => field.name === node.dataset.parameterValue)
+    for (const {node,label} of nodes.values) {
+      const owner = layersByUid.get(node.dataset.parameterLayer)
+      if(owner && !fieldsByLayer.has(owner.uid))fieldsByLayer.set(owner.uid,new Map((owner.fields || []).map(field=>[field.name,field])))
+      const field = fieldsByLayer.get(owner?.uid)?.get(node.dataset.parameterValue)
       if (!field) continue
       const value =
         owner?.uid === state.focusUid && field.name === state.parameter && Number.isFinite(state.liveValue) ? state.liveValue : field.value
-      const label = node.querySelector('small')
       if (label && Number.isFinite(value))
-        label.textContent =
-          field.choices?.find((choice) => choice.value === value)?.label ??
-          Number(value.toFixed(5)).toString()
+        setText(label,field.choices?.find((choice) => choice.value === value)?.label ?? Number(value.toFixed(5)).toString())
     }
+    updatePlayheadPosition()
+  }
+  function updatePlayheadPosition(panning=false) {
+    if(!state)return
+    const nodes=timelineNodes()
+    const width=Math.max(0,sheet.clientWidth-240)
     // Every segment uses one pixel position and transition for the same paint.
     // Different easing on sticky headers and the body visibly tears the line.
-    const fraction = x(state.time) / 100
-    const position = fraction * Math.max(0, sheet.clientWidth - 240)
-    const transition = !frame && displayedTime !== null && Math.abs(state.time - displayedTime) < 0.75
+    const clock=playbackClock()
+    const fraction = x(clock) / 100
+    const position = fraction * width
+    const transition = !panning && !frame && displayedTime !== null && Math.abs(clock - displayedTime) < 0.75
       ? 'left 100ms linear' : 'none'
-    for (const node of sheet.querySelectorAll('.header-playhead, #playhead')) {
-      node.style.transition = transition
+    for (const node of nodes.heads) {
+      // Newly drawn segments have no previous screen position to animate from.
+      node.style.transition = node.style.left ? transition : 'none'
       node.style.left = (position + (node.id === 'playhead' ? 240 : 0)) + 'px'
       node.hidden = fraction < 0 || fraction > 1
     }
     const editFraction=x(editClock())/100
-    const editPosition=editFraction*Math.max(0,sheet.clientWidth-240)
-    for(const node of sheet.querySelectorAll('.header-edithead, #edithead')) {
+    const editPosition=editFraction*width
+    for(const node of nodes.editHeads) {
       node.style.left=(editPosition+(node.id==='edithead'?240:0))+'px'
       node.hidden=state.editor?.linkTime !== false || editFraction<0 || editFraction>1
     }
-    displayedTime = state.time
+    displayedTime = clock
   }
   function bounds(value) {
     return Math.max(0, Math.min(Math.max(0, (state?.length || span) - span), value))
@@ -2140,7 +2518,8 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     start = bounds(start + delta * 0.16)
     const offset = ((Number(sheet.dataset.origin) - start) / span) * Math.max(1, sheet.clientWidth - 240)
     sheet.style.setProperty('--pan', offset + 'px')
-    updatePlayhead()
+    // Follow animation moves geometry only; controls and values update on live data.
+    updatePlayheadPosition(true)
     frame = requestAnimationFrame(animate)
   }
   function setFollow(value) {
@@ -2207,6 +2586,9 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
   let viewerZoomCursor = null
   document.addEventListener('visibilitychange', () => { viewerZoomCursor = null })
   function paintLiveGeometry(layer, previous, oldEditor) {
+    // Group drag DOM still carries a transient translation until a complete
+    // native snapshot arrives. Never add absolute key positions on top of it.
+    if(pendingGroupGeometry.has(layer.uid))return
     const root=sheet.querySelector('.layer[data-uid="'+layer.uid+'"]')
     if(!root)return
     const motion='left 65ms linear, top 65ms linear, width 65ms linear'
@@ -2234,7 +2616,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       if(row.dataset.ownerLayer!==layer.uid)continue
       const name=row.querySelector('[data-parameter-value]')?.dataset.parameterValue
       const field=layer.fields?.find(f=>f.name===name),path=row.querySelector('.lane svg path'),mark=row.querySelector('[data-curve-min]')
-      if(!path || !mark || !field?.samples?.length)continue
+      if(!path || !mark || !field?.samples?.length || path._previewSamples)continue
       const lo=Number(mark.dataset.curveMin),hi=Number(mark.dataset.curveMax)
       if(!(hi>lo))continue
       // Animate presentation only. Every destination is confirmed native data.
@@ -2274,6 +2656,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
           const modeChanged = state.viewOnly !== live.viewOnly
           Object.assign(state, live)
           if (modeChanged) {
+            presentation.clear()
             editRevision++; lastFullRead = 0; rendered = ''
             closeKeyMenu(); layerMarquee?.cancel(); selectedLayers.clear(); mouseGesture = null; layerReorder = null; showSnap(null)
           }
@@ -2298,11 +2681,21 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
         }
       }
     } catch {
+      presentation.clear()
       $('status').textContent = 'CONNECTION LOST'
       $('status').className = 'error'; $('status').disabled = true
     } finally {
       setTimeout(pollLive, 75)
     }
+  }
+  function mergeLiveClock(snapshot, live, minimumRevision) {
+    // Cached live feedback may predate a just-confirmed seek. It must never
+    // overwrite the newer clock returned with the full snapshot.
+    if(!live || (live.editRevision || 0)<Math.max(minimumRevision,snapshot.editRevision || 0) ||
+      live.trackUid!==snapshot.trackUid || live.focusUid!==snapshot.focusUid)return
+    snapshot.time=live.time
+    snapshot.timecode=live.timecode
+    snapshot.liveValue=live.liveValue
   }
   async function poll() {
     try {
@@ -2330,19 +2723,18 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
         if (readRevision !== editRevision || editPending || interactionBusy || mouseGesture || performance.now()<liveGeometryUntil) return
         if (full) {
           // A selection can change while a slow snapshot is in flight.
-          if (latestLive && (latestLive.trackUid !== incoming.trackUid || latestLive.focusUid !== incoming.focusUid)) {
+          const compatibleLive = latestLive && (latestLive.editRevision || 0) >= Math.max(confirmedRevision,incoming.editRevision || 0) ? latestLive : null
+          if (compatibleLive && (compatibleLive.trackUid !== incoming.trackUid || compatibleLive.focusUid !== incoming.focusUid)) {
             lastFullRead = 0
             rendered = ''
             return
           }
           const currentEditor = state?.editor
+          presentation.clear()
+          pendingGroupGeometry.clear()
           state = incoming
           if (editPending) state.editor = currentEditor
-          if (latestLive?.trackUid === state.trackUid && latestLive?.focusUid === state.focusUid) {
-            state.time = latestLive.time
-            state.timecode = latestLive.timecode
-            state.liveValue = latestLive.liveValue
-          }
+          mergeLiveClock(state,compatibleLive,confirmedRevision)
           lastFullRead = performance.now()
           lastView = view
         }
@@ -2371,13 +2763,14 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
         followClock()
       }
     } catch {
+      presentation.clear()
       $('status').textContent = 'CONNECTION LOST'
       $('status').className = 'error'; $('status').disabled = true
     } finally {
       setTimeout(poll, 100)
     }
   }
-  const uiSizes = {small:1,medium:1.1,large:1.2}
+  const uiSizes = {small:1,medium:1.2,large:1.4}
   function setUiSize(size, save = true) {
     if (!Object.hasOwn(uiSizes,size) || mouseGesture || layerReorder || layerMarquee || editPending || interactionBusy || resizingWaveform) return
     clearDragTimes(); closeKeyMenu()
@@ -2403,8 +2796,8 @@ const stylesheet = `
 .resource-picker[hidden]{display:none}.resource-picker{position:fixed;z-index:40;right:20px;top:160px;width:min(680px,calc(100vw / var(--ui-scale,1) - 40px));max-height:calc(100vh / var(--ui-scale,1) - 180px);overflow:auto;background:#151e23;border:1px solid #237484;border-radius:9px;box-shadow:0 12px 40px #000a;padding:10px}.resource-picker-bar{display:flex;align-items:center;gap:7px;padding:4px 0}.resource-picker-bar strong{flex:1}.resource-picker button{font-size:10px;padding:4px 7px}.resource-picker-body{display:grid;grid-template-columns:180px 1fr;gap:12px;margin-top:8px}.resource-folders{display:flex;flex-direction:column;gap:3px;max-height:340px;overflow:auto;border-right:1px solid #29363d;padding-right:8px}.resource-folders button{text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-color:transparent;background:transparent}.resource-folders button[aria-pressed=true]{background:#10343d;border-color:#237484}.resource-files{min-width:0}.resource-path{color:#8bcbd6;font-size:11px;overflow-wrap:anywhere;padding-bottom:8px}.resource-file-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;min-height:150px}.resource-file{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0}.resource-file>span:last-child{max-width:100%;overflow-wrap:anywhere;line-height:1.3}.resource-file .thumb{width:100%;height:52px}.resource-picker .resource-picker-bar:last-child{justify-content:flex-end}
 .key-edit-menu{position:fixed;z-index:50;display:grid;gap:3px;padding:5px;width:165px;background:#151e23;border:1px solid #0699b2;border-radius:5px;box-shadow:0 4px 16px #0009}.key-edit-menu button{padding:3px 7px;font-size:10px;text-align:left}.value-edit-menu button{font-size:11px;padding:5px 7px;min-height:27px;width:100%;box-sizing:border-box}
 .group-layer .label{background:#24213a}.group-layer .clip{background:#49416699;border-color:#8e80ba;color:#e2dafa}.group-layer .layer-edge{border-color:#8e80ba;cursor:default}.key-point.selected-keyframe,.curve-key.selected-keyframe{scale:1.4;z-index:4}.timeline-target,.clip{touch-action:none}.key-edit-menu[hidden]{display:none}.snap-option{display:flex;align-items:center;gap:7px;padding:6px 8px;font-size:10px;white-space:nowrap;cursor:pointer}.snap-guide{position:absolute;top:0;bottom:0;width:2px;background:#ffc580;box-shadow:0 0 5px #ffc58088;z-index:8;pointer-events:none}.key-edit-menu input{background:#101a20;color:#eef4f6;border:1px solid #44616f;border-radius:3px;padding:5px}.key-edit-menu strong{font-size:11px}
-:root{color-scheme:dark;font:12px 'Segoe UI',Arial,sans-serif;background:#101517;color:#eef4f6}*{box-sizing:border-box}body{margin:0;zoom:var(--ui-scale,1);height:calc(100vh / var(--ui-scale,1));display:flex;flex-direction:column;overflow:hidden}header,.toolbar{display:flex;align-items:center;gap:14px;padding:16px 22px;border-bottom:1px solid #29363d}header{height:82px;min-height:82px;padding:5px 16px;position:relative}#status{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.08em}#status:before{content:'';width:8px;height:8px;border-radius:50%;background:#849aa5}#status.live:before{background:#43e68c;animation:live-pulse 1.4s ease-in-out infinite}#status.error:before{background:#ffc580}@keyframes live-pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 #43e68c44}50%{opacity:.45;box-shadow:0 0 0 4px #43e68c00}}@media(prefers-reduced-motion:reduce){#status.live:before{animation:none}}h1{font-size:15px;letter-spacing:.08em;margin:0}.brand-logo{position:relative;width:72px;height:41px;overflow:hidden;flex-shrink:0;align-self:center}.brand-logo img{position:absolute;top:-19px;left:-4px;width:80px;height:80px}header small{display:block;color:#849aa5;margin-top:5px;letter-spacing:.15em}.spacer{flex:1}#clockBlock{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;max-width:40%;line-height:1.2}#editClock{font:14px Consolas,monospace;color:#4aaaff;line-height:16px}#clock{color:#43e68c;font:24px Consolas,monospace;white-space:nowrap}#beat{font:12px Consolas,monospace;color:#8bcbd6;margin-left:10px}#clockDetails{font-size:12px;color:#9eb6c2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:15px}#sectionRemaining{font:14px Consolas,monospace;color:#8bcbd6;min-height:17px}#sectionRemaining.ending{color:#ff6268}.live{color:#43e68c}.error{color:#ffc580}.ui-size-controls{display:flex;gap:2px;flex-shrink:0}.ui-size-controls button{width:24px;height:20px;padding:2px 4px;border-radius:3px;display:grid;place-items:center}.ui-size-controls svg{width:14px;height:12px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.toolbar{padding:4px 16px;gap:7px;flex-wrap:wrap;min-height:32px}.toolbar button{padding:3px 7px;font-size:10px;line-height:16px;border-radius:4px}.toolbar #track,.toolbar #externalTc{font-size:11px}button{background:#1b272d;border:1px solid #34444d;border-radius:5px;color:#d4e2e8;padding:7px 10px;cursor:pointer}button[aria-pressed=true]{border-color:#0699b2;color:#63d4e7}button:focus-visible{outline:2px solid #43e68c}#viewport{flex:1;overflow:auto;margin:7px 12px;border:1px solid #29363d;border-radius:6px;min-height:0}#sheet{position:relative;min-width:760px;overflow:clip;min-height:100%}.row{display:grid;grid-template-columns:240px 1fr;position:relative;min-height:54px;border-bottom:1px solid #26343b}.label{background:#151e23;padding:10px 12px;display:flex;gap:9px;align-items:center;z-index:3;border-right:1px solid #29363d;min-width:0;overflow:hidden}.layer{height:52px;min-height:52px}.layer>.label{position:relative;padding-top:14px;padding-bottom:4px}.layer>.lane>.clip{top:11px;height:30px;padding-top:6px;padding-bottom:6px}.layer>.lane>.key-point{top:22px}.layer>.lane>.thumb{top:14px}.label .name{overflow:hidden;text-overflow:ellipsis}.label small{margin-left:auto;color:#729db4;font-size:10px;max-width:85px;overflow:hidden;text-overflow:ellipsis}.lane{position:relative;min-width:0;overflow:hidden}.timeline-header{position:sticky;z-index:6;background:#101517;height:30px;min-height:30px}.timeline-header>.label{padding-top:5px;padding-bottom:5px}.header-edithead,.edithead{position:absolute;top:0;bottom:0;width:2px;background:#4aaaff;box-shadow:0 0 5px #4aaaff66;pointer-events:none;z-index:5;transform:none!important}.header-playhead{position:absolute;top:0;bottom:0;width:1px;background:#43e68c;pointer-events:none;z-index:4;transform:none!important}.section-band{position:absolute;top:0;bottom:0;border-left:1px solid #4b8792;pointer-events:none;background:#16414b}.section-0{background:#293b4d;border-color:#6b8caa}.ruler{min-height:30px}.ruler>.label{font-size:10px}.annotations{min-height:30px;font-size:10px}.focused{background:#10343d}.focused .label{background:#10343d}.parameter .label{padding-left:30px;color:#91afbd}.parameter.selected{color:#43e68c}.parameter.selected .label{color:#43e68c}.parameter .lane{color:#729db4}.selected .lane{color:#43e68c}.lane svg{width:100%;height:54px}.clip{position:absolute;top:8px;height:36px;background:#1d3e49;border:1px solid #2b626f;border-radius:4px;padding:9px 42px;overflow:hidden;white-space:nowrap;color:#a9d8e3}.clip:disabled{cursor:default}.clip:not(:disabled):hover{border-color:#63d4e7;background:#26515e}.clip{min-width:0;padding:0!important;text-align:left}.playback-mode{font-size:10px;color:#8bcbd6;margin-left:5px}.playback-icon{display:inline-flex;vertical-align:middle;margin-left:5px;color:#8bcbd6}.lane .playback-icon svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.clip-label{display:block;padding:6px 42px;white-space:nowrap}.marker{position:absolute;top:7px;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;z-index:2;font-size:10px}.key{color:#72d5e8;top:20px;font-size:10px}.lane>.key-point{width:8px;height:8px;margin-left:-4px;top:23px;background:currentColor;border:1px solid #101517;transform:translateX(var(--pan,0px)) rotate(45deg)}.timeline-target{cursor:pointer}.timeline-target:focus-visible{outline:2px solid #43e68c}.layer-edge{top:11px;width:7px;height:30px;margin-left:-3px;border:1px solid #63d4e7;border-radius:2px;background:#0699b255;z-index:3}.timeline-target:hover{filter:brightness(1.6);color:#63d4e7;box-shadow:0 0 7px #63d4e7;outline:1px solid #63d4e7}.tick{color:#849aa5;font:10px Consolas,monospace}.ruler .tick{font-size:12px;color:#bdd0da}.cue-marker{top:3px;overflow:visible;max-width:220px;padding:3px 7px 3px 13px;height:22px;line-height:16px;border:0;border-radius:0;clip-path:polygon(0 50%,9px 0,100% 0,100% 100%,9px 100%);background:#29414e;font-size:10px;white-space:nowrap}.cue-marker:before{content:"";position:absolute;left:0;top:0;width:9px;height:22px;background:currentColor;clip-path:polygon(0 50%,100% 0,100% 100%)}.cue-marker.notes{max-width:260px}.cue-marker.midi{color:#b7a0dc}.cue-marker.tc{color:#74c6d8}.cue{color:#e1bf77}.notes{color:#acbfc8}.resource{display:flex;align-items:center;gap:5px;top:3px}.thumb{display:inline-flex;width:34px;height:24px;align-items:center;justify-content:center;background:#263b44;border-radius:3px;overflow:hidden;flex-shrink:0;color:#729db4}.thumb.large{width:60px;height:38px}.thumb img{width:100%;height:100%;object-fit:cover}.gridline{position:absolute;top:30px;bottom:0;width:1px;background:#88a9bb0b;pointer-events:none;z-index:1}.gridline.major{background:#88a9bb20}.playhead{position:absolute;top:0;bottom:0;width:1px;background:#43e68c;box-shadow:0 0 5px #43e68c66;z-index:4;pointer-events:none}.lane>*{transform:translateX(var(--pan,0px))}.alignment-guide.subtle{opacity:.3;pointer-events:none}.alignment-guide.matched{border-left:2px solid #ffe0a0;box-shadow:0 0 5px #e7ba6370}.alignment-guide.subtle.matched{opacity:.65}.alignment-guide{pointer-events:none;position:absolute;top:0;bottom:0;border-left:1px dashed #e7ba63;z-index:3;transform:translateX(var(--pan,0px))}.gridline,.relation{transform:translateX(var(--pan,0px))}.select-label{border:0;padding:0;background:transparent;color:inherit;text-align:left;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.select-label:disabled{cursor:default}.select-label:not(:disabled):hover{color:#63d4e7}#selectionMessage{color:#e1bf77;margin-left:12px}.wave-controls{position:absolute;right:4px;top:4px;display:flex;gap:2px;z-index:5}.wave-controls button{width:16px;height:12px;padding:0;background:#151e23;border:1px solid #34444d;border-radius:4px;color:#849aa5;display:grid;place-items:center}.wave-controls svg{width:12px;height:10px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.wave-controls button:hover,.wave-controls button[aria-pressed=true]{color:#63d4e7;border-color:#0699b2}.wave-controls .parameter-mode{font-size:10px;line-height:10px}.wave-controls button:disabled{opacity:.45}.wave-beat-line{position:absolute;top:0;bottom:0;width:1px;background:#accdd526;z-index:2;pointer-events:none}.wave-beat-line.timeline-target{pointer-events:auto;cursor:pointer}.wave-beat-line.timeline-target:before{content:"";position:absolute;left:-4px;top:0;bottom:0;width:9px}.wave-beat-line.major{background:#accdd55c}.beat-tick{background:#101517bb;padding:1px 3px;z-index:3}.track-waveform{position:sticky;z-index:6;background:#101517}.waveform .lane svg{height:100%}.waveform .label{font-size:10px}.wave-status{display:block;padding:14px;color:#849aa5}.relation{position:absolute;width:3px;margin-left:-1px;background:#bd9be0;border-radius:3px;z-index:2;pointer-events:none;box-shadow:0 0 0 1px #10151799}.relation:after{content:"";position:absolute;width:13px;height:10px;left:-5px;background:#d4b8ef;clip-path:polygon(0 0,100% 0,50% 100%)}.relation.down:after{bottom:-1px}.relation.up:after{top:-1px;transform:rotate(180deg)}.relation:before{content:"";position:absolute;left:-2px;width:7px;height:7px;background:#d4b8ef;border-radius:50%}.relation.down:before{top:-2px}.relation.up:before{bottom:-2px}.layer-selection-box{position:fixed;z-index:80;pointer-events:none;border:1px solid #63d4e7;background:#0699b22b}.layer-multi-selected>.label,.layer-multi-selected>.lane{background-color:#123e49;box-shadow:inset 0 0 0 1px #0699b2}.layer-display-bar{height:22px;min-height:22px;background:#19262d;border-bottom:2px solid #35505e}.layer-display-bar>.label{background:#19262d;font-size:9px;padding:2px 12px;position:relative}.layer-display-bar .wave-controls{top:4px}.layer-display-bar>.lane{background:#19262d}footer{min-height:27px;padding:4px 22px;color:#849aa5;font-size:10px}#warnings{color:#d5b97b;margin-left:12px}
+:root{color-scheme:dark;font:12px 'Segoe UI',Arial,sans-serif;background:#101517;color:#eef4f6}*{box-sizing:border-box}body{margin:0;zoom:var(--ui-scale,1);height:calc(100vh / var(--ui-scale,1));display:flex;flex-direction:column;overflow:hidden}header,.toolbar{display:flex;align-items:center;gap:14px;padding:16px 22px;border-bottom:1px solid #29363d}header{height:82px;min-height:82px;padding:5px 16px;position:relative}#status{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.08em}#status:before{content:'';width:8px;height:8px;border-radius:50%;background:#849aa5}#status.live:before{background:#43e68c;animation:live-pulse 1.4s ease-in-out infinite}#status.error:before{background:#ffc580}@keyframes live-pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 #43e68c44}50%{opacity:.45;box-shadow:0 0 0 4px #43e68c00}}@media(prefers-reduced-motion:reduce){#status.live:before{animation:none}}h1{font-size:15px;letter-spacing:.08em;margin:0}.brand-logo{position:relative;width:72px;height:41px;overflow:hidden;flex-shrink:0;align-self:center}.brand-logo img{position:absolute;top:-19px;left:-4px;width:80px;height:80px}header small{display:block;color:#849aa5;margin-top:5px;letter-spacing:.15em}.spacer{flex:1}#clockBlock{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;max-width:40%;line-height:1.2}#editClock{font:14px Consolas,monospace;color:#4aaaff;line-height:16px}#clock{color:#43e68c;font:24px Consolas,monospace;white-space:nowrap}#beat{font:12px Consolas,monospace;color:#8bcbd6;margin-left:10px}#clockDetails{font-size:12px;color:#9eb6c2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:15px}#sectionRemaining{font:14px Consolas,monospace;color:#8bcbd6;min-height:17px}#sectionRemaining.ending{color:#ff6268}.live{color:#43e68c}.error{color:#ffc580}.ui-size-controls{display:flex;gap:2px;flex-shrink:0}.ui-size-controls button{width:24px;height:20px;padding:2px 4px;border-radius:3px;display:grid;place-items:center}.ui-size-controls svg{width:14px;height:12px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.toolbar{padding:4px 16px;gap:7px;flex-wrap:wrap;min-height:32px}.toolbar button{padding:3px 7px;font-size:10px;line-height:16px;border-radius:4px}.toolbar #track,.toolbar #externalTc{font-size:11px}button{background:#1b272d;border:1px solid #34444d;border-radius:5px;color:#d4e2e8;padding:7px 10px;cursor:pointer}button[aria-pressed=true]{border-color:#0699b2;color:#63d4e7}button:focus-visible{outline:2px solid #43e68c}#viewport{flex:1;overflow:auto;overflow-anchor:none;margin:7px 12px;border:1px solid #29363d;border-radius:6px;min-height:0}#sheet{position:relative;min-width:760px;overflow:clip;min-height:100%}.row{display:grid;grid-template-columns:240px 1fr;position:relative;min-height:54px;border-bottom:1px solid #26343b}.label{background:#151e23;padding:10px 12px;display:flex;gap:9px;align-items:center;z-index:3;border-right:1px solid #29363d;min-width:0;overflow:hidden}.layer{height:52px;min-height:52px}.layer>.label{position:relative;padding-top:14px;padding-bottom:4px}.layer>.lane>.clip{top:11px;height:30px;padding-top:6px;padding-bottom:6px}.layer>.lane>.key-point{top:22px}.layer>.lane>.thumb{top:14px}.label .name{overflow:hidden;text-overflow:ellipsis}.label small{margin-left:auto;color:#729db4;font-size:10px;max-width:85px;overflow:hidden;text-overflow:ellipsis}.lane{position:relative;min-width:0;overflow:hidden}.timeline-header{position:sticky;z-index:6;background:#101517;height:30px;min-height:30px}.timeline-header>.label{padding-top:5px;padding-bottom:5px}.header-edithead,.edithead{position:absolute;top:0;bottom:0;width:2px;background:#4aaaff;box-shadow:0 0 5px #4aaaff66;pointer-events:none;z-index:5;transform:none!important}.header-playhead{position:absolute;top:0;bottom:0;width:1px;background:#43e68c;pointer-events:none;z-index:4;transform:none!important}.section-band{position:absolute;top:0;bottom:0;border-left:1px solid #4b8792;pointer-events:none;background:#16414b}.section-0{background:#293b4d;border-color:#6b8caa}.ruler{min-height:30px}.ruler>.label{font-size:10px}.annotations{min-height:30px;font-size:10px}.focused{background:#10343d}.focused .label{background:#10343d}.parameter .label{padding-left:30px;color:#91afbd}.parameter.selected{color:#43e68c}.parameter.selected .label{color:#43e68c}.parameter .lane{color:#729db4}.selected .lane{color:#43e68c}.lane svg{width:100%;height:54px}.clip{position:absolute;top:8px;height:36px;background:#1d3e49;border:1px solid #2b626f;border-radius:4px;padding:9px 42px;overflow:hidden;white-space:nowrap;color:#a9d8e3}.clip:disabled{cursor:default}.clip:not(:disabled):hover{border-color:#63d4e7;background:#26515e}.clip{min-width:0;padding:0!important;text-align:left}.playback-mode{font-size:10px;color:#8bcbd6;margin-left:5px}.playback-icon{display:inline-flex;vertical-align:middle;margin-left:5px;color:#8bcbd6}.lane .playback-icon svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.clip-label{display:block;padding:6px 42px;white-space:nowrap}.marker{position:absolute;top:7px;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;z-index:2;font-size:10px}.key{color:#72d5e8;top:20px;font-size:10px}.lane>.key-point{width:8px;height:8px;margin-left:-4px;top:23px;background:currentColor;border:1px solid #101517;transform:translateX(var(--pan,0px)) rotate(45deg)}.timeline-target{cursor:pointer}.timeline-target:focus-visible{outline:2px solid #43e68c}.layer-edge{top:11px;width:7px;height:30px;margin-left:-3px;border:1px solid #63d4e7;border-radius:2px;background:#0699b255;z-index:3}.timeline-target:hover{filter:brightness(1.6);color:#63d4e7;box-shadow:0 0 7px #63d4e7;outline:1px solid #63d4e7}.tick{color:#849aa5;font:10px Consolas,monospace}.ruler .tick{font-size:12px;color:#bdd0da}.cue-marker{top:3px;overflow:visible;max-width:220px;padding:3px 7px 3px 13px;height:22px;line-height:16px;border:0;border-radius:0;clip-path:polygon(0 50%,9px 0,100% 0,100% 100%,9px 100%);background:#29414e;font-size:10px;white-space:nowrap}.cue-marker:before{content:"";position:absolute;left:0;top:0;width:9px;height:22px;background:currentColor;clip-path:polygon(0 50%,100% 0,100% 100%)}.cue-marker.notes{max-width:260px}.cue-marker.midi{color:#b7a0dc}.cue-marker.tc{color:#74c6d8}.cue{color:#e1bf77}.notes{color:#acbfc8}.resource{display:flex;align-items:center;gap:5px;top:3px}.thumb{display:inline-flex;width:34px;height:24px;align-items:center;justify-content:center;background:#263b44;border-radius:3px;overflow:hidden;flex-shrink:0;color:#729db4}.thumb.large{width:60px;height:38px}.thumb img{width:100%;height:100%;object-fit:cover}.gridline{position:absolute;top:30px;bottom:0;width:1px;background:#88a9bb0b;pointer-events:none;z-index:1}.gridline.major{background:#88a9bb20}.playhead{position:absolute;top:0;bottom:0;width:1px;background:#43e68c;box-shadow:0 0 5px #43e68c66;z-index:4;pointer-events:none}.lane>*{transform:translateX(var(--pan,0px))}.alignment-guide.subtle{opacity:.3;pointer-events:none}.alignment-guide.matched{border-left:2px solid #ffe0a0;box-shadow:0 0 5px #e7ba6370}.alignment-guide.subtle.matched{opacity:.65}.alignment-guide{pointer-events:none;position:absolute;top:0;bottom:0;border-left:1px dashed #e7ba63;z-index:3;transform:translateX(var(--pan,0px))}.gridline,.relation{transform:translateX(var(--pan,0px))}.select-label{border:0;padding:0;background:transparent;color:inherit;text-align:left;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.select-label:disabled{cursor:default}.select-label:not(:disabled):hover{color:#63d4e7}#selectionMessage{color:#e1bf77;margin-left:12px}.wave-controls{position:absolute;right:4px;top:4px;display:flex;gap:2px;z-index:5}.wave-controls button{width:16px;height:12px;padding:0;background:#151e23;border:1px solid #34444d;border-radius:4px;color:#849aa5;display:grid;place-items:center}.wave-controls svg{width:12px;height:10px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.wave-controls button:hover,.wave-controls button[aria-pressed=true]{color:#63d4e7;border-color:#0699b2}.wave-controls .parameter-mode{font-size:10px;line-height:10px}.wave-controls button:disabled{opacity:.45}.wave-beat-line{position:absolute;top:0;bottom:0;width:1px;background:#accdd526;z-index:2;pointer-events:none}.wave-beat-line.timeline-target{pointer-events:auto;cursor:pointer}.wave-beat-line.timeline-target:before{content:"";position:absolute;left:-4px;top:0;bottom:0;width:9px}.wave-beat-line.major{background:#accdd55c}.beat-tick{background:#101517bb;padding:1px 3px;z-index:3}.track-waveform{position:sticky;z-index:6;background:#101517}.waveform .lane svg{height:100%}.waveform .label{font-size:10px}.wave-status{display:block;padding:14px;color:#849aa5}.relation{position:absolute;width:3px;margin-left:-1px;background:#bd9be0;border-radius:3px;z-index:2;pointer-events:none;box-shadow:0 0 0 1px #10151799}.relation:after{content:"";position:absolute;width:13px;height:10px;left:-5px;background:#d4b8ef;clip-path:polygon(0 0,100% 0,50% 100%)}.relation.down:after{bottom:-1px}.relation.up:after{top:-1px;transform:rotate(180deg)}.relation:before{content:"";position:absolute;left:-2px;width:7px;height:7px;background:#d4b8ef;border-radius:50%}.relation.down:before{top:-2px}.relation.up:before{bottom:-2px}.layer-selection-box{position:fixed;z-index:80;pointer-events:none;border:1px solid #63d4e7;background:#0699b22b}.layer-multi-selected>.label,.layer-multi-selected>.lane{background-color:#123e49;box-shadow:inset 0 0 0 1px #0699b2}.layer-display-bar{height:22px;min-height:22px;background:#19262d;border-bottom:2px solid #35505e}.layer-display-bar>.label{background:#19262d;font-size:9px;padding:2px 12px;position:relative}.layer-display-bar .wave-controls{top:4px}.layer-display-bar>.lane{background:#19262d}#helpButton{width:24px;height:20px;padding:2px 4px;display:grid;place-items:center;border-radius:3px;margin-right:-10px}#helpButton svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round}#viewerHelp{position:fixed;inset:86px 16px auto auto;margin:0;max-width:calc(100vw / var(--ui-scale,1) - 32px);padding:12px 16px;border:1px solid #34444d;border-radius:6px;background:#151e23;color:#bdd0da;font-size:11px;line-height:1.9;box-shadow:0 8px 28px #0008}#viewerHelp strong{display:block;color:#63d4e7;margin-bottom:5px}footer:not(:has(#selectionMessage:not(:empty),#warnings:not(:empty))){display:none}footer{min-height:27px;padding:4px 22px;color:#849aa5;font-size:10px}#warnings{color:#d5b97b;margin-left:12px}
 `
-const page = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Disguise Layer Editor · Timeline</title><link rel="stylesheet" href="/viewer.css"><script src="/viewer.js" defer></script></head><body><header><span class="brand-logo"><img src="${brandLogo}" alt="VEHKA AV"></span><div><h1>DISGUISE LAYER EDITOR</h1><small>TIMELINE VIEWER</small></div><div class="spacer"></div><div id="clockBlock"><span id="clock">—</span><span id="beat"></span><div id="editClock" hidden></div><div id="clockDetails"></div><div id="sectionRemaining" aria-live="off"></div></div><div class="ui-size-controls" role="group" aria-label="INTERFACE SIZE"><button data-ui-size="small" aria-label="SMALL" title="SMALL · 100%" aria-pressed="true"><svg viewBox="0 0 22 20" aria-hidden="true"><path d="M4 10h14"/></svg></button><button data-ui-size="medium" aria-label="MEDIUM" title="MEDIUM · 110%" aria-pressed="false"><svg viewBox="0 0 22 20" aria-hidden="true"><path d="M4 7h14M4 13h14"/></svg></button><button data-ui-size="large" aria-label="LARGE" title="LARGE · 120%" aria-pressed="false"><svg viewBox="0 0 22 20" aria-hidden="true"><path d="M4 4h14M4 10h14M4 16h14"/></svg></button></div><button id="status" type="button" title="LIVE / VIEW" disabled>CONNECTING</button></header><div class="toolbar"><strong><span id="track">TRACK</span><span id="externalTc" hidden></span></strong><div class="spacer"></div><button id="fitTrack" title="FIT TRACK">FIT TRACK</button><button id="fitLayer" title="CENTRE SELECTED LAYER">FIT LAYER</button><button id="follow" title="FOLLOW PLAYHEAD" aria-pressed="true">FOLLOW</button><button id="zoomOut" aria-label="ZOOM OUT" title="ZOOM OUT">−</button><button id="zoomIn" aria-label="ZOOM IN" title="ZOOM IN">+</button></div><main id="viewport" aria-label="Designer timeline"><div id="sheet"></div></main><footer>CTRL + WHEEL: ZOOM · SHIFT + WHEEL: PAN · S: SNAP ON/OFF · F: FOLLOW · T: FIT TRACK · L: FIT LAYER · SHIFT+L: LINK TIME · WHEEL: SELECTED KEY VALUE · SHIFT+DRAG: SELECT KEYS<span id="selectionMessage" role="status"></span><span id="warnings"></span></footer></body></html>`
+const page = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Disguise Layer Editor · Timeline</title><link rel="stylesheet" href="/viewer.css"><script src="/viewer.js" defer></script></head><body><header><span class="brand-logo"><img src="${brandLogo}" alt="VEHKA AV"></span><div><h1>DISGUISE LAYER EDITOR</h1><small>TIMELINE VIEWER</small></div><div class="spacer"></div><div id="clockBlock"><span id="clock">—</span><span id="beat"></span><div id="editClock" hidden></div><div id="clockDetails"></div><div id="sectionRemaining" aria-live="off"></div></div><button id="helpButton" type="button" popovertarget="viewerHelp" aria-label="HELP" title="HELP"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8"/><path d="M10 9v5M10 6v.5"/></svg></button><aside id="viewerHelp" popover aria-label="VIEWER SHORTCUTS"><strong>SHORTCUTS</strong><div>CTRL + WHEEL: ZOOM</div><div>SHIFT + WHEEL: PAN</div><div>S: SNAP ON/OFF</div><div>F: FOLLOW</div><div>T: FIT TRACK</div><div>L: FIT LAYER</div><div>SHIFT+L: LINK TIME</div><div>WHEEL: SELECTED KEY VALUE</div><div>SHIFT+DRAG: SELECT KEYS</div></aside><div class="ui-size-controls" role="group" aria-label="INTERFACE SIZE"><button data-ui-size="small" aria-label="SMALL" title="SMALL · 100%" aria-pressed="true"><svg viewBox="0 0 22 20" aria-hidden="true"><path d="M4 10h14"/></svg></button><button data-ui-size="medium" aria-label="MEDIUM" title="MEDIUM · 120%" aria-pressed="false"><svg viewBox="0 0 22 20" aria-hidden="true"><path d="M4 7h14M4 13h14"/></svg></button><button data-ui-size="large" aria-label="LARGE" title="LARGE · 140%" aria-pressed="false"><svg viewBox="0 0 22 20" aria-hidden="true"><path d="M4 4h14M4 10h14M4 16h14"/></svg></button></div><button id="status" type="button" title="LIVE / VIEW" disabled>CONNECTING</button></header><div class="toolbar"><strong><span id="track">TRACK</span><span id="externalTc" hidden></span></strong><div class="spacer"></div><button id="fitTrack" title="FIT TRACK">FIT TRACK</button><button id="fitLayer" title="CENTRE SELECTED LAYER">FIT LAYER</button><button id="follow" title="FOLLOW PLAYHEAD" aria-pressed="true">FOLLOW</button><button id="zoomOut" aria-label="ZOOM OUT" title="ZOOM OUT">−</button><button id="zoomIn" aria-label="ZOOM IN" title="ZOOM IN">+</button></div><main id="viewport" aria-label="Designer timeline"><div id="sheet"></div></main><footer><span id="selectionMessage" role="status"></span><span id="warnings"></span></footer></body></html>`
 
-module.exports = { page, stylesheet, browserScript: '(' + browserMain.toString() + ')(' + applyEditPatch.toString() + ',' + discreteSegments.toString() + ',' + selectionScroll.toString() + ',' + timecode.toString() + ',' + duplicateMarkerKeys.toString() + ',' + createUiGeometry.toString() + ')' }
+module.exports = { page, stylesheet, browserScript: '(' + browserMain.toString() + ')(' + applyEditPatch.toString() + ',' + discreteSegments.toString() + ',' + selectionScroll.toString() + ',' + timecode.toString() + ',' + duplicateMarkerKeys.toString() + ',' + createUiGeometry.toString() + ',' + createPresentationQueue.toString() + ')' }

@@ -63,6 +63,31 @@ for bpm in (None,60.0,120.0,123.0):
                 layer=next(l for l in t.layers if str(l.uid)==uid)
                 start,end=bounds(layer)
                 check('create',end>start and len(t.layers)>0)
+                # Marker and section operations share cues; deleting one tag must
+                # preserve the others. Inspect native cue contents independently.
+                def marker_value(kind, seconds):
+                    at=t.timeToBeat(seconds)
+                    index=next((i for i in range(t.cues.n()) if abs(t.cues.getT(i)-at)<0.00001),None)
+                    if index is None: return None
+                    cue=t.cues.getV(index)
+                    if kind=='notes': return cue.getNote() if cue.hasNote() else None
+                    tag_type={'cue':Tag.CUE,'tc':Tag.TC,'midi':Tag.MIDI}[kind]
+                    return next((tag.text for tag in cue.getTags() if tag.type==tag_type),None)
+                for marker_kind,text in [('cue','901'),('tc','12:00:00:00'),('midi','1.60'),('notes','Regression note')]:
+                    request('annotation_edit',kind=marker_kind,mode='add',targetTime=2,text=text)
+                    check('marker-add-'+marker_kind,marker_value(marker_kind,2)==text)
+                    request('annotation_edit',kind=marker_kind,mode='move',sourceTime=2,sourceText=text,targetTime=3,text=text)
+                    check('marker-move-'+marker_kind,marker_value(marker_kind,2) is None and marker_value(marker_kind,3)==text)
+                    request('annotation_edit',kind=marker_kind,mode='delete',sourceTime=3,sourceText=text,targetTime=3,text=text)
+                    check('marker-delete-'+marker_kind,marker_value(marker_kind,3) is None)
+                request('annotation_edit',kind='notes',mode='add',targetTime=4,text='Keep note')
+                request('annotation_edit',kind='cue',mode='add',targetTime=4,text='902')
+                request('annotation_edit',kind='cue',mode='delete',sourceTime=4,sourceText='902',targetTime=4,text='902')
+                check('marker-delete-preserves-note',marker_value('notes',4)=='Keep note')
+                request('section_edit',operation='cut',time=5)
+                check('section-cut',t.beatToSection(t.timeToBeat(5.1))>t.beatToSection(t.timeToBeat(4.9)))
+                request('section_edit',operation='merge',time=5.1)
+                check('section-merge',t.beatToSection(t.timeToBeat(5.1))==t.beatToSection(t.timeToBeat(4.9)))
                 # All mutations below pass through the actual production native command generator.
                 field=layer.findSequence('volume' if kind=='audio' else 'brightness')
                 if field is None: raise RuntimeError('Primary parameter unavailable')
@@ -77,6 +102,9 @@ for bpm in (None,60.0,120.0,123.0):
                 keytimes=[start+(end-start)*f for f in (0.25,0.5,0.75)]
                 for at,value in zip(keytimes,(0.2,0.5,0.8)):
                     request('key_set',layer,field=field.name,time=at,value=value)
+                current_value=float(field.eval(t.timeToBeat(keytimes[1]),16))
+                request('key_set',layer,field=field.name,time=keytimes[1],value=-99,evaluateCurrent=True)
+                check('atomic-key-value',any(close(at,keytimes[1]) and close(value,current_value) for at,value in field_keys(field)))
                 audit_field('keys-created',layer,field,keytimes[0])
                 check('sequencing-enabled',not field.disableSequencing)
                 for keytype in (0,1,2):
@@ -162,6 +190,17 @@ for bpm in (None,60.0,120.0,123.0):
                     tested+=1
                 if not tested: checks.append({'name':prefix+'/resource-tests','status':'SKIP','detail':'No usable resource fields/media in this project'})
                 start,end=bounds(layer)
+                supported=[f for f in layer.fields if isinstance(f.sequence,(FloatSequence,ResourceSequence))]
+                unchanged_rejection('default-all-needs-confirmation',{'command':'layer_default','layerUid':uid,'time':start,'editTime':start,'keepPlayhead':True},lambda:[field_keys(f) for f in supported])
+                request('layer_default',layer,time=start,confirmed=True)
+                for f in supported:
+                    constant=f.disableSequencing and f.sequence.nKeys()==1
+                    if isinstance(f.sequence,ResourceSequence):
+                        value=f.sequence.key(0).r
+                        default=f.defaultValue
+                        correct=(str(value.uid) if value else '')==(str(default.uid) if default else '')
+                    else: correct=close(f.sequence.key(0).v,f.defaultValue)
+                    check('default-all-'+f.name,constant and correct)
                 duplicated=request('layer_manage',layer,operation='duplicate',expectedName=layer.name,expectedStart=start,expectedEnd=end)['layerUid']
                 copy=next(l for l in t.layers if str(l.uid)==duplicated)
                 check('duplicate',str(copy.uid)!=uid and all(close(a,b) for a,b in zip(bounds(copy),bounds(layer))))

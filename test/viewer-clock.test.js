@@ -80,3 +80,19 @@ test('external input TC is independent of timeline TC and disappears when unconf
     assert.equal(c.read(ctx).externalTimecode,undefined)
   } finally { c.close() }
 })
+
+test('separate display subscription cannot replace a confirmed seek with cached or delayed old time',()=>{
+ const c=new ViewerClock({baseUrl:'http://localhost'},Socket)
+ const ctx={transportUid:'1',trackUid:'1',connected:true,time:2,editRevision:1}
+ try {
+ c.read(ctx);const ws=c.socket;ws.dispatchEvent(new Event('open'));ws.message({subscriptions:[{id:1,propertyPath:ws.sent.subscribe.properties[0]}]})
+ const sample=time=>ws.message({valuesChanged:[{id:1,value:['1',time,'00:00:00.00']}]})
+ sample(9);assert.equal(c.read(ctx).time,9)
+ const next={...ctx,editRevision:2,clockSeek:{time:2,until:Date.now()+1500},clockFps:25}
+ assert.equal(c.read(next).time,2);sample(9);assert.equal(c.read(next).time,2)
+ sample(2);assert.equal(c.read(next).time,2)
+ sample(9);assert.equal(c.read(next).time,2)
+ assert.equal(c.read({...next,clockSeek:{time:2,until:0}}).time,9,'expired fence follows native clock')
+ sample(3);assert.equal(c.read({...ctx,editRevision:2}).time,3,'normal playback resumes without a pending seek')
+ }finally{c.close()}
+})

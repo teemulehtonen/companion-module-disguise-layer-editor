@@ -100,7 +100,7 @@ if p['command'] == 'viewer_snapshot':
                         lo = max(start, row['start'])
                         hi = min(end, row['end'])
                         f['samples'] = []
-                        if hi >= lo and not f.get('discrete'):
+                        if hi >= lo and f['sequenced'] and f['keys'] and not f.get('discrete'):
                             # Fixed bound on sampling cost; include key times as well as uniform samples.
                             times = set([lo + (hi-lo)*i/95.0 for i in range(96)])
                             times.update(k['time'] for k in f['keys'] if lo <= k['time'] <= hi)

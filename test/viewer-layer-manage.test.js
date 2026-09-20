@@ -27,6 +27,18 @@ test('reordering requires an exact sibling order and a distinct target',()=>{
  assert.equal(validEditRequest({...r,after:undefined}),false)
 })
 
+test('create and duplicate explicitly select IN through the shared edit clock',async()=>{
+ for(const operation of ['create','duplicate']){
+  const c=new DemoClient();c.data.trackUid='1';const execute=c.execute.bind(c)
+  c.execute=async(command,args)=>command==='layer_manage'?{layerUid:'new-layer'}:execute(command,args)
+  const e=new Editor(c);await e.refresh();e.linkTime=false
+  let selected;e.selectFromViewer=async request=>{selected=request;return {ok:true}}
+  const options=operation==='create'?{kind:'video',targetTime:20}:{layerUid:'2',expectedName:'Original',expectedStart:0,expectedEnd:10}
+  const r=await editFromViewer(e,{action:'layer_manage',token:describeEditor(e).token,trackUid:'1',operation,...options})
+  assert.equal(r.ok,true);assert.deepEqual(selected,{trackUid:'1',layerUid:'new-layer',point:'in'})
+ }
+})
+
 test('delete accepts guarded identity and clears pinned target without selecting removed layer',async()=>{
  const c=new DemoClient();c.data.trackUid='1';c.data.layers[0].uid='2';const execute=c.execute.bind(c)
  c.execute=async(command,args)=>{if(command==='layer_manage'){assert.equal(args.operation,'delete');c.data.layers=c.data.layers.filter(l=>l.uid!==args.layerUid);return{deletedLayerUid:args.layerUid}}return execute(command,args)}

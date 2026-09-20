@@ -1,3 +1,22 @@
+# 0.2.0-beta.43 repeatable checks
+
+- 251 local tests and packaged-module/page smoke checks passed.
+- 1,128 assertions against detached Designer tracks passed, including time and
+  60/120/123 BPM fixtures, markers, sections, all-parameter defaults and resource keys.
+- 34 installed Companion scenarios passed with independent native readback on
+  Video, Audio and Bitmap fixtures; two durationless Video/Bitmap FIT cases skipped.
+- The installed run initially exposed new-layer selection outside edit time. Fixed
+  by selecting IN through shared clock policy. A group oracle mistakenly queried
+  aggregated display parameters as native group fields; the oracle was corrected.
+- A single native ThumbnailSystem ACCESS_VIOLATION was reported approximately
+  35 seconds after the final installed run. Designer continued responding; cause
+  and resource unconfirmed. Numeric readback does not detect asynchronous renderer faults.
+- These tests do not certify actual image/audio output, physical Deck input,
+  browser frame rate or every project/resource configuration.
+
+Use REGRESSION-TESTS.md to rerun or extend the public scripts. Older results below
+are historical and do not describe the current full test scope.
+
 # Beta.127 targeted release checks
 
 165 local tests and the packaged Companion lifecycle smoke check passed. Isolated native checks covered linked/unlinked numeric and resource key moves, edit-time numeric/Video/Mapping/Palette insertion away from the real playhead, layer IN/OUT/move and unchanged duplicate extents/key times. Browser and actual Companion HTTP rotary checks verified independent blue edit time, shared LINK TIME, green transport display and no idle extra guides. Browser errors and Companion last_error were empty after the final check. No exhaustive live layer or external-system test was performed. Immediate duplicate display in the Designer GUI remains subject to user acceptance.

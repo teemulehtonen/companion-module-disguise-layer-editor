@@ -319,7 +319,7 @@ def field_snapshot(layer, field, seconds, curve=True):
     result.update({'value': float(field.eval(track.timeToBeat(seconds), 16)),
                    'sequenced': not field.disableSequencing,
                    'keys': [{'time': float(track.beatToTime(seq.t(i))), 'value': float(seq.key(i).v), 'interpolation': int(seq.key(i).interpolation)} for i in range(seq.nKeys())]})
-    if curve and not result.get('discrete') and p.get('previewCurve') and p.get('command') in ('key_move','adjust_value') and not field.disableSequencing:
+    if curve and not result.get('discrete') and p.get('previewCurve') and p.get('command') in ('key_move','key_group','adjust_value') and not field.disableSequencing:
         lo, hi = float(track.beatToTime(layer.tStart)), float(track.beatToTime(layer.tEnd))
         times = set(lo+(hi-lo)*i/95.0 for i in range(96))
         keys = [k['time'] for k in result['keys'] if lo <= k['time'] <= hi]
@@ -492,6 +492,8 @@ if p['command'] == 'playback_state':
     return {'playing': bool(manager.player.playing)}
 if p['command'] in ('seek', 'nudge_time'):
     seconds = float(p['time'])
+    if p.get('frameSnap') and not math.isnan(seconds) and not math.isinf(seconds):
+        seconds = max(0, min(float(track.lengthInSec), round(seconds * fps()) / fps()))
     if p['command'] == 'nudge_time':
         current = float(p['cursor']) if p.get('cursor') is not None else edit_seconds()
         if p.get('beats'):
@@ -1054,7 +1056,7 @@ if command == 'adjust_value':
     field.notifyEdit()
     return {'field': field_snapshot(layer, field, seconds), 'time': seconds}
 if command in ('key_set', 'constant_set'):
-    value = float(p['value'])
+    value = float(field.eval(beat, 16)) if command == 'key_set' and p.get('evaluateCurrent') else float(p['value'])
     if math.isnan(value) or math.isinf(value):
         raise ValueError('Invalid value')
     if command == 'constant_set':

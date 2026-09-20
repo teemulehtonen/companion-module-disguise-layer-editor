@@ -34,7 +34,7 @@ $sourceFiles = @(
     'package.json','package-lock.json','build-config.cjs','.prettierrc.json','.gitignore','CONTRIBUTING.md',
     'AGENTS.md','README.md','LICENSE','CHANGELOG.md','KNOWN-LIMITATIONS.md','DISCLAIMER.md','SECURITY.md',
     'scripts/release.ps1',
-    'scripts/regression.cjs','scripts/native-regression.cjs','scripts/native-regression.py','docs/REGRESSION-TESTS.md',
+    'scripts/regression.cjs','scripts/test-plan.cjs','scripts/installed-regression.cjs','scripts/installed-oracle.py','scripts/native-regression.cjs','scripts/native-regression.py','docs/REGRESSION-TESTS.md',
     'scripts/build-page.cjs','scripts/verify-package.mjs','templates/button-style.json',
     'docs/RASPBERRY-PI-SMB.md','docs/PROJECT-HANDOFF.md','docs/VIEWER-DEVELOPMENT.md','docs/TIMELINE-VIEWER.md','docs/VIEWER-TEST-REPORT.md','docs/ARCHITECTURE.md','docs/DEVELOPER-MANUAL.md','docs/TRACK-1-TESTS.md','docs/TRACK-6-TESTS.md','docs/GITHUB-SETUP.md','docs/BUILD.md'
 )

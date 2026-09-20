@@ -19,6 +19,26 @@ VIEW must never mutate Designer. Keep expected-state checks, lock checks, reques
 
 ## Testing and privacy
 
+Use `npm run test:regression -- --group=layers,keyframes --unit-only` for a focused
+change and the full runner before release. Every changed behavior or fixed bug
+must add/update its regression case. See [repeatable tests](docs/REGRESSION-TESTS.md)
+for groups, native/installed integration, reports and current coverage gaps.
+
+## Working with another developer or coding assistant
+
+Work on separate branches or forks and use pull requests. Agree on file ownership
+before parallel work; avoid two people editing the same working copy or test track.
+Include the base commit, intended behavior, tests actually run and remaining issues
+in each pull request. The next developer/assistant should fetch the latest changes,
+read the handoff, review the diff, and rerun relevant tests before merging. GitHub
+does not automatically synchronize separate local checkouts or running Companion
+installations. Never share Companion passwords or project media in issues or PRs.
+
+Maintainers can grant repository collaborator access; a fork and pull request also
+work without write access. Preserve feature branches until their work is reviewed.
+
+## Test environment privacy
+
 Use synthetic fixtures. Offline tests and builds require no Designer or Companion installation. Live integration tests require your own licensed software, disposable project and operator authorization; they are not implied by a passing unit suite. Private probes from earlier development are intentionally not distributed. Never commit credentials, personal paths, real project identifiers, local settings, backups, logs or media. Use generated clean page exports, not exports from a configured live connection.
 
 ## Releases and handoff

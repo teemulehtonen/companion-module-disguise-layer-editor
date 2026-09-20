@@ -9,7 +9,8 @@ function applyEditPatch(state, patch) {
   const translated=delta!==0 && Math.abs((patch.layer.end-patch.layer.start)-(layer.end-layer.start))<1e-7
   layer.start = patch.layer.start
   layer.end = patch.layer.end
-  for (const incoming of patch.layer.fields || []) {
+  const incomingFields=new Map([...(patch.layer.fields || []),...(patch.layer.mediaFields || [])].map(field=>[field.name,field]))
+  for (const incoming of incomingFields.values()) {
     // JSON snapshots contain separate copies for each display list.
     // Patch every copy so redraw cannot resurrect the pre-edit key/value.
     const numeric=new Set([...(layer.fields || []),...(layer.visibleParameters || []),...(layer.allParameters || [])])

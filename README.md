@@ -6,7 +6,7 @@ Disguise layer, keyframe and resource control for Bitfocus Companion and Stream 
 
 ## Install
 
-**Downloads (0.2.0-beta.26):** [Companion module](../../releases/download/v0.2.0-beta.26/disguise-layer-control-0.2.0-beta.26.tgz) · [Stream Deck XL page](../../releases/download/v0.2.0-beta.26/D3-Stream-Deck-XL.companionconfig) · [Companion page](../../releases/download/v0.2.0-beta.26/D3-Stream-Deck-Plus.companionconfig)
+**Downloads (0.2.0-beta.43):** [Companion module](../../releases/download/v0.2.0-beta.43/disguise-layer-control-0.2.0-beta.43.tgz) · [Stream Deck XL page](../../releases/download/v0.2.0-beta.43/D3-Stream-Deck-XL.companionconfig) · [Companion page](../../releases/download/v0.2.0-beta.43/D3-Stream-Deck-Plus.companionconfig)
 
 Tested with Designer 32.4.17 and Companion 5.0.5.
 

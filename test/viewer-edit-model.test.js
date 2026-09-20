@@ -28,3 +28,14 @@ test('layer translation shifts cached curve times once and trims preserve absolu
  applyEditPatch(state,{trackUid:'t',layer:{uid:'a',start:3,end:12,fields:[{name:'brightness',keys:[]}]}})
  assert.equal(f.samples[0].time,3)
 })
+
+test('layer move updates resource keys from the editor media list on every display copy',()=>{
+ const clip={uid:'c',name:'CLIP'}
+ const resource=()=>({name:'video',sequenced:true,current:clip,keys:[{time:1,resource:clip}]})
+ const a=resource(),b=resource(),c=resource()
+ const layer={uid:'a',start:0,end:10,fields:[],resources:[a],visibleParameters:[b],allParameters:[c]}
+ const state={trackUid:'t',layers:[layer]}
+ const patch={trackUid:'t',layer:{uid:'a',start:4,end:14,fields:[],mediaFields:[{name:'video',resource:true,sequenced:true,keys:[{time:5,resourceUid:'c'}]}]}}
+ applyEditPatch(state,patch);applyEditPatch(state,patch)
+ for(const item of [a,b,c]){assert.equal(item.keys[0].time,5);assert.equal(item.keys[0].resource,clip)}
+})

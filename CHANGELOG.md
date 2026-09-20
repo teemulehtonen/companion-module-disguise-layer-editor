@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0-beta.43
+
+- Update viewer edits immediately while preserving guarded native writes and rejecting stale feedback. Improve seek ordering, wheel/drag curves, multi-key previews and whole-layer movement without transient geometry jumps.
+- Keep header keyframe curves synchronized, preserve scroll during edits, add the wheel value popup and move help into the information popup. UI sizes are 100/120/140 percent.
+- Fix creation/duplication outside the current unlinked edit time by selecting the new layer's IN through the shared clock policy.
+- Add reusable installed-Companion integration tests with an independent Designer oracle, focused regression groups and contributor instructions. Extend native marker, section and whole-layer default checks.
+- Validation: 251 local tests, package checks, 1,128 detached native assertions and 34 installed cases passed. Two FIT TO CONTENT cases skipped for durationless Video/Bitmap resources; Audio FIT passed. A single native ThumbnailSystem ACCESS_VIOLATION was reported after testing; its cause remains unresolved. See KNOWN-LIMITATIONS.md.
+
 ## 0.2.0-beta.26
 
 - Add repeatable offline, native Designer and read-only installed Companion regression stages with local JSON reports and no AI requests.

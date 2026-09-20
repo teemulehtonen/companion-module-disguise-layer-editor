@@ -348,9 +348,11 @@ class DisguiseLayerControl extends InstanceBase {
             keyTime: this.editor?.moveKey?.time ?? this.editor?.selectedKeyTime,
             liveValue: this.editor?.value,
             editPatch: Date.now()-(this.viewerLivePatchAt || 0)<500 ? this.viewerLivePatch : undefined,
-            time: this.editor?.transportTime,
+            clockSeek: this.editor?.pendingJump,
+            clockFps: this.editor?.snapshot?.fps || 25,
+            time: this.editor?.viewerTransportTime,
             timecode: absoluteTimecode(
-              this.editor?.transportTime,
+              this.editor?.viewerTransportTime,
               this.editor?.snapshot?.fps || 25,
               false,
               this.editor?.timecodeSamples,
@@ -423,12 +425,14 @@ class DisguiseLayerControl extends InstanceBase {
                 async (editor) => {
                   try {
                     result = await editor.seekFromViewer(target)
+                    if (result.ok) result.editor = describeEditor(editor)
                   } catch {
                     result = { ok: false, reason: 'Designer seek could not be completed' }
                   }
                 },
                 { synchronise: false },
               )
+              if (result.ok) result.editRevision = this.viewerEditRevision || 0
               return result
             },
             select: async (target) => {

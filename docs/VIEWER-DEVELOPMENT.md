@@ -1,3 +1,15 @@
+## Local presentation transactions (Companion beta.37)
+
+`viewer-presentation.js` owns reversible DOM previews, never native/editor data. `previewAction` captures command identity before sending and supplies immediate presentation for marker edits, key/layer deletion, rename/reorder, resource/value selection and transport/link controls. Creation uses a non-interactive placeholder without an invented UID or duration. Group/fit/sequence/type operations show pending feedback where Designer must determine the result. Existing key/layer/marker drags retain their geometry previews; multiple selected numeric keys now deform native curve samples between key anchors. Discrete resources are never rendered as numeric curves.
+
+An accepted preview persists until a revision-checked full snapshot replaces it. Unpaint before replacing the DOM (particularly for reorder previews), then repaint if awaiting a snapshot. Reject/timeout rolls back presentation without retrying native writes; mode changes, disconnection and fresh snapshots clear previews. Do not replay previews per animation frame. Read-only mode and all native validation remain authoritative. Exact cubic resampling, tempo-aware typed marker times, fit durations and new hierarchy identifiers still come from Designer. Tests cover queue composition/rollback, redraw/context reset, group curve anchoring and stale command acknowledgements.
+
+## Rendering optimization (Companion build 0.2.0-beta.28)
+
+FOLLOW animation updates only playhead geometry. Metadata, parameter values and availability update on live data, not on each animation frame. DOM references are cached for a single draw and discarded before replacing the sheet. Native layer/field objects are indexed afresh on every data update, so incoming replacements and in-place patches cannot leave stale values. Text content is only assigned when changed. Both playhead segments share one width measurement and disable transition easing during follow panning.
+
+Tests in viewer-fluid.test.js exercise 1,000 parameters over 600 presentation frames, cache invalidation, refreshed choice labels, linked/unlinked clocks and selection permissions. These measure work counts using a simulated DOM, not real browser FPS or CPU usage. No command ordering, mutation guards, frame/beat rules or native write paths changed. Companion deployment was approved; GitHub publication remains pending.
+
 ## Clear media cache
 
 In module settings, select **CLEAR MEDIA CACHE** and save. This one-shot setting resets itself. The connection restarts its viewer and thumbnail/waveform memory caches, waits for cancelled waveform tasks, then clears owned waveform and thumbnail files from the shared host cache. Reload open viewers to replace already displayed thumbnails. No media or Designer data is deleted. Other module instances retain their memory data and can repopulate the shared disk cache; an active disk writer prevents clearing and logs a warning instead of bypassing its lock.
@@ -174,6 +186,6 @@ Viewer transport actions use controlTransport and DesignerClient.transport. Vali
 
 ## Pending UI update: sizes and transport input
 
-SMALL/MEDIUM/LARGE apply browser-local 100/110/120 percent CSS zoom. viewer-ui-scale.js normalizes pointer and DOMRect coordinates to layout pixels, including popup placement. Track metadata always shows @ native FPS, then duration. TC IN: is a separate raw TransportManager.timecode readout, hidden when no source is assigned. Designer 32.4 exposes TimecodeTransport.current; newer timecode is a fallback. ViewerClock subscribes separately from the timeline clock and expires samples after two seconds; full snapshots provide a guarded fallback. Never substitute the timeline's TC-marker time for incoming TC. statusString remains the readout tooltip, including No clock.
+SMALL/MEDIUM/LARGE apply browser-local 100/120/140 percent CSS zoom. viewer-ui-scale.js normalizes pointer and DOMRect coordinates to layout pixels, including popup placement. Track metadata always shows @ native FPS, then duration. TC IN: is a separate raw TransportManager.timecode readout, hidden when no source is assigned. Designer 32.4 exposes TimecodeTransport.current; newer timecode is a fallback. ViewerClock subscribes separately from the timeline clock and expires samples after two seconds; full snapshots provide a guarded fallback. Never substitute the timeline's TC-marker time for incoming TC. statusString remains the readout tooltip, including No clock.
 
 Verification: native read-only inspection confirmed no assigned source on the current transport and current as a Timecode on an isolated LTC object. Actual incoming LTC/MTC signal has not been tested. Unit coverage includes removal, stale input and independence from timeline TC.

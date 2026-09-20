@@ -1,4 +1,97 @@
-# Current release - 0.2.0-beta.26
+# Current release - 0.2.0-beta.43
+
+Supersedes the local-only publication status in older entries below. The user
+authorized Companion installation and GitHub publication after testing.
+
+Installed testing exposed successful native creation followed by rejected selection
+when the unlinked edit clock was outside the new layer. Create/duplicate now select
+IN through the shared clock policy. An oracle error was also fixed: group display
+fields aggregate children and are not native fields on GroupLayer.
+
+Validation: 251 unit tests, package smoke checks, 1,128 detached native assertions,
+34 installed cases passed. Video/Bitmap FIT skipped for durationless resources;
+Audio FIT passed. Original layer bounds/names/parents remained unchanged. Test
+fixtures remain in the authorized track. Reports and UID journals stay in .tools.
+No physical Deck, browser FPS or exhaustive native layer/resource certification.
+
+After the installed run, the operator reported one native ThumbnailSystem
+ACCESS_VIOLATION. Designer remained responsive and the error did not recur at that
+time. The cause/resource is unconfirmed; retain the existing known limitation and
+do not label the release crash-free. Do not stress-reproduce on a live show.
+
+Read REGRESSION-TESTS.md before further testing. Maintain public assertions with
+each behavior change. Installed runs mutate the named active test track; native
+runs use detached fixtures. CONTRIBUTING.md explains branch/PR collaboration.
+
+# Companion-only header key curve fix - 0.2.0-beta.42
+
+Resolve numeric curve targets through the matching parameter diamond by layer/parameter/time, independently of the dragged header diamond. Single-key header time drags now preview the same curve and receive native curve acknowledgements in the parameter lane. Header time drags retain the value instead of interpreting pointer Y as an absolute curve value. Resource/discrete markers remain excluded.
+
+# Companion-only curve tail fix - 0.2.0-beta.41
+
+Use a shared numeric preview sampler for pointer and wheel editing. Missing previous/next keys mean the leading/trailing plateau follows the edited value fully; layer IN/OUT are temporal bounds, not fixed-value neighbours. Retain the final single-key preview through acknowledgement until the next native snapshot. No native edit commands changed.
+
+# Companion-only layer handoff fix - 0.2.0-beta.40
+
+On ordinary layer move/trim completion, redraw from the confirmed patch atomically to discard temporary CSS translations before live geometry paints absolute key positions. Disable inherited geometry transitions and cancel native curve animation when starting a drag. Group previews remain until a full snapshot; suppress partial live geometry over their translated lanes. Resource keys now consume mediaFields in confirmed editor patches. Retained wheel curves follow confirmed whole-layer translation.
+
+Validation: local tests and package checks; live viewer readiness only, no user-track mutations. GitHub unchanged.
+
+# Companion-only gesture fix - 0.2.0-beta.39
+
+Selection/mode commands no longer create a blocking pending parameter-row overlay. Shift marquee disables text selection, clears native browser selection, and cleans up lost pointer capture. Multi-key replies update native identities without repainting an older pointer position. Group moves support the existing throttled native curve sampling. Wheel/drag previews cancel outstanding live curve animations and CSS position transitions; confirmed final local curves remain until a fresh snapshot, including across consecutive wheel bursts.
+
+Preserve vertical scroll on the first redraw after a pointer edit of the same layer, and disable browser scroll anchoring in the timeline. Explicit later layer/parameter selections still reveal normally.
+
+Validation: local regression batch and focused gesture tests; no live project mutations for this fix. GitHub unchanged.
+
+# Companion-only presentation update - 0.2.0-beta.37
+
+Extend DOM-only optimistic feedback to marker/resource/value/layer operations and transport/link controls. Pending placeholders do not invent native UIDs, hierarchy or timing results. Acknowledged previews survive until a fresh revision-checked snapshot; failures roll back without retry. Multi-key drags preview numeric curves. See VIEWER-DEVELOPMENT.md for limitations and the reusable presentation queue. Validation: 238-test local batch plus two targeted DOM-preview tests passed; package checks passed. Installed beta.37 viewer reports LIVE with no visible error. No destructive live edits or sustained frame-rate benchmark were run for this update. GitHub unchanged.
+
+# Companion-only update - 0.2.0-beta.37
+
+Multi-key mouse drags preview numeric curves from captured native samples, warping sample times between selected and stationary key anchors. Values and authoritative snapshots remain unchanged. Supports dragging either header or parameter diamonds; discrete/resource rows do not become curves. Native samples replace the transient preview after confirmation.
+
+# Companion-only update - 0.2.0-beta.36
+
+Move viewer shortcut instructions into a native dismissible HELP popover (info icon before interface size controls). The footer takes no space while messages and warnings are empty; operational warnings remain visible. No editor or native command logic changed. GitHub unchanged.
+
+# Companion-only update - 0.2.0-beta.35
+
+Local seek preview overlays the clock/position without changing authoritative state; queued newer seeks keep their own preview until acknowledged, failures restore confirmed time. Numeric key insertion shows a non-interactive pending diamond; confirmed keys can render before curve samples arrive. Existing pointer/wheel curve and layer geometry previews remain. Value-entry labels preview locally, edit responses reject stale track/session/revision contexts, and confirmed patches redraw immediately. Destructive/hierarchy/resource operations still require native confirmation rather than inventing IDs or metadata. Wheel editing shows a small three-decimal value popup near the pointer for 900 ms. UI sizes remain 100/120/140.
+
+Validation: 233 local tests and package checks passed, covering failed/late acknowledgements, newer previews, independent clocks and wheel popup formatting. Installed Companion reports LIVE. No claim of guaranteed browser FPS or complete optimistic coverage of all operations. GitHub unchanged.
+
+# Companion-only optimization - 0.2.0-beta.33
+
+Numeric viewer insertion reduces native requests from refresh/seek/read_field/key_set/select_key to refresh/seek/key_set. evaluateCurrent reads the native value atomically during key_set; select the inserted key from the write response. Resource picker flow and ordinary encoder writes remain unchanged. Validation: 226 local tests, package checks and 528 detached native checks across time and 60/120/123 BPM, including atomic current-value preservation. No measured end-to-end browser latency claim. GitHub unchanged.
+
+# Companion-only fix - 0.2.0-beta.32
+
+Measured remaining rollback in the independent ViewerClock subscription: it overwrote confirmed editor time with cached socket samples despite matching edit revisions. ViewerClock now discards samples after an edit revision changes and respects the bounded pending-seek target before overriding the shared clock. Linked viewer time follows editor time; unlinked keeps native transport separate.
+
+Validation: 225 local tests and package checks passed. On installed Companion, eight alternating seeks with 128 live/full readbacks reproduced rollback before the clock fix and reported zero mismatches afterwards; initial time restored. No sustained playback or browser frame-by-frame guarantee. GitHub not updated.
+
+# Companion-only fix - 0.2.0-beta.30
+
+Explicit viewer seeks reset playback interpolation. Newly created playhead DOM segments never animate from their default position; subsequent continuous playback still uses the existing transition. 223 local tests and package verification passed. No GitHub publication.
+
+# Companion-only fix - 0.2.0-beta.29
+
+Full viewer snapshots must not inherit time/timecode/value or focus rejection from cached live feedback whose edit revision predates the snapshot or the latest confirmed edit. See mergeLiveClock and viewer-seek-queue.test.js. 221 local tests and package checks passed. GitHub remains unchanged.
+
+# Installed build - 0.2.0-beta.28
+
+Companion-only build: protect confirmed seek transport time from delayed feedback and same-track refreshes, return the seek revision, and apply the confirmed timecode with the position. FOLLOW geometry no longer updates parameter controls per animation frame; cache DOM references per draw and avoid unchanged text writes. 220 local tests and package checks passed, including delayed feedback, rapid seek ordering, unlinked clock isolation and a simulated 1,000-parameter/600-frame workload. No GitHub publication authorized for this build.
+
+# Installed build - 0.2.0-beta.27
+
+Fix ruler clicks being consumed by the key-selection release handler. A deliberate seek waits for the final mouse write, coalesces pending clicks and drops requests after track/token/permission changes. Fresh seeks skip the full refresh; native Designer validates the track and frame-snaps against current timing. Existing write serialization and VIEW/LINK TIME rules remain.
+
+Avoid sampling constant curves; reuse drag labels and cache key-marker selection lookup, invalidating it on every draw. Validation: 215 local tests, package callback checks, 516 detached native checks and read-only installed Companion checks passed. This does not certify sustained browser frame rate or physical encoders. Package installed locally; no GitHub release made for this build yet.
+
+# Previous release - 0.2.0-beta.26
 
 Add reusable regression scripts and REGRESSION-TESTS.md. Run offline tests and packaged Companion actions with node scripts/regression.cjs. Native tests are opt-in; keep private reports under .tools. Preserve this runner for future development.
 
@@ -298,6 +391,13 @@ Latest local suite and package smoke checks run during release. Live checks cove
 See KNOWN-LIMITATIONS.md for source waveform limitations, unsupported field types and large-project performance limits. Beat/bar labels assume 4/4. Direct guest SMB and arbitrary server policies remain unverified.
 
 ## Workflow
+
+Regression maintenance: use `npm run test:regression -- --group=layers,keyframes --unit-only`
+for focused changes and `npm run test:regression` before release. Read
+REGRESSION-TESTS.md for installed/native runs. Every new behavior or bug fix must
+extend the existing test suite and relevant native/installed scenario; do not rebuild
+one-off private test scripts. Full runs discover new test files automatically.
+The runner contains no model calls. Script development/report analysis is separate.
 
 Inspect git status/diff and preserve unrelated work. Use targeted local batches to save credits; npm test and npm run package before release. npm run release -- -Force creates an allowlisted source/archive set. Never commit private probes, media, paths, credentials, machine IDs or real connection exports. Use generated Companion pages. Publish only when requested. Keep README download links, release tag and package versions aligned. User continues manual tests after this release.
 

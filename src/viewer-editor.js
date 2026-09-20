@@ -257,7 +257,10 @@ async function editFromViewerCommand(editor, request) {
     if(result.deletedLayerUid) return {ok:true,editor:describeEditor(editor)}
     if(result.group) return {ok:true,editor:describeEditor(editor)}
     const layerUid=result.layerUid || result.layer?.uid || request.layerUid
-    const selected=await editor.selectFromViewer({trackUid:request.trackUid,layerUid})
+    // New/copied layers may be outside the current edit time. Select their IN
+    // through the shared clock policy (unlinked editing must not seek Designer).
+    const point=['create','duplicate'].includes(request.operation)?'in':undefined
+    const selected=await editor.selectFromViewer({trackUid:request.trackUid,layerUid,...(point?{point}:{})})
     return {...selected,editor:describeEditor(editor)}
   }
   if (request.action === 'value_set') {

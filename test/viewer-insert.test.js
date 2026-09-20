@@ -32,3 +32,11 @@ test('resource insertion pins clicked time until file confirmation and uses medi
  await e.pressValue()
  assert.equal(writes.length,1);assert.equal(writes[0].command,'media_key_set');assert.equal(writes[0].targetTime,8)
 })
+
+test('numeric insertion uses one atomic native write and selects its returned key',async()=>{
+ const c=setup(),execute=c.execute.bind(c),commands=[]
+ c.execute=async(command,args)=>{commands.push(command);if(command==='key_set'){assert.equal(args.evaluateCurrent,true);c.data.layers[0].fields.find(f=>f.name==='speed').value=0.37}return execute(command,args)}
+ const e=new Editor(c);await e.refresh();commands.length=0
+ const result=await editFromViewer(e,{action:'key_insert',token:describeEditor(e).token,trackUid:'1',layerUid:'2',parameter:'speed',targetTime:7.2})
+ assert.equal(result.ok,true);assert.deepEqual(commands,['refresh','seek','key_set']);assert.equal(e.moveKey.time,7.2);assert.equal(e.moveKey.value,0.37)
+})
