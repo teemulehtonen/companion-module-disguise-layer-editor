@@ -1,4 +1,8 @@
-# Current release — 0.2.0-beta.4
+# Current release — 0.2.0-beta.5
+
+Sticky 22px LAYERS divider below NOTES controls sequenced/all/hidden parameter rows for all layers, using the existing icons. Display only, available in VIEW. Bulk expansion requests allDetails so native metadata/curves are not limited to the ordinary 16 explicitly expanded rows. Track waveform stays sticky below the divider.
+
+# Previous release — 0.2.0-beta.4
 
 VIEW hides LINK TIME and the entire SNAP control group. LIVE restores them without changing snap preferences. The S shortcut is inactive in VIEW.
 

@@ -84,7 +84,9 @@ class ViewerServer {
         .slice(0, 32),
     )
     const expanded = (query.get('expanded') || '').split(',').filter(uid => /^\d+$/.test(uid)).slice(0,16)
+    const allDetails = query.get('allDetails') === '1'
     const signature = JSON.stringify([
+      allDetails,
       expanded,
       context.trackUid,
       context.focusUid,
@@ -102,6 +104,7 @@ class ViewerServer {
           const data = await this.client.execute('viewer_snapshot', {
             focusUid: context.focusUid,
             expanded,
+            allDetails,
             width,
             viewStart: start,
             ...(end === undefined ? {} : { viewEnd: end }),

@@ -54,7 +54,7 @@ if p['command'] == 'viewer_snapshot':
             if isinstance(item, GroupLayer): visit_layers(item, str(item.uid), depth+1)
     visit_layers(track)
     for layer, parent, depth in ordered_layers:
-        focused = str(layer.uid) == p.get('focusUid') or str(layer.uid) in p.get('expanded', [])
+        focused = p.get('allDetails') is True or str(layer.uid) == p.get('focusUid') or str(layer.uid) in p.get('expanded', [])
         if isinstance(layer, GroupLayer):
             result['layers'].append({'uid': str(layer.uid), 'name': layer.name, 'moduleType': 'Group',
                 'group': True, 'parent': parent, 'depth': depth, 'expanded': bool(layer.expanded),
