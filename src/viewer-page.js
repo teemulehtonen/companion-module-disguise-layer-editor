@@ -3,10 +3,11 @@ const brandLogo = require('./viewer-logo.json')
 const { applyEditPatch } = require('./viewer-edit-model')
 const { discreteSegments } = require('./viewer-discrete')
 const { selectionScroll } = require('./viewer-selection-scroll')
+const { timecode } = require('./timecode')
 
 // Embedded at bundle time: the packaged module needs no external web runtime.
 // All project strings reach the DOM through textContent, never HTML parsing.
-function browserMain(applyEditPatch, discreteSegments, selectionScroll) {
+function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode) {
   const $ = (id) => document.getElementById(id)
   const viewport = $('viewport'),
     sheet = $('sheet')
@@ -906,9 +907,11 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll) {
     input.required=true
     Object.assign(input.style,{width:'100%',margin:'8px 0',fontSize:'12px'})
     panel.append(input)
-    const at = el('input'), timeLabel = el('label','','TRACK TIME (SECONDS)')
-    at.type='number';at.min='0';at.max=String(state.length);at.step='any';at.required=true
-    at.value=String(time);at.setAttribute('aria-label','TRACK TIME (SECONDS)')
+    const at = el('input'), timeLabel = el('label','','TRACK TIME (HH:MM:SS:FF)')
+    at.type='text';at.required=true;at.placeholder='HH:MM:SS:FF'
+    at.value=timecode(time,state.fps || 25);at.setAttribute('aria-label','TRACK TIME (HH:MM:SS:FF)')
+    const originalTimeLabel=at.value
+    at.oninput=()=>at.setCustomValidity('')
     Object.assign(at.style,{width:'100%',margin:'6px 0 9px',fontSize:'12px'})
     timeLabel.append(at);panel.append(timeLabel)
     const save=el('button','','SAVE'),cancel=el('button','','CANCEL')
@@ -928,8 +931,13 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll) {
       void interact(async()=>{
         const text=input.value.trim()
         if (!text) return
-        const targetTime=Number(at.value)
-        if (!Number.isFinite(targetTime) || targetTime<0 || targetTime>state.length) return
+        const parts=/^(\d{2,}):(\d{2}):(\d{2}):(\d{2})$/.exec(at.value.trim())
+        const rate=state.fps || 25,nominal=Math.round(rate)
+        const valid=parts && Number(parts[2])<60 && Number(parts[3])<60 && Number(parts[4])<nominal
+        const targetTime=at.value===originalTimeLabel ? time : valid ? ((Number(parts[1])*3600+Number(parts[2])*60+Number(parts[3]))*nominal+Number(parts[4]))/rate : NaN
+        if (!Number.isFinite(targetTime) || targetTime<0 || targetTime>state.length) {
+          at.setCustomValidity('ENTER A VALID TRACK TIME: HH:MM:SS:FF');at.reportValidity();return
+        }
         if (!await releaseViewerMode()) return
         const ok=await sendEdit('annotation',{kind,mode:item ? (targetTime===item.time ? 'update' : 'move') : 'add',targetTime,text,
           ...(item ? {sourceTime:item.time,sourceText:String(item.text ?? item.value ?? '')} : {})})
@@ -1823,4 +1831,4 @@ const stylesheet = `
 `
 const page = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Disguise Layer Editor · Timeline</title><link rel="stylesheet" href="/viewer.css"><script src="/viewer.js" defer></script></head><body><header><span class="brand-logo"><img src="${brandLogo}" alt="VEHKA AV"></span><div><h1>DISGUISE LAYER EDITOR</h1><small>TIMELINE VIEWER</small></div><div class="spacer"></div><div id="clockBlock"><span id="clock">—</span><span id="beat"></span><div id="editClock" hidden></div><div id="clockDetails"></div><div id="sectionRemaining" aria-live="off"></div></div><span id="status" role="status">CONNECTING</span></header><div class="toolbar"><strong id="track">TRACK</strong><div class="spacer"></div><button id="fitTrack" title="FIT TRACK">FIT TRACK</button><button id="fitLayer" title="CENTRE SELECTED LAYER">FIT LAYER</button><button id="follow" title="FOLLOW PLAYHEAD" aria-pressed="true">FOLLOW</button><button id="zoomOut" aria-label="ZOOM OUT" title="ZOOM OUT">−</button><button id="zoomIn" aria-label="ZOOM IN" title="ZOOM IN">+</button></div><main id="viewport" aria-label="Designer timeline"><div id="sheet"></div></main><footer>CTRL + WHEEL: ZOOM · SHIFT + WHEEL: PAN<span id="selectionMessage" role="status"></span><span id="warnings"></span></footer></body></html>`
 
-module.exports = { page, stylesheet, browserScript: '(' + browserMain.toString() + ')(' + applyEditPatch.toString() + ',' + discreteSegments.toString() + ',' + selectionScroll.toString() + ')' }
+module.exports = { page, stylesheet, browserScript: '(' + browserMain.toString() + ')(' + applyEditPatch.toString() + ',' + discreteSegments.toString() + ',' + selectionScroll.toString() + ',' + timecode.toString() + ')' }

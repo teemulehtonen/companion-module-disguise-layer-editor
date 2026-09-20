@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-beta.141
+
+- Show and edit marker track positions as HH:MM:SS:FF using track FPS. Unchanged displayed time preserves the original exact position; invalid frame/minute/second fields are rejected.
+
 ## 0.1.0-beta.140
 
 - Right-click or double-click cue, TC, MIDI and notes markers to edit their content and track-relative time in seconds, or delete the selected marker. Native source checks and locks remain enforced; unrelated co-located markers are preserved.

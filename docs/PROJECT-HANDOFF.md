@@ -1,4 +1,6 @@
-# Current release — beta.140
+# Current release — beta.141
+
+Marker popup track-relative time uses HH:MM:SS:FF (shared timecode formatter, fractional FPS conversion). Leaving the formatted field unchanged preserves the original subframe position. This is track-relative time, distinct from the TC marker's content.
 
 Marker popup includes current track-relative seconds and DELETE. Changed time uses the existing guarded move command; unchanged time updates content. Native deletion verifies source text/time and removes only that tag type or note, preserving the cue/section and other tags. All four types passed add/move/delete on an isolated native track (seven assertions).
 
