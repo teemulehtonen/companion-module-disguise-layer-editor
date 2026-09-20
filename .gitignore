@@ -16,3 +16,5 @@ assets/*
 !.env.example
 *.pem
 *.key
+
+/D3-Stream-Deck-XL.companionconfig

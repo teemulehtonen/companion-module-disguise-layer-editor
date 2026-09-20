@@ -1219,11 +1219,78 @@ class Editor {
     if (id === 'field') return this.browseClearKeys(Number(options.direction))
     // Other dials are intentionally inert while choosing deletion targets.
   }
+  acceptPlaybackMode(mode) {
+    const command = { play: 'play', 'play to end of section': 'playsection', 'loop section': 'playloopsection' }[String(mode).toLowerCase()]
+    if (command) this.lastPlaybackMode = command
+  }
+  get timeEntryLabel() {
+    if (this.timeEntryError) return this.timeEntryError
+    return (this.timeEntryDigits || '').padStart(8, '0').match(/.{2}/g).join(':')
+  }
+  async enterTime(key) {
+    key = String(key)
+    this.local()
+    if (key === 'clear') {
+      this.timeEntryDigits = ''
+      this.timeEntryError = ''
+      this.timeEntryTrackUid = null
+      return
+    }
+    if (key === 'back') {
+      this.timeEntryDigits = (this.timeEntryDigits || '').slice(0, -1)
+      this.timeEntryError = ''
+      return
+    }
+    if (/^\d$/.test(key)) {
+      this.requireReady()
+      if (this.timeEntryTrackUid !== this.snapshot.trackUid) this.timeEntryDigits = ''
+      this.timeEntryTrackUid = this.snapshot.trackUid
+      // Shift a bounded timecode register, including explicit leading zeros.
+      // Never freeze input after eight digits: further keys replace the oldest.
+      this.timeEntryDigits = ((this.timeEntryDigits || '') + key).slice(-8)
+      this.timeEntryError = ''
+      return
+    }
+    if (key !== 'go') throw new Error('Invalid time keypad key')
+    if (!this.timeEntryDigits) return
+    this.requireReady()
+    await this.refresh({ preserve: true })
+    if (this.timeEntryTrackUid !== this.snapshot.trackUid) {
+      this.timeEntryError = 'TRACK\nCHANGED'
+      return
+    }
+    this.timeEntryError = ''
+    const label = this.timeEntryLabel
+    const [, minutes, seconds, frames] = label.split(':').map(Number)
+    if (minutes > 59 || seconds > 59 || frames >= Math.round(this.snapshot.fps || 25)) {
+      this.timeEntryError = 'INVALID\nTIME'
+      return
+    }
+    const trackUid = this.snapshot.trackUid
+    const result = await this.remote(() => this.client.execute('resolve_timecode', { ...this.context(), label }))
+    if (!Number.isFinite(result.time)) {
+      this.timeEntryError = 'TIME NOT\nON TRACK'
+      return
+    }
+    const jump = await this.seekFromViewer({ trackUid, time: result.time })
+    if (jump.ok) this.timeEntryDigits = ''
+    else this.timeEntryError = 'TRACK\nCHANGED'
+  }
+  async editSection(operation) {
+    this.requireReady()
+    if (!['cut', 'merge'].includes(operation)) throw new Error('Invalid section operation')
+    const result = await this.remote(() => this.client.execute('section_edit', {
+      ...this.context(), operation, time: this.time,
+    }))
+    this.stale = true
+    await this.refresh({ preserve: true })
+    return result
+  }
   async controlTransport(operation) {
     this.requireReady()
     const context = {trackUid:this.snapshot.trackUid,transportUid:this.snapshot.transportUid}
     const result = await this.remote(() => this.client.transport(context,operation,this.lastPlaybackMode))
-    if (['play','playsection'].includes(result.command)) this.lastPlaybackMode=result.command
+    if (['play','playsection','playloopsection'].includes(result.command)) this.lastPlaybackMode=result.command
     this.playing=result.playing
     this.pendingJump=null
     this.navigationTime=null

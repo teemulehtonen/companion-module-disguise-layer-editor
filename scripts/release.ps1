@@ -47,7 +47,7 @@ foreach ($relative in $sourceFiles) {
 }
 $bundle = Join-Path $staging 'bundle'
 New-Item -ItemType Directory -Path $bundle | Out-Null
-foreach ($relative in @("disguise-layer-control-$version.tgz",'D3-Stream-Deck-Plus.companionconfig','README.md','LICENSE','CHANGELOG.md','KNOWN-LIMITATIONS.md','DISCLAIMER.md','SECURITY.md')) {
+foreach ($relative in @("disguise-layer-control-$version.tgz",'D3-Stream-Deck-Plus.companionconfig','D3-Stream-Deck-XL.companionconfig','README.md','LICENSE','CHANGELOG.md','KNOWN-LIMITATIONS.md','DISCLAIMER.md','SECURITY.md')) {
     Copy-Item -LiteralPath (Join-Path $projectRoot $relative) -Destination $bundle
 }
 New-Item -ItemType Directory -Path (Join-Path $bundle 'docs') | Out-Null
@@ -69,8 +69,8 @@ try {
     foreach ($relative in $sourceFiles) { if ($entries -notcontains $relative.Replace('\','/')) { throw "Missing source file: $relative" } }
     if ($entries | Where-Object { $_ -match '(^|/)(node_modules|\.tools|track-[345]|history)/|\.d3$|\.log$' }) { throw 'Development data entered source archive.' }
 } finally { $zip.Dispose() }
-# Small installation download: only the two files imported into Companion.
-Compress-Archive -LiteralPath @((Join-Path $bundle "disguise-layer-control-$version.tgz"), (Join-Path $bundle 'D3-Stream-Deck-Plus.companionconfig')) -DestinationPath (Join-Path $bundle "disguise-layer-editor-$releaseName-companion.zip")
+# Small installation download: module and both clean Companion pages.
+Compress-Archive -LiteralPath @((Join-Path $bundle "disguise-layer-control-$version.tgz"), (Join-Path $bundle 'D3-Stream-Deck-Plus.companionconfig'), (Join-Path $bundle 'D3-Stream-Deck-XL.companionconfig')) -DestinationPath (Join-Path $bundle "disguise-layer-editor-$releaseName-companion.zip")
 $hashes = Get-ChildItem -LiteralPath $bundle -File -Recurse | Sort-Object FullName | ForEach-Object {
     $name = $_.FullName.Substring($bundle.Length + 1).Replace('\','/')
     $stream = [IO.File]::OpenRead($_.FullName)

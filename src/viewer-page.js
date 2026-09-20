@@ -138,6 +138,7 @@ function browserMain(applyEditPatch, discreteSegments) {
     ['gotoprevsection','PREVIOUS SECTION','M4 3V13 M12 3L6 8L12 13Z'],
     ['play','PLAY','M4 2L13 8L4 14Z'],
     ['playsection','PLAY TO END OF SECTION','M2 3L10 8L2 13Z M13 3V13'],
+    ['playloopsection','PLAY LOOP SECTION','M12 5A5 5 0 1 0 1 8 M12 1V5H8 M6 5L10 8L6 11Z'],
     ['stop','STOP','M4 4H12V12H4Z'],
     ['gotonextsection','NEXT SECTION','M12 3V13 M4 3L10 8L4 13Z'],
   ]) {
@@ -325,7 +326,7 @@ function browserMain(applyEditPatch, discreteSegments) {
     transportControls.style.display=enabled?'flex':'none'
     for (const [operation,button] of transportButtons) {
       button.disabled=!enabled || !state.connected || editPending || interactionBusy || Boolean(mouseGesture || layerReorder)
-      if (['play','playsection','stop'].includes(operation)) button.setAttribute('aria-pressed',String(operation==='stop' ? !state.editor?.playing : state.editor?.playing && state.editor?.playbackMode===operation))
+      if (['play','playsection','playloopsection','stop'].includes(operation)) button.setAttribute('aria-pressed',String(operation==='stop' ? !state.editor?.playing : state.editor?.playing && state.editor?.playbackMode===operation))
     }
     addLayers.hidden=!enabled
     addLayers.style.display=enabled?'flex':'none'

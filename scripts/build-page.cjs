@@ -47,11 +47,12 @@ function control(preset, notes = '') {
       id: id(),
       connectionId,
       definitionId: f.feedbackId,
-      options: {},
+      options: Object.fromEntries(Object.entries(f.options || {}).map(([key, value]) => [key, literal(value)])),
       isInverted: literal(false),
       upgradeIndex: -1,
       styleOverrides: [
-        { overrideId: id(), elementId: 'box0', elementProperty: 'color', override: literal(f.style.bgcolor) },
+        ...(f.style.bgcolor === undefined ? [] : [{ overrideId: id(), elementId: 'box0', elementProperty: 'color', override: literal(f.style.bgcolor) }]),
+        ...(f.style.color === undefined ? [] : [{ overrideId: id(), elementId: text.id, elementProperty: 'color', override: literal(f.style.color) }]),
       ],
     })),
   }
@@ -272,3 +273,55 @@ const page = {
 const output = path.join(root, 'D3-Stream-Deck-Plus.companionconfig')
 fs.writeFileSync(output, JSON.stringify(page, null, 2) + '\n')
 console.log(`Companion page: ${output}`)
+
+// XL is generated from the same action presets, font and feedback definitions.
+// Keep controls in five-column groups; the right-hand status column stays separate.
+const xl = structuredClone(page)
+xl.page.id = 'd3-streamdeck-xl-page'
+xl.page.name = 'Disguise Layer Editor XL'
+xl.oldPageNumber = 5
+xl.page.controls = { 0: {}, 1: {}, 2: {}, 3: {} }
+function xlButton(preset, notes, fontSize = 25) {
+  const button = control(preset, notes)
+  button.style.layers = button.style.layers.filter(layer => layer.type !== 'image')
+  const text = button.style.layers.find(layer => layer.type === 'text')
+  text.y = literal(10)
+  text.height = literal(80)
+  text.fontsize = literal(fontSize)
+  const accent = structuredClone(button.style.layers.find(layer => layer.type === 'box'))
+  accent.id = 'xl-accent'
+  accent.name = 'Editor accent'
+  accent.height = literal(2)
+  accent.color = literal(theme.accent)
+  button.style.layers.push(accent)
+  return button
+}
+for (let slot = 0; slot < 10; slot++) {
+  xl.page.controls[Math.floor(slot / 5)][slot % 5] = xlButton(
+    definitions['timing_' + slot], 'Select the shared time/beat step. Highlight = selected. Dash = unavailable.',
+  )
+}
+
+// A conventional keypad occupies the rightmost three columns.
+const keypad = [ ['7','8','9'], ['4','5','6'], ['1','2','3'], ['back','0','go'] ]
+for (let row=0;row<4;row++) for(let col=0;col<3;col++) {
+  const key=keypad[row][col]
+  const text=key==='back' ? 'BACK' : key==='go' ? 'JUMP' : key
+  const preset={style:{text,bgcolor:key==='go'?theme.active:theme.background},steps:[{down:[{actionId:'time_keypad',options:{key}}],up:[],rotate_left:[],rotate_right:[]}],feedbacks:[]}
+  xl.page.controls[row][col+5]=xlButton(preset,'Enter HH:MM:SS:FF; colons and leading zeros are automatic. JUMP moves the active clock. BACK removes one digit.', /^\d$/.test(key) ? 60 : 25)
+}
+for(const [column,operation] of ['gotoprevsection','gotonextsection'].entries())
+  xl.page.controls[2][column]=xlButton(definitions['transport_'+operation],'Go to previous/next section in Designer.')
+xl.page.controls[2][2]=xlButton(definitions.section_cut,'Cut section at active edit time; layer content stays intact.')
+xl.page.controls[2][3]=xlButton(definitions.section_merge,'Merge current section with previous; preserve notes and tags.')
+const timeEntry={style:{text:'$(d3layers:time_entry)',bgcolor:theme.background},steps:[{down:[{actionId:'time_keypad',options:{key:'clear'}}],up:[],rotate_left:[],rotate_right:[]}],feedbacks:[]}
+const entryButton=xlButton(timeEntry,'Entered time, or current edit time when empty. Press to clear the entry. LINK TIME chooses the real or blue editing clock.')
+entryButton.style.layers.find(l=>l.type==='text').fontsize=literal(17)
+entryButton.style.layers.find(l=>l.type==='box').color=expression(variable('time_entry_active')+' ? '+theme.active+' : '+theme.background)
+xl.page.controls[2][4]=entryButton
+for(const [column,operation] of ['play','playsection','playloopsection','stop'].entries())
+  xl.page.controls[3][column]=xlButton(definitions['transport_'+operation],'Designer transport. Highlight = active play mode or stopped.')
+xl.page.controls[3][4]=xlButton(definitions.link_time,'Link editing to Designer time. Highlight = linked.')
+const xlOutput = path.join(root, 'D3-Stream-Deck-XL.companionconfig')
+fs.writeFileSync(xlOutput, JSON.stringify(xl, null, 2) + '\n')
+console.log(`Companion XL page: ${xlOutput}`)

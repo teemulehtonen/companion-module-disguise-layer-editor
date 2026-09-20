@@ -346,6 +346,49 @@ ${waveformScript}
 ${viewerScript}
 if p['command'] == 'refresh':
     return snapshot()
+if p['command'] == 'resolve_timecode':
+    label = p.get('label', '')
+    if not re.match(r'^\\d{2}:\\d{2}:\\d{2}:\\d{2}$', label):
+        raise ValueError('Invalid timecode')
+    requested = Timecode.fromStringWithFps(label, manager.smpteClockType(), manager.customFps())
+    # Each TC marker starts a new mapping. Verify a candidate against Designer's
+    # own display so invalid drop-frame labels and discontinuities never seek.
+    starts = [0.0]
+    for i in range(track.cues.n()):
+        cue = track.cues.getV(i)
+        if any(tag.type == Tag.TC for tag in cue.getTags()):
+            starts.append(float(track.beatToTime(track.cues.getT(i))))
+    starts = sorted(set(starts))
+    matches = []
+    for i, start in enumerate(starts):
+        end = starts[i+1] if i+1 < len(starts) else float(track.lengthInSec)
+        origin = manager.beatToTimecode(track.timeToBeat(start))
+        candidate = round((start + requested.t - origin.t) * fps()) / fps()
+        if candidate < start or candidate > end or (i+1 < len(starts) and candidate >= end):
+            continue
+        actual = str(manager.beatToTimecode(track.timeToBeat(candidate)))
+        if re.sub(r'[.;]', ':', actual) == label:
+            matches.append(candidate)
+    return {'time': min(matches, key=lambda value: abs(value-edit_seconds())) if matches else None}
+if p['command'] == 'section_edit':
+    operation = p.get('operation')
+    if operation not in ('cut', 'merge'):
+        raise ValueError('Invalid section operation')
+    if track.locked:
+        raise ValueError('Track is locked')
+    seconds = float(p['time'])
+    if math.isnan(seconds) or math.isinf(seconds) or seconds < 0 or seconds > float(track.lengthInSec):
+        raise ValueError('Section time is outside the track')
+    beat = track.timeToBeat(seconds)
+    if operation == 'cut':
+        if seconds <= 0 or seconds >= float(track.lengthInSec):
+            return {'changed': False}
+        track.splitSectionAtBeat(beat)
+    else:
+        if track.beatToSection(beat) <= 0:
+            return {'changed': False}
+        track.mergeSectionAtBeat(beat)
+    return {'changed': True}
 if p['command'] == 'annotation_edit':
     kind, mode = p['kind'], p['mode']
     if kind not in ('cue', 'tc', 'midi', 'notes') or mode not in ('add', 'move', 'update'):

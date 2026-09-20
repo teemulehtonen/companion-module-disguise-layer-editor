@@ -70,7 +70,7 @@ class DesignerClient {
     return body.result.annotations
   }
   async transport(context, operation, lastMode = 'playsection') {
-    if (!['play','playsection','stop','toggle','gotonextsection','gotoprevsection'].includes(operation)) throw new Error('Invalid transport operation')
+    if (!['play','playsection','playloopsection','stop','toggle','gotonextsection','gotoprevsection'].includes(operation)) throw new Error('Invalid transport operation')
     const state = await this.execute('playback_state', context)
     const command = operation === 'toggle' ? (state.playing ? 'stop' : lastMode) : operation
     const section = command === 'gotonextsection' || command === 'gotoprevsection'

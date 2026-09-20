@@ -6,7 +6,7 @@ Disguise layer, keyframe and resource control for Bitfocus Companion and Stream 
 
 ## Install
 
-**Downloads (beta.132):** [Companion module](../../releases/download/v0.1.0-beta.132/disguise-layer-control-0.1.0-beta.132.tgz) · [Companion page](../../releases/download/v0.1.0-beta.132/D3-Stream-Deck-Plus.companionconfig)
+**Downloads (beta.135):** [Companion module](../../releases/download/v0.1.0-beta.135/disguise-layer-control-0.1.0-beta.135.tgz) · [Stream Deck XL page](../../releases/download/v0.1.0-beta.135/D3-Stream-Deck-XL.companionconfig) · [Companion page](../../releases/download/v0.1.0-beta.135/D3-Stream-Deck-Plus.companionconfig)
 
 Tested with Designer 32.4.17 and Companion 5.0.5.
 
@@ -15,11 +15,19 @@ Tested with Designer 32.4.17 and Companion 5.0.5.
 3. Import `D3-Stream-Deck-Plus.companionconfig`, choose a destination page and link the connection. Import replaces that page; export it first if needed.
 4. Assign Stream Deck + to that page. **HTTP + SYNC** indicates automatic feedback.
 
+## Stream Deck XL
+
+Import **D3-Stream-Deck-XL.companionconfig** into one chosen page and map it to the existing d3layers connection. The 8 × 4 layout shares the Plus font/theme: ten adaptive time/beat steps on the left, a permanent 7–9 / 4–6 / 1–3 keypad on the right, and BACK / 0 / JUMP on its bottom row. The entered time is zero-padded with automatic colons; press its display to clear. JUMP uses Designer timecode mapping and LINK TIME selects the real or independent edit clock. Invalid entries do not seek.
+
+PLAY, PLAY TO END, PLAY LOOP and STOP highlight their active state; PREV/NEXT SECTION and CUT/MERGE SECTION are above them. CUT splits at active edit time; MERGE removes the current section boundary, preserving tags and notes. LINK TIME has its own highlight. Unavailable beat slots are dark and inert.
+
+Both pages are generated and tested on every release. Importing a page replaces that destination page only; preserve any custom layout first.
+
 ## Additional Stream Deck presets
 
 In Companion **Presets**, select this connection and drag buttons from **Adaptive timing steps** or **Transport and time linking** onto any page or Stream Deck. Timing slots automatically follow the current track and editing mode: frame/seconds on time tracks, beats on quantized tracks, with finer fractions while moving keys. The selected step is highlighted; unused slots display a dash and do nothing. Selecting a step keeps the selected key/layer editing mode.
 
-Transport presets provide PLAY, PLAY TO END, STOP, PLAY / STOP (last play mode), PREVIOUS/NEXT SECTION and LINK TIME. They share state with the viewer.
+Transport presets provide PLAY, PLAY TO END, PLAY LOOP, STOP, PLAY / STOP (last play mode), PREVIOUS/NEXT SECTION and LINK TIME. They share state with the viewer.
 
 ## Controls
 

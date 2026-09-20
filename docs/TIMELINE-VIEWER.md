@@ -13,7 +13,7 @@ Enable **ENABLE TIMELINE VIEWER** and open `http://127.0.0.1:8765` (configurable
 
 ## Transport
 
-The icon group before +VIDEO contains PREVIOUS SECTION, PLAY, PLAY TO END OF SECTION, STOP and NEXT SECTION. Hover for labels. Space toggles play/stop using the last successful PLAY or PLAY TO END choice (initially section end). Typing, open popups and held-key repeats do not trigger it. These controls always command Designer transport, even when LINK TIME is off; the blue editing cursor stays independent.
+The icon group before +VIDEO contains PREVIOUS SECTION, PLAY, PLAY TO END OF SECTION, PLAY LOOP SECTION, STOP and NEXT SECTION. Hover for labels. Space toggles play/stop using the last successful PLAY, PLAY TO END or PLAY LOOP choice (initially section end). Typing, open popups and held-key repeats do not trigger it. These controls always command Designer transport, even when LINK TIME is off; the blue editing cursor stays independent.
 
 ## Mouse editing
 

@@ -107,7 +107,7 @@ function validGrid(grid) {
     Object.keys(grid).every(key=>['unit','step','index'].includes(key)))
 }
 function validEditRequest(value) {
-  if (value?.action === 'transport') return /^[a-f0-9]{64}$/.test(value.token || '') && ['play','playsection','stop','toggle','gotonextsection','gotoprevsection'].includes(value.operation) && Object.keys(value).every(k=>['action','token','operation'].includes(k))
+  if (value?.action === 'transport') return /^[a-f0-9]{64}$/.test(value.token || '') && ['play','playsection','playloopsection','stop','toggle','gotonextsection','gotoprevsection'].includes(value.operation) && Object.keys(value).every(k=>['action','token','operation'].includes(k))
   if (value?.action === 'link_time') return typeof value.enabled === 'boolean' && /^[a-f0-9]{64}$/.test(value.token || '') && Object.keys(value).every(k => ['action','token','enabled'].includes(k))
   if(value && Object.hasOwn(value,'keepPlayhead')) {
     const {keepPlayhead,...command}=value

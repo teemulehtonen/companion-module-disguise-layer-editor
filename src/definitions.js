@@ -46,8 +46,10 @@ function actions(instance) {
       }, queueOptions),
   })
   return {
+    time_keypad: action('Time keypad', [{type:'dropdown',id:'key',label:'Key',default:'go',choices:[...Array.from({length:10},(_,i)=>({id:String(i),label:String(i)})),{id:'back',label:'Backspace'},{id:'clear',label:'Clear'},{id:'go',label:'Jump'}]}], (e,o)=>e.enterTime(o.key), {synchronise:false}),
     time_step_set: action('Select adaptive timing step', [numeric('slot','Step slot (0–9)',0,0,9)], (e,o)=>e.setTimeStep(Number(o.slot))),
-    transport: action('Transport control', [{type:'dropdown',id:'operation',label:'Operation',default:'play',choices:[{id:'play',label:'Play'},{id:'playsection',label:'Play to end of section'},{id:'stop',label:'Stop'},{id:'toggle',label:'Play / stop (last mode)'},{id:'gotoprevsection',label:'Previous section'},{id:'gotonextsection',label:'Next section'}]}], (e,o)=>e.controlTransport(o.operation)),
+    transport: action('Transport control', [{type:'dropdown',id:'operation',label:'Operation',default:'play',choices:[{id:'play',label:'Play'},{id:'playsection',label:'Play to end of section'},{id:'playloopsection',label:'Play loop section'},{id:'stop',label:'Stop'},{id:'toggle',label:'Play / stop (last mode)'},{id:'gotoprevsection',label:'Previous section'},{id:'gotonextsection',label:'Next section'}]}], (e,o)=>e.controlTransport(o.operation)),
+    section_edit: action('Cut / merge section at active edit time', [{type:'dropdown',id:'operation',label:'Operation',default:'cut',choices:[{id:'cut',label:'Cut section'},{id:'merge',label:'Merge with previous section'}]}], (e,o)=>e.editSection(o.operation)),
     refresh: action('Read layers and values from Designer', [], (e) => e.refresh()),
     link_time: action('Toggle playhead follow while editing', [], (e) => e.setLinkTime(!e.linkTime)),
     play_stop: action('Play to end of section / stop', [], (e) => e.togglePlayback()),
@@ -194,11 +196,12 @@ function presets(label = 'd3layers') {
     p['timing_'+i]=button('Adaptive timing step '+(i+1),'$(this:timing_step_'+i+')',[entry('time_step_set',{slot:i})])
     p['timing_'+i].feedbacks=[{feedbackId:'timing_step_selected',options:{slot:i},style:{bgcolor:theme.active}},{feedbackId:'timing_step_unavailable',options:{slot:i},style:{bgcolor:0,color:theme.secondary}}]
   }
-  for(const [operation,text] of [['play','PLAY'],['playsection','PLAY\nTO END'],['stop','STOP'],['toggle','PLAY /\nSTOP'],['gotoprevsection','PREV\nSECTION'],['gotonextsection','NEXT\nSECTION']]) {
+  for(const [operation,text] of [['play','PLAY'],['playsection','PLAY\nTO END'],['playloopsection','PLAY\nLOOP'],['stop','STOP'],['toggle','PLAY /\nSTOP'],['gotoprevsection','PREV\nSECTION'],['gotonextsection','NEXT\nSECTION']]) {
     p['transport_'+operation]=button(text,text,[entry('transport',{operation})])
     p['transport_'+operation].style.bgcolor=theme.groups.playback
-    if(['play','playsection','stop'].includes(operation)) p['transport_'+operation].feedbacks=[{feedbackId:'transport_state',options:{operation},style:{bgcolor:theme.active}}]
+    if(['play','playsection','playloopsection','stop'].includes(operation)) p['transport_'+operation].feedbacks=[{feedbackId:'transport_state',options:{operation},style:{bgcolor:theme.active}}]
   }
+  for (const operation of ['cut','merge']) p['section_'+operation]=button(operation+' section',operation.toUpperCase()+'\nSECTION',[entry('section_edit',{operation})])
   p.link_time=button('Link editing time to Designer','LINK\nTIME',[entry('link_time')])
   p.link_time.feedbacks=[{feedbackId:'link_time',options:{},style:{bgcolor:theme.active}}]
   p.connection.feedbacks = [{ feedbackId: 'connected', options: {}, style: { bgcolor: theme.active } }]
@@ -240,7 +243,7 @@ function presets(label = 'd3layers') {
         id: 'timing', name: 'Adaptive timing steps', definitions:Array.from({length:10},(_,i)=>'timing_'+i),
       },
       {
-        id: 'transport', name:'Transport and time linking', definitions:['transport_gotoprevsection','transport_play','transport_playsection','transport_stop','transport_gotonextsection','transport_toggle','link_time'],
+        id: 'transport', name:'Transport and time linking', definitions:['transport_gotoprevsection','transport_play','transport_playsection','transport_playloopsection','transport_stop','transport_gotonextsection','transport_toggle','link_time','section_cut','section_merge'],
       },
       {
         id: 'additional',

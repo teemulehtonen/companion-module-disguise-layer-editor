@@ -1,4 +1,16 @@
-# Current release — beta.132
+# Current release — beta.135
+
+XL uses larger 25% control text and 60% numeric keys. Timecode stays on one line at 17%. The keypad is an eight-digit shift register: explicit leading zeros are accepted, excess input replaces the oldest digit, BACK removes the newest, and pressing the time display clears input. Keep numeric input local; only JUMP refreshes Designer context.
+
+Validation: 172 local tests and package checks passed; seven isolated native section checks preserved notes and layer timing. Native timecode resolution was verified without seeking. The XL page is installed on Companion page 5 using the existing connection. Numeric input is local and bypasses stale-selection refresh; JUMP refreshes and validates the original track before resolving time.
+
+Maintain both generated Companion pages through scripts/build-page.cjs. The XL export shares preset definitions and Plus typography; never maintain a hand-exported page containing user settings. The builder must preserve feedback options (timing slot / playback operation) and both foreground/background overrides. test/xl-page.test.js guards these contracts. release.ps1 includes both pages in the install ZIP; GitHub releases must attach both page assets.
+
+The rightmost three XL columns are a fixed numeric keypad. Editor.enterTime owns bounded input, track identity, inline validation and native timecode resolution. resolve_timecode is read-only: native TC parsing plus segment candidate validation against beatToTimecode; ambiguous repeated labels choose nearest edit time. Final seek uses existing linked/unlinked policy.
+
+Section edits use native splitSectionAtBeat/mergeSectionAtBeat on the current guarded track, reject locks, and preserve tags/notes. Native isolated checks covered cut, merge, initial boundary no-op and note preservation. PLAY LOOP uses /api/session/transport/playloopsection. Successful play mode is shared by presets/viewer/Space and refreshed from guarded REST transport feedback.
+
+# Previous release — beta.132
 
 Validation: 169 local tests and packaged lifecycle checks passed. This release consolidates timing catalogs and labels; no broad native layer or playback matrix was run.
 

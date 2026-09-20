@@ -19,7 +19,7 @@ test('transport API uses guarded target and proper section envelope; toggle reta
     }
   })
   const context = { trackUid: '1', transportUid: '2' }
-  for (const operation of ['play', 'playsection', 'stop', 'gotoprevsection', 'gotonextsection']) {
+  for (const operation of ['play', 'playsection', 'playloopsection', 'stop', 'gotoprevsection', 'gotonextsection']) {
     await c.transport(context, operation)
     const r = requests.at(-1)
     assert.ok(r.url.endsWith('/' + operation))

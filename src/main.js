@@ -27,6 +27,8 @@ class DisguiseLayerControl extends InstanceBase {
           layer_type: 'Friendly layer type',
           parameter: 'Selected numeric parameter',
           playing: 'Designer is playing',
+          time_entry: 'Keypad time entry or validation message',
+          time_entry_active: 'Keypad has a pending time',
           playback_label: 'Play section / stop button label',
           parameter_animated: 'Selected parameter has multiple sequenced keys',
           value: 'Current numeric value',
@@ -99,7 +101,7 @@ class DisguiseLayerControl extends InstanceBase {
       link_time:{type:'boolean',name:'Time linked',options:[],defaultStyle:{bgcolor:theme.active},callback:()=>Boolean(this.editor?.linkTime)},
       timing_step_selected:{type:'boolean',name:'Timing step selected',options:[{type:'number',id:'slot',label:'Slot',default:0,min:0,max:9}],defaultStyle:{bgcolor:theme.active},callback:f=>Boolean(this.editor?.timeStepChoices[Number(f.options.slot)]?.selected)},
       timing_step_unavailable:{type:'boolean',name:'Timing step unavailable',options:[{type:'number',id:'slot',label:'Slot',default:0,min:0,max:9}],defaultStyle:{bgcolor:0,color:theme.secondary},callback:f=>!this.editor?.timeStepChoices[Number(f.options.slot)]},
-      transport_state:{type:'boolean',name:'Transport mode',options:[{type:'dropdown',id:'operation',label:'Mode',default:'play',choices:[{id:'play',label:'Play'},{id:'playsection',label:'Play to section end'},{id:'stop',label:'Stop'}]}],defaultStyle:{bgcolor:theme.active},callback:f=>f.options.operation==='stop' ? !this.editor?.playing : Boolean(this.editor?.playing && this.editor.lastPlaybackMode===f.options.operation)},
+      transport_state:{type:'boolean',name:'Transport mode',options:[{type:'dropdown',id:'operation',label:'Mode',default:'play',choices:[{id:'play',label:'Play'},{id:'playsection',label:'Play to section end'},{id:'playloopsection',label:'Play loop section'},{id:'stop',label:'Stop'}]}],defaultStyle:{bgcolor:theme.active},callback:f=>f.options.operation==='stop' ? !this.editor?.playing : Boolean(this.editor?.playing && this.editor.lastPlaybackMode===f.options.operation)},
       fine: {
         type: 'boolean',
         name: 'Fine mode',
@@ -249,6 +251,8 @@ class DisguiseLayerControl extends InstanceBase {
             )
             if (state.probeRevision !== this.lastProbeRevision) {
               this.lastProbeRevision = state.probeRevision
+              if (active && state.probeFeedbackRevision === state.feedbackRevision && !this.editor?.busy)
+                this.editor?.acceptPlaybackMode(active.playmode)
               if (
                 state.connected &&
                 this.editor?.snapshot &&
@@ -775,6 +779,8 @@ class DisguiseLayerControl extends InstanceBase {
       media_field: e?.mediaField?.label || '',
       media_position: `${(e?.mediaIndex ?? -1) + 1}/${e?.mediaItems.length || 0}`,
       playing: Boolean(e?.playing),
+      time_entry: e?.timeEntryDigits ? e.timeEntryLabel : tc(e?.time),
+      time_entry_active: Boolean(e?.timeEntryDigits),
       playback_label: playbackLabel,
       parameter_animated: Boolean(!clearBrowser && !e?.layerEdit && e?.field?.sequenced && keys.length > 1),
       track: e?.snapshot?.trackName || '',

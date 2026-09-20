@@ -112,6 +112,7 @@ class Connection {
   }
   async check() {
     if (this.closed) return
+    const feedbackRevision = this.feedbackRevision
     try {
       const transports = await this.client.probe()
       if (this.closed) return
@@ -119,6 +120,7 @@ class Connection {
       this.pulseHeartbeat()
       this.error = ''
       this.transports = transports
+      this.probeFeedbackRevision = feedbackRevision
       this.probeRevision = (this.probeRevision || 0) + 1
       if (this.transportUid && !this.socket) this.watch(this.transportUid, this.fieldTarget)
     } catch (error) {

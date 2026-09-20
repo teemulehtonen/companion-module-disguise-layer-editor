@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.0-beta.135
+
+- Add a maintained Stream Deck XL page: adaptive steps, playback-state highlights, section controls and a permanent timecode keypad with automatic separators.
+- Add PLAY LOOP to presets and viewer; add guarded CUT/MERGE SECTION at active edit time.
+- JUMP validates Designer-native timecodes and respects linked/unlinked editing.
+- Include both pages in every install bundle and preserve all preset feedback options in generated exports.
+
 ## 0.1.0-beta.132
 
 - Consolidate beat-step catalogs and labels, tidy timing code/tests and update developer handoff. 169 local tests and packaged lifecycle checks pass.
