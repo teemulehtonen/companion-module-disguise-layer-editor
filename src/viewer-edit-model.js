@@ -5,13 +5,17 @@ function applyEditPatch(state, patch) {
   if (!state || !patch || state.trackUid !== patch.trackUid) return false
   const layer = state.layers.find(item => item.uid === patch.layer.uid)
   if (!layer) return false
+  const delta=patch.layer.start-layer.start
+  const translated=delta!==0 && Math.abs((patch.layer.end-patch.layer.start)-(layer.end-layer.start))<1e-7
   layer.start = patch.layer.start
   layer.end = patch.layer.end
   for (const incoming of patch.layer.fields || []) {
     // JSON snapshots contain separate copies for each display list.
     // Patch every copy so redraw cannot resurrect the pre-edit key/value.
-    for (const list of [layer.fields,layer.visibleParameters,layer.allParameters]) {
-      for(const field of list || []) if(field.name===incoming.name && !('current' in field)) Object.assign(field,incoming)
+    const numeric=new Set([...(layer.fields || []),...(layer.visibleParameters || []),...(layer.allParameters || [])])
+    for(const field of numeric) if(field.name===incoming.name && !('current' in field)) {
+        if(translated && !incoming.samples && field.samples)field.samples=field.samples.map(sample=>({...sample,time:sample.time+delta}))
+        Object.assign(field,incoming)
     }
     const resources=new Set([...(layer.resources || []),...(layer.visibleParameters || []),...(layer.allParameters || [])].filter(item=>item.name===incoming.name && 'current' in item))
     for (const resource of resources) if (incoming.resource) {

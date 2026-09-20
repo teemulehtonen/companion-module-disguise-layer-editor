@@ -1,3 +1,9 @@
+## Incremental viewer geometry
+
+Confirmed encoder patches now update existing layer bars, IN/OUT markers, key markers and curve paths instead of reconstructing the entire timeline. Geometry uses a short 65 ms visual interpolation; native destinations remain authoritative. Heavy state requests wait until 400 ms after the last applied patch; stale in-flight reads cannot replace a newer patch. Cached curve sample times translate with ordinary layer moves and remain absolute when trimming.
+
+Validation: 202 local tests including node-preserving geometry and shared curve-reference regression tests. A read-only LAN measurement before this change observed 1–2 ms warm live requests versus 232 ms for an uncached 537 KB full state; these numbers are environment-specific, not a latency guarantee.
+
 ## Encoder responsiveness
 
 Companion encoder edits coalesce adjacent identical pending detents (maximum 64) behind an in-flight command. Clicks, reversals, different options and generation changes are barriers; keyframe multi-selection remains unbatched. Native key moves simulate intermediate detents to preserve collision and boundary behavior. Layer edit returns only the edited layer instead of re-reading every layer.

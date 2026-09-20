@@ -67,6 +67,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
   let editRevision = 0
   let confirmedRevision = 0
   let livePatchRevision = -1
+  let liveGeometryUntil = 0
   const snapOptions = {enabled:true,edges:true,keys:true,markers:true,sections:true,grid:true}
   let snapGuide
   function showSnap(time) {
@@ -2205,6 +2206,51 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
   let latestLive = null
   let viewerZoomCursor = null
   document.addEventListener('visibilitychange', () => { viewerZoomCursor = null })
+  function paintLiveGeometry(layer, previous, oldEditor) {
+    const root=sheet.querySelector('.layer[data-uid="'+layer.uid+'"]')
+    if(!root)return
+    const motion='left 65ms linear, top 65ms linear, width 65ms linear'
+    const clip=root.querySelector('.clip')
+    if(clip){clip.style.transition=motion;clip.style.left=x(Math.max(start,layer.start))+'%';clip.style.width=Math.max(0,x(Math.min(start+span,layer.end))-x(Math.max(start,layer.start)))+'%'}
+    for(const edge of root.querySelectorAll('[data-layer-edge]')) {edge.style.transition=motion;edge.style.left=x(edge.dataset.layerEdge==='in'?layer.start:layer.end)+'%'}
+    const moving=state.editor?.moveKey
+    const oldTime=oldEditor?.moveKey?.time
+    for(const mark of sheet.querySelectorAll('[data-key-time]')) {
+      if(mark.dataset.keyLayer!==layer.uid)continue
+      const field=[...(layer.fields || []),...(layer.resources || [])].find(f=>f.name===mark.dataset.keyParameter)
+      const prior=[...(previous.fields || []),...(previous.resources || [])].find(f=>f.name===mark.dataset.keyParameter)
+      const time=Number(mark.dataset.keyTime)
+      const moved=state.editor?.layerUid===layer.uid && state.editor.parameter===field?.name && moving && Math.abs(time-oldTime)<1e-6
+      const index=prior?.keys?.findIndex(k=>Math.abs(k.time-time)<1e-6)
+      const changedBounds=previous.start!==layer.start || previous.end!==layer.end
+      const key=moved ? field?.keys?.find(k=>Math.abs(k.time-moving.time)<1e-6) : changedBounds && index>=0 ? field?.keys?.[index] : field?.keys?.find(k=>Math.abs(k.time-time)<1e-6)
+      if(!key)continue
+      mark.dataset.keyTime=String(key.time);mark.style.transition=motion;mark.style.left=x(key.time)+'%'
+      mark.style.display=key.time<layer.start || key.time>layer.end?'none':''
+      const lo=Number(mark.dataset.curveMin),hi=Number(mark.dataset.curveMax)
+      if(hi>lo && Number.isFinite(key.value))mark.style.top=(44-(key.value-lo)/(hi-lo)*42)+'px'
+    }
+    for(const row of sheet.querySelectorAll('[data-owner-layer]')) {
+      if(row.dataset.ownerLayer!==layer.uid)continue
+      const name=row.querySelector('[data-parameter-value]')?.dataset.parameterValue
+      const field=layer.fields?.find(f=>f.name===name),path=row.querySelector('.lane svg path'),mark=row.querySelector('[data-curve-min]')
+      if(!path || !mark || !field?.samples?.length)continue
+      const lo=Number(mark.dataset.curveMin),hi=Number(mark.dataset.curveMax)
+      if(!(hi>lo))continue
+      // Animate presentation only. Every destination is confirmed native data.
+      const target=field.samples.filter(v=>Number.isFinite(v.value)).map(v=>[x(v.time)*10,48-(v.value-lo)/(hi-lo)*42])
+      const old=[...(path.getAttribute('d') || '').matchAll(/[ML]([-+0-9.e]+),([-+0-9.e]+)/g)].map(m=>[Number(m[1]),Number(m[2])])
+      if(path._liveFrame)cancelAnimationFrame(path._liveFrame)
+      const began=performance.now()
+      const paint=now=>{
+        if(!path.isConnected)return
+        const f=Math.min(1,(now-began)/65)
+        path.setAttribute('d',target.map((point,i)=>{const from=old.length===target.length?old[i]:point;return(i?'L':'M')+(from[0]+(point[0]-from[0])*f)+','+(from[1]+(point[1]-from[1])*f)}).join(' '))
+        path._liveFrame=f<1?requestAnimationFrame(paint):null
+      }
+      path._liveFrame=requestAnimationFrame(paint)
+    }
+  }
   async function pollLive() {
     try {
       if (!document.hidden && state) {
@@ -2215,7 +2261,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
         if ((incoming.editRevision || 0) < confirmedRevision) return
         if (readRevision !== editRevision || interactionBusy) return
         latestLive = incoming
-        if (incoming.trackUid !== state.trackUid || incoming.focusUid !== state.focusUid || incoming.contentRevision !== state.contentRevision || incoming.tempoKey !== state.tempoKey) {
+        if (incoming.trackUid !== state.trackUid || incoming.focusUid !== state.focusUid || (incoming.contentRevision !== state.contentRevision && !incoming.editPatch && performance.now()>=liveGeometryUntil) || incoming.tempoKey !== state.tempoKey) {
           lastFullRead = 0
           rendered = ''
         }
@@ -2239,10 +2285,12 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
           }
           if (!state.viewOnly && (editPending || interactionBusy || mouseGesture)) state.editor = currentEditor
           const patch=incoming.editPatch
+          const before=patch && patch.revision!==livePatchRevision && patch.revision>=confirmedRevision && state.layers.find(l=>l.uid===patch.layer.uid)
+          const previous=before && structuredClone(before)
           const patchChanged=patch && patch.revision!==livePatchRevision && patch.revision>=confirmedRevision && !editPending && !interactionBusy && !mouseGesture && applyEditPatch(state,patch)
-          if(patchChanged){livePatchRevision=patch.revision;confirmedRevision=Math.max(confirmedRevision,patch.revision);rendered=''}
+          if(patchChanged){livePatchRevision=patch.revision;confirmedRevision=Math.max(confirmedRevision,patch.revision);liveGeometryUntil=performance.now()+400;lastFullRead=0;paintLiveGeometry(before,previous,currentEditor)}
           updateEditorControls()
-          if ((patchChanged || selectionChanged) && !resizingWaveform && !mouseGesture && !editPending) draw()
+          if (selectionChanged && !resizingWaveform && !mouseGesture && !editPending) draw()
           else updatePlayhead()
           followClock()
           $('status').textContent = state.connected ? (state.viewOnly ? 'VIEW' : 'LIVE') : 'CONNECTION LOST'
@@ -2258,7 +2306,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
   }
   async function poll() {
     try {
-      if (!document.hidden && !mouseGesture && !layerMarquee && !editPending && !interactionBusy) {
+      if (!document.hidden && !mouseGesture && !layerMarquee && !editPending && !interactionBusy && performance.now()>=liveGeometryUntil) {
         const view = JSON.stringify([start, span, viewport.clientWidth, [...waveformOpen], expandedLayers()])
         const full = !state || !rendered || view !== lastView || performance.now() - lastFullRead >= 1500
         if (!full) return
@@ -2279,7 +2327,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
         if (!response.ok) throw new Error('Disconnected')
         const incoming = await response.json()
         if ((incoming.editRevision || 0) < confirmedRevision) return
-        if (readRevision !== editRevision || editPending || interactionBusy || mouseGesture) return
+        if (readRevision !== editRevision || editPending || interactionBusy || mouseGesture || performance.now()<liveGeometryUntil) return
         if (full) {
           // A selection can change while a slow snapshot is in flight.
           if (latestLive && (latestLive.trackUid !== incoming.trackUid || latestLive.focusUid !== incoming.focusUid)) {

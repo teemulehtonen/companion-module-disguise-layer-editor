@@ -19,3 +19,12 @@ test('confirmed edits replace old key times immediately and preserve resource id
  assert.equal(applyEditPatch(state,{trackUid:'old-track',layer:{uid:'layer',start:99}}),false)
  assert.equal(state.layers[0].start,0)
 })
+test('layer translation shifts cached curve times once and trims preserve absolute sample times',()=>{
+ const f={name:'brightness',samples:[{time:1,value:0.4}]}
+ const layer={uid:'a',start:0,end:10,fields:[f],visibleParameters:[f],allParameters:[f]}
+ const state={trackUid:'t',layers:[layer]}
+ applyEditPatch(state,{trackUid:'t',layer:{uid:'a',start:2,end:12,fields:[{name:'brightness',keys:[]}]}})
+ assert.equal(f.samples[0].time,3)
+ applyEditPatch(state,{trackUid:'t',layer:{uid:'a',start:3,end:12,fields:[{name:'brightness',keys:[]}]}})
+ assert.equal(f.samples[0].time,3)
+})
