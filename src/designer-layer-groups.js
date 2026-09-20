@@ -34,6 +34,12 @@ if p['command'] == 'layer_group':
         expected = next(value for value in selected if value['uid'] == str(item.uid))
         if item.name != expected['name'] or abs(float(track.beatToTime(item.tStart))-expected['start']) > 0.00001 or abs(float(track.beatToTime(item.tEnd))-expected['end']) > 0.00001:
             raise ValueError('A selected layer changed; select the layers again')
+    def refresh_hierarchy(item):
+        # groupLayers/ungroupLayer update native data without rebuilding the
+        # open Designer timeline in r32.4. A native no-op reorder notifies it.
+        index = list(container.layers).index(item)
+        if isinstance(container, GroupLayer): track.moveLayerToIndexInGroup(item, index)
+        else: track.moveLayerToIndex(item, index)
     if operation == 'group':
         name = p.get('name', '').strip()
         if len(members) < 2 or not name or len(name) > 128 or any(ord(c)<32 for c in name):
@@ -44,6 +50,7 @@ if p['command'] == 'layer_group':
         # Native order, not click order: the group replaces the highest member.
         track.groupLayers(members, name, False)
         created = next(item for item in container.layers if str(item.uid) not in old_ids)
+        refresh_hierarchy(created)
         return {'groupUid': str(created.uid), 'memberUids': [str(item.uid) for item in created.layers]}
     if len(members) != 1 or not isinstance(members[0], GroupLayer):
         raise ValueError('Select one group to ungroup')
@@ -53,5 +60,7 @@ if p['command'] == 'layer_group':
     markDirty(track)
     for ancestor in ancestors: markDirty(ancestor)
     track.ungroupLayer(group)
+    if children:
+        refresh_hierarchy(next(item for item in container.layers if str(item.uid) == children[0]))
     return {'ungroupedUid': str(group.uid), 'memberUids': children}
 `

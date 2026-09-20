@@ -1,4 +1,12 @@
-# Current release - 0.2.0-beta.13
+# Current release - 0.2.0-beta.14
+
+Grouping now triggers Designer timeline hierarchy refresh through a native no-op sibling reorder after group/ungroup. Data-only grouping previously left the open native timeline stale. First Shift layer selection includes the ordinary active sibling; the group popup shows selected count.
+
+Validation: 194 local tests, 11 isolated native time-track grouping checks, 18 quantized checks; browser fixture active-selection extension and group confirmation. Existing native GROUP became visible after the notification without timing/order changes.
+
+Group timing inspection on isolated native layers: moving group [10,30] to [15,35] shifts child bounds and keys +5. IN [15,30] shifts child starts +5 while ends and keys remain; OUT [10,25] shifts child ends -5 while starts and keys remain. Group bounds are still read-only in the viewer; do not apply ordinary layer edit math to groups. These findings are for native setExtents in Designer 32.4, not an exhaustive GUI modifier-mode test.
+
+# Previous release - 0.2.0-beta.13
 
 Numeric keyframe hover time/value labels show at most three decimals, trimming trailing zeroes. Display formatting only: stored values and edit precision remain unchanged; choice/resource labels remain text.
 

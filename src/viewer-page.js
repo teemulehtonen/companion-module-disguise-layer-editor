@@ -809,6 +809,12 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       if (!event.shiftKey || event.button !== 0 || !state.editEnabled || editPending || interactionBusy ||
         event.target.closest('.wave-controls,.key-point,.layer-edge')) return
       event.preventDefault(); event.stopImmediatePropagation(); clearTimeout(clickTimer)
+      // Extend the ordinary active selection on the first Shift gesture.
+      // Otherwise the first clicked layer silently stays outside the group.
+      if (!selectedLayers.size) {
+        const active = state.layers.find(l=>l.uid===state.focusUid)
+        if (active && active.uid!==layer.uid && (active.parent||null)===(layer.parent||null)) selectedLayers.add(active.uid)
+      }
       const existing = state.layers.filter(l=>selectedLayers.has(l.uid))
       if (existing.some(l=>(l.parent || null)!==(layer.parent || null))) {
         $('selectionMessage').textContent='SELECT LAYERS IN THE SAME GROUP'; return
@@ -867,7 +873,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       }
     })
     cancel.onclick=closeKeyMenu
-    if(!ungroup)panel.append(input)
+    if(!ungroup)panel.append(el('div','',chosen.length+' LAYERS'),input)
     panel.append(apply,cancel);document.body.append(panel)
     input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();apply.click()}}
     return true
