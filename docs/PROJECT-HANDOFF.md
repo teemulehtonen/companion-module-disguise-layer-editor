@@ -1,4 +1,8 @@
-# Current release - 0.2.0-beta.10
+# Current release - 0.2.0-beta.11
+
+Interface size buttons use the waveform height controls' one/two/three-line icons. SMALL/MEDIUM/LARGE remain accessible names and hover hints.
+
+# Previous release - 0.2.0-beta.10
 
 Track header: NAME @ FPS, duration, then optional TC IN: and incoming timecode. No redundant TC mode suffix. Typography remains shared.
 
