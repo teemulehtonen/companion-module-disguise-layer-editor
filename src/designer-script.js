@@ -566,6 +566,44 @@ if p['command'] == 'layer_manage':
         p['command']='layer_edit'
         p['mode']='fit'
     else: raise ValueError('Unsupported layer operation')
+if p['command'] == 'parameter_sequence':
+    field = layer.findSequence(p['field'])
+    if field is None or not isinstance(field.sequence, (FloatSequence, ResourceSequence)):
+        raise ValueError('Parameter is not available')
+    if layer.locked or track.locked:
+        raise ValueError('Layer or track is locked')
+    seq = field.sequence
+    animated = not field.disableSequencing and seq.nKeys() > 0
+    if animated != p.get('expectedSequenced'):
+        raise ValueError('Sequencing changed; reopen the parameter menu')
+    mode = p['mode']
+    if mode not in ('enable', 'clear', 'reset') or (mode != 'enable' and p.get('confirmed') is not True):
+        raise ValueError('Confirm before clearing parameter animation')
+    seconds = edit_seconds()
+    beat = track.timeToBeat(seconds)
+    if beat < layer.tStart or beat > layer.tEnd:
+        raise ValueError('Layer is outside the edit time')
+    resource = isinstance(seq, ResourceSequence)
+    if mode == 'reset': value = field.defaultValue if resource else float(field.defaultValue)
+    elif resource: value = seq.key(0).r if field.disableSequencing and seq.nKeys() else seq.evalResource(beat)
+    else: value = float(field.eval(beat, 16))
+    if not resource and (math.isnan(value) or math.isinf(value)):
+        raise ValueError('Invalid current parameter value')
+    if mode == 'enable':
+        if animated or field.notSequencable:
+            raise ValueError('Parameter cannot be enabled')
+        markDirty(field)
+        markDirty(seq)
+        field.disableSequencing = False
+        if resource: seq.setResource(beat, value)
+        else: seq.setFloat(beat, value)
+        if not resource:
+            for i in range(seq.nKeys()):
+                if abs(seq.t(i)-beat) < 0.000001: seq.key(i).interpolation = Key.cubic
+        field.notifyEdit()
+    else:
+        reset_sequence_to_constant(field, value, layer.tStart)
+    return {'time':seconds, 'mode':mode}
 if p['command'] in ('key_clear_list', 'keys_clear', 'parameter_default', 'layer_default'):
     reset_constant = p['command'] == 'parameter_default'
     if reset_constant:

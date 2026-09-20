@@ -917,6 +917,28 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     lane.append(node)
     return node
   }
+  async function sequenceControl(layer,field,reset,event) {
+    event.preventDefault();event.stopPropagation()
+    if(!state.editEnabled || editPending || interactionBusy) return
+    const expectedSequenced=Boolean(field.sequenced && field.keys?.length)
+    const mode=reset ? 'reset' : expectedSequenced ? 'clear' : 'enable'
+    await interact(async()=>{
+      if(!await releaseViewerMode() || !await selectTarget(layer,field.name)) return
+      const token=state.editor.token
+      const apply=async()=>{
+        if(state.editor.token!==token){$('selectionMessage').textContent='PARAMETER CHANGED — CANCELLED';closeKeyMenu();return}
+        if(await sendEdit('parameter_sequence',{parameter:field.name,mode,expectedSequenced,confirmed:mode!=='enable'}))closeKeyMenu()
+      }
+      if(mode==='enable'){await apply();return}
+      closeKeyMenu()
+      const panel=el('div','key-edit-menu');keyMenu=panel
+      Object.assign(panel.style,{left:Math.max(4,Math.min(event.clientX,innerWidth-270))+'px',top:Math.max(4,Math.min(event.clientY,innerHeight-150))+'px',width:'250px',padding:'9px'})
+      panel.append(el('strong','',reset?'RESET PARAMETER?':'DISABLE SEQUENCING?'),el('p','',reset?'DELETE ALL KEYFRAMES AND RESTORE DEFAULT.':'DELETE ALL KEYFRAMES AND KEEP THE CURRENT VALUE.'))
+      const yes=el('button','','CONFIRM'),no=el('button','','CANCEL')
+      yes.onclick=()=>void interact(apply);no.onclick=closeKeyMenu
+      panel.append(yes,no);document.body.append(panel)
+    })
+  }
   async function annotationForm(kind,time,event,item) {
     if (!state?.editEnabled || interactionBusy || editPending || mouseGesture) return
     closeKeyMenu()
@@ -1514,6 +1536,17 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
           )
           addKeyAtPointer(p.lane,layer,field)
           p.side.replaceChildren(selectionButton(layer, field.label || field.name, field.name))
+          if(state.editEnabled && !field.unsupported) {
+            const tools=el('span','wave-controls')
+            tools.style.position='static';tools.style.display='inline-flex';tools.style.flexShrink='0'
+            const gear=el('button','','⚙'),reset=el('button','','⟳')
+            gear.title=field.sequenced?'DISABLE SEQUENCING':'ENABLE SEQUENCING'
+            gear.setAttribute('aria-label',gear.title);gear.setAttribute('aria-pressed',String(Boolean(field.sequenced)))
+            reset.title='RESET PARAMETER';reset.setAttribute('aria-label',reset.title)
+            gear.onclick=event=>void sequenceControl(layer,field,false,event)
+            reset.onclick=event=>void sequenceControl(layer,field,true,event)
+            tools.append(gear,reset);p.side.prepend(tools)
+          }
           p.side.dataset.parameterValue = field.name
           p.side.dataset.parameterLayer = layer.uid
           p.root.dataset.ownerLayer = layer.uid

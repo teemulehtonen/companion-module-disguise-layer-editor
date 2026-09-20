@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-beta.144
+
+- Add parameter gear and reset controls. Enable sequencing at the active edit time using the native current value; confirmed disable clears every key and preserves the evaluated value. Confirmed reset clears keys and restores Designer's default. Numeric, enum and resource sequences use the same guarded native path.
+
 ## 0.1.0-beta.143
 
 - Show compact destination timecodes while dragging keys, resource keys, markers and layer bounds; whole-layer moves show IN and OUT. Native TC anchors keep preview updates local.

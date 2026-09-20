@@ -1,4 +1,6 @@
-# Current release — beta.143
+# Current release — beta.144
+
+Parameter gear/reset use parameter_sequence, strict request schema and current selection token. Native code validates locks, active edit time and expected sequencing before evaluating current/default values. Clear/reset reuse reset_sequence_to_constant and cover keys outside layer bounds. Enable writes native current resource/float at edit time (numeric SMOOTH). Confirmation binds to the selected parameter token. Eight isolated native assertions passed for FloatSequence and ResourceSequence.
 
 Drag labels use viewer_snapshot.dragTimecodes (segment starts, native TC seconds and a probe label to identify drop-frame numbering) and the shared browser timecode formatter. No native calls per pointer event. Labels are disposable and removed on pointer release/cancel, Escape or redraw. Duplicate marker highlighting uses all annotation tags, grouped by type; NOTES are excluded. Public helper viewer-marker-duplicates.js is embedded in the viewer and unit tested.
 

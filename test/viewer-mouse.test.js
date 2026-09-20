@@ -68,6 +68,12 @@ test('Delete is a selected-key action and cannot become default or a resource ti
 })
 test('new mouse commands reject nonfinite times, arbitrary fields and unguarded marker moves',()=>{
  const token='a'.repeat(64)
+ const sequence={action:'parameter_sequence',token,parameter:'brightness',mode:'clear',expectedSequenced:true,confirmed:true}
+ assert.equal(validEditRequest(sequence),true)
+ assert.equal(validEditRequest({...sequence,confirmed:false}),false)
+ assert.equal(validEditRequest({...sequence,mode:'reset',confirmed:false}),false)
+ assert.equal(validEditRequest({...sequence,mode:'enable',confirmed:false}),true)
+ assert.equal(validEditRequest({...sequence,layerUid:'injected'}),false)
  const marker={action:'annotation',token,mode:'add',kind:'cue',targetTime:2,text:'12'}
  assert.equal(validEditRequest(marker),true)
  assert.equal(validEditRequest({...marker,mode:'move'}),false)

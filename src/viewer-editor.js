@@ -148,6 +148,7 @@ function validEditRequest(value) {
     (value.targetValue === undefined || (value.mode === 'key' && Number.isFinite(value.targetValue) && Math.abs(value.targetValue)<=1e12)) &&
     validGrid(value.snapGrid) && (value.snapGrid === undefined || value.snap) &&
     Object.keys(value).every(key=>['action','token','mode','targetTime','targetValue','snap','snapOffset','snapGrid'].includes(key)))
+  if (value?.action === 'parameter_sequence') return Boolean(/^[a-f0-9]{64}$/.test(value.token || '') && ['enable','clear','reset'].includes(value.mode) && typeof value.expectedSequenced==='boolean' && typeof value.confirmed==='boolean' && (value.mode==='enable' || value.confirmed) && typeof value.parameter==='string' && value.parameter.length>0 && value.parameter.length<256 && Object.keys(value).every(k=>['action','token','mode','parameter','expectedSequenced','confirmed'].includes(k)))
   if (value?.action === 'annotation_time') return Boolean(/^[a-f0-9]{64}$/.test(value.token || '') && Number.isFinite(value.time) && value.time>=0 && value.time<=1e8 && Object.keys(value).every(k=>['action','token','time'].includes(k)))
   if (value?.action === 'annotation') return Boolean(
     /^[a-f0-9]{64}$/.test(value.token || '') && ['add','move','update','delete'].includes(value.mode) &&
@@ -259,6 +260,15 @@ async function editFromViewerCommand(editor, request) {
       await editor.adjustLayerTiming(request.mode,1,pointer)
     }
     return {ok:true,editor:describeEditor(editor),curve:request.mode === 'key' ? editor.field?.samples : undefined}
+  }
+  if (request.action === 'parameter_sequence') {
+    if (!editor.layer || editor.moveKey || editor.layerEdit || editor.clearKeysBrowser) return {ok:false,reason:'RELEASE THE CURRENT EDIT FIRST'}
+    const target=editor.mediaMode ? editor.mediaField : editor.field
+    if(target?.name!==request.parameter) return {ok:false,reason:'PARAMETER CHANGED'}
+    await editor.remote(()=>editor.client.execute('parameter_sequence',{...editor.context(),layerUid:editor.layer.uid,field:request.parameter,mode:request.mode,confirmed:request.confirmed,expectedSequenced:request.expectedSequenced}))
+    editor.mediaMode=false
+    await editor.refresh({preserve:true})
+    return {ok:true,editor:describeEditor(editor)}
   }
   if (request.action === 'annotation_time') {
     const annotation=await editor.remote(()=>editor.client.execute('resolve_timecode',{...editor.context(),time:request.time}))
