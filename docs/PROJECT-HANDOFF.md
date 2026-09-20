@@ -1,4 +1,8 @@
-# Current release - 0.2.0-beta.24
+# Current release - 0.2.0-beta.25
+
+CLEAR MEDIA CACHE is a one-shot connection setting: select and save to clear waveform disk data and restart this connection's memory caches. Thumbnails now persist alongside waveform summaries under a shared 100 MiB cap. Native resource/file identity is revalidated before reuse; unsupported identities use the native endpoint. Reload viewers afterwards. Clearing respects other processes' writer lock and never recursively deletes folders. Validation: 209 local tests including pending-write ordering, foreign-file preservation, active-writer rejection and thumbnail reuse across client recreation. Native identity resolution passed for two current video resources. A physical Pi reboot was not tested.
+
+# Previous release - 0.2.0-beta.24
 
 Add a 100 MiB persistent waveform-summary cache on the Companion host. Identity includes resource, project/file path and source revision; only peaks are stored. REFRESH bypasses and replaces disk data. Cache failures fall back to decoding. See VIEWER-DEVELOPMENT for paths, eviction, crash-lock cleanup and deployment limitations.
 

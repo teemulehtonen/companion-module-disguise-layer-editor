@@ -9,6 +9,7 @@ const { timecode, absoluteTimecode } = require('./timecode')
 const theme = require('./theme')
 const { layerTypeLabel } = require('./layer-types')
 const { ViewerServer } = require('./viewer-server')
+const { WaveformDiskCache } = require('./waveform-disk-cache')
 const { describeEditor, editFromViewer, resourceList } = require('./viewer-editor')
 
 class DisguiseLayerControl extends InstanceBase {
@@ -129,6 +130,10 @@ class DisguiseLayerControl extends InstanceBase {
   getConfigFields() {
     return [
       {
+        type: 'checkbox', id: 'clearMediaCache', label: 'CLEAR MEDIA CACHE', width: 12, default: false,
+        tooltip: 'Select and save once to clear this connection\'s waveform/thumbnail memory and the shared local media disk cache. Media and Designer projects are unchanged. Reload open viewers afterwards.',
+      },
+      {
         type: 'static-text',
         id: 'info',
         label: 'Designer 32.4.17 / Companion 5.0.5',
@@ -213,7 +218,22 @@ class DisguiseLayerControl extends InstanceBase {
     ]
   }
   async configUpdated(config, secrets = {}) {
+    this.client?.close()
+    await Promise.allSettled([...(this.client?.thumbnailTasks || [])])
+    const oldWaveforms = this.viewer?.waveforms
     await this.viewer?.close()
+    // Finish cancelled reads/writes before clearing, so they cannot restore old peaks.
+    await oldWaveforms?.tail?.catch(() => {})
+    if (config.clearMediaCache) {
+      config = { ...config, clearMediaCache: false }
+      this.saveConfig(config)
+      try {
+        await new WaveformDiskCache().clear()
+        this.log('info', 'Media cache cleared. Reload open viewers to refresh displayed thumbnails.')
+      } catch {
+        this.log('warn', 'Media disk cache could not be cleared (busy or inaccessible). Memory caches were reset; retry after other instances finish.')
+      }
+    }
     this.viewer = null
     this.viewerStatus = 'DISABLED'
     clearInterval(this.autoSyncTimer)

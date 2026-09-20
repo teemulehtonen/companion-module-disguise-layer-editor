@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0-beta.25
+
+- Add one-shot CLEAR MEDIA CACHE setting for local waveform disk data and connection thumbnail/waveform memory. Select and save, then reload viewers. Does not delete source media or Designer data.
+- Persist thumbnails with native identity revalidation under the same 100 MiB quota as waveform summaries. Unknown identities are fetched directly.
+- Validation: 209 local tests and two native thumbnail identity checks.
+
 ## 0.2.0-beta.24
 
 - Persist waveform summaries on the Companion host with a 100 MiB quota, revision-aware identity, corruption fallback and explicit refresh invalidation. No source media is copied.

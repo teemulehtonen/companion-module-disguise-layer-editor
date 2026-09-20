@@ -49,3 +49,16 @@ test('viewer uses persisted peaks without opening media; REFRESH forces decoding
   await cache.tail
   assert.equal((await cache.get('uid', 'layer')).status, 'unavailable')
 })
+
+test('explicit flush waits for writes, deletes only owned files and respects another writer', async t => {
+  const dir = await directory(t), cache = new WaveformDiskCache(dir)
+  await fs.writeFile(path.join(dir, 'keep.txt'), 'untouched')
+  const write = cache.write(cache.key(['entry']), wave)
+  await cache.clear()
+  await write
+  assert.equal(await cache.read(cache.key(['entry'])), null)
+  assert.deepEqual(await fs.readdir(dir), ['keep.txt'])
+  await fs.writeFile(path.join(dir, '.write-lock'), '')
+  await assert.rejects(cache.clear(), { code: 'EEXIST' })
+  assert.equal(await fs.readFile(path.join(dir, 'keep.txt'), 'utf8'), 'untouched')
+})

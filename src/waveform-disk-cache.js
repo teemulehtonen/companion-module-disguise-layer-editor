@@ -5,6 +5,7 @@ const os = require('node:os')
 const { createHash } = require('node:crypto')
 const LIMIT = 100 * 1024 * 1024
 const MAX_ENTRY = 256 * 1024
+const MAX_THUMBNAIL = 1400 * 1024
 let writes = Promise.resolve()
 
 function cacheDirectory() {
@@ -16,6 +17,11 @@ function cacheDirectory() {
 }
 
 function valid(data) {
+  if (data?.kind === 'thumbnail') {
+    if (typeof data.png !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(data.png) || data.png.length > MAX_THUMBNAIL) return false
+    const bytes = Buffer.from(data.png, 'base64')
+    return bytes.length <= 1024 * 1024 && bytes.subarray(0,8).toString('hex') === '89504e470d0a1a0a'
+  }
   return data && Array.isArray(data.peaks) && data.peaks.length <= 8192 &&
     data.peaks.every(n => Number.isFinite(n) && n >= 0 && n <= 1) &&
     Number.isFinite(data.duration) && data.duration >= 0 &&
@@ -38,7 +44,7 @@ class WaveformDiskCache {
   async read(key) {
     try {
       const filename = this.filename(key)
-      if ((await fs.stat(filename)).size > MAX_ENTRY) return null
+      if ((await fs.stat(filename)).size > MAX_THUMBNAIL) return null
       const data = JSON.parse(await fs.readFile(filename, 'utf8'))
       return valid(data) ? data : null
     } catch { return null }
@@ -46,12 +52,35 @@ class WaveformDiskCache {
   async remove(key) {
     await fs.unlink(this.filename(key)).catch(() => {})
   }
+  clear() {
+    const run = async () => {
+      let lock
+      const lockPath = path.join(this.directory, '.write-lock')
+      try {
+        await fs.mkdir(this.directory, { recursive: true })
+        lock = await fs.open(lockPath, 'wx')
+        for (const name of await fs.readdir(this.directory)) {
+          // Never recursively remove this directory or touch unrelated files.
+          if (/^[a-f0-9]{64}\.json$/.test(name) || name === '.pending')
+            await fs.unlink(path.join(this.directory, name))
+        }
+      } finally {
+        if (lock) {
+          await lock.close()
+          await fs.unlink(lockPath)
+        }
+      }
+    }
+    const result = writes.then(run, run)
+    writes = result.catch(() => {})
+    return result
+  }
   write(key, wave) {
     const run = async () => {
       if (!valid(wave)) return
-      const data = JSON.stringify({ peaks: wave.peaks, duration: wave.duration, step: wave.step })
+      const data = JSON.stringify(wave.kind === 'thumbnail' ? { kind: 'thumbnail', png: wave.png } : { peaks: wave.peaks, duration: wave.duration, step: wave.step })
       const size = Buffer.byteLength(data)
-      if (size > MAX_ENTRY || size > this.limit) return
+      if (size > (wave.kind === 'thumbnail' ? MAX_THUMBNAIL : MAX_ENTRY) || size > this.limit) return
       let lock
       const lockPath = path.join(this.directory, '.write-lock')
       const pending = path.join(this.directory, '.pending')

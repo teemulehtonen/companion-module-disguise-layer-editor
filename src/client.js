@@ -2,6 +2,7 @@
 const { makeScript } = require('./designer-script')
 const { orderLayerParameters } = require('./parameter-order')
 const { paths, requireSuccess, decodeExecution } = require('./designer-api')
+const { WaveformDiskCache } = require('./waveform-disk-cache')
 
 /** HTTP boundary: validate responses and enforce the shared VIEW write lock.
  * A shared abort signal cancels in-flight work when Companion replaces the
@@ -16,19 +17,43 @@ class DesignerClient {
     this.url = this.baseUrl + paths.execute
     this.fetch = fetchImpl
     this.controller = new AbortController()
+    this.mediaDisk = new WaveformDiskCache()
+    this.thumbnailTasks = new Set()
   }
   close() {
     this.controller.abort()
   }
   async thumbnail(uid) {
+    const task = this.loadThumbnail(uid)
+    this.thumbnailTasks.add(task)
+    try { return await task }
+    finally { this.thumbnailTasks.delete(task) }
+  }
+  async loadThumbnail(uid) {
     if (!/^[0-9]+$/.test(uid)) return ''
+    let diskKey
+    try {
+      const identity = await this.execute('thumbnail_identity', { uid })
+      if (identity?.revision) {
+        diskKey = this.mediaDisk.key(['thumbnail-v1', this.baseUrl, uid, identity.revision])
+        const saved = await this.mediaDisk.read(diskKey)
+        this.controller.signal.throwIfAborted()
+        if (saved?.kind === 'thumbnail') return saved.png
+      }
+    } catch {
+      this.controller.signal.throwIfAborted()
+      // Unknown/internal resource types still use the native thumbnail endpoint.
+    }
     const response = await this.fetch(this.baseUrl + paths.thumbnail(uid), {
       signal: AbortSignal.any([this.controller.signal, AbortSignal.timeout(5000)]),
     })
     if (!response.ok) return ''
     const bytes = Buffer.from(await response.arrayBuffer())
     if (bytes.length > 1024 * 1024 || bytes.subarray(0, 8).toString('hex') !== '89504e470d0a1a0a') return ''
-    return bytes.toString('base64')
+    this.controller.signal.throwIfAborted()
+    const png = bytes.toString('base64')
+    if (diskKey) await this.mediaDisk.write(diskKey, { kind: 'thumbnail', png })
+    return png
   }
   async probe() {
     const response = await this.fetch(this.baseUrl + paths.transports, {
@@ -50,7 +75,7 @@ class DesignerClient {
   async execute(command, args = {}) {
     // Fail closed: new native operations must explicitly be audited as reads.
     const reads = ['refresh','resolve_timecode','live_state','playback_state','read_field',
-      'media_list','key_clear_list','viewer_snapshot','viewer_audio_source']
+      'media_list','key_clear_list','viewer_snapshot','viewer_audio_source','thumbnail_identity']
     const localSeek = ['seek','nudge_time','jump_key'].includes(command) && args.keepPlayhead === true
     if (!reads.includes(command) && !localSeek) this.assertWritable()
     // makeScript merges args into its command payload; never allow an override.
