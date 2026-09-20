@@ -1,6 +1,6 @@
 # Developer manual
 
-This guide maps the core module architecture. For the 0.2.0-beta.1 baseline, read [PROJECT-HANDOFF](PROJECT-HANDOFF.md) and [VIEWER-DEVELOPMENT](VIEWER-DEVELOPMENT.md) alongside it: these describe the newer browser editor, shared selection, clocks and concurrency rules. Historical track reports describe only their named builds, not certification of the current release.
+This guide maps the core module architecture. For current behavior and release status, read [PROJECT-HANDOFF](PROJECT-HANDOFF.md) and [VIEWER-DEVELOPMENT](VIEWER-DEVELOPMENT.md) alongside it: these describe the newer browser editor, shared selection, clocks and concurrency rules. Historical track reports describe only their named builds, not certification of the current release.
 
 ## Continuing development
 
@@ -155,7 +155,7 @@ Heartbeat is a short pulse triggered by a validated Designer response. Its timer
 
 SELECT KEYFRAME selects the nearest eligible key, breaking equal-distance ties toward the next key, and may move the playhead. Pressing it again releases the lock. While locked, layer and parameter selection are disabled; time-step, value and interpolation changes remain available. A constant without animation cannot enter this mode.
 
-PREV/NEXT navigate the selected parameter's in-range keys. When there is no further key, navigation stops at IN or the last visible frame before OUT. Moving a key uses current layer bounds and checks its expected state; it must not silently overwrite a different key.
+PREV/NEXT navigate the selected parameter's in-range keys. When there is no further key, navigation stops at exact IN or OUT (the end boundary of the last displayed frame). Moving a key uses current layer bounds and checks its expected state; it must not silently overwrite a different key.
 
 LAYER EDIT maps the encoders to IN, POSITION, OUT and FIT. POSITION displays the layer centre and moving the layer carries the playhead by the same displacement. Timing operations clamp against track bounds. FIT uses available native content-duration information; do not assume every resource has a usable duration.
 

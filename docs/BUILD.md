@@ -11,8 +11,9 @@ npm run package
 
 Outputs:
 
-- `disguise-layer-control-0.1.0-beta.16.tgz` — import under Companion → Modules.
+- `disguise-layer-control-<package-version>.tgz` — import under Companion → Modules.
 - `D3-Stream-Deck-Plus.companionconfig` — import as a page and map its connection.
+- `D3-Stream-Deck-XL.companionconfig` — optional XL page using the same connection.
 - `pkg/` — intermediate module bundle.
 
 `package` builds the module, smoke-tests the bundled export and generates the page. Unit tests run separately. Builds do not require or contact Designer.
@@ -27,4 +28,4 @@ npm run release -- -Force
 
 This reruns tests and packaging, then creates source/Companion ZIPs and SHA-256 checksums in `releases/0.2.beta/`. The source archive uses an explicit allowlist in `scripts/release.ps1`; update it when adding distributable files. Node/npm must be on PATH.
 
-For a new published version, update `package.json`, lockfile, `companion/manifest.json`, the release script and documented filenames together. Keep the module ID stable. Do not replace published tags. Generated outputs are ignored by Git.
+For a new published version, update `package.json`, lockfile, `companion/manifest.json`, README links and release documentation together; the release script reads the package version. Keep the module ID stable. Do not replace published tags. Generated outputs are ignored by Git.

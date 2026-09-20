@@ -1,9 +1,26 @@
 # Contributing
 
-Use Node.js 22.22.0. Run `npm ci`, `npm test`, `npm run format:check` and `npm run package`; Windows release archives use `npm run release`.
+Anyone can develop, fork and redistribute this project under the [MIT license](LICENSE), including modified versions. Preserve the license and copyright notice. Contributions are welcome; repository maintainers review pull requests before merging. A fork does not need permission or access to the original author's machine.
 
-Create a branch and submit a pull request describing the change and validation. Keep UI text English and preserve action/variable IDs. See [architecture](docs/ARCHITECTURE.md).
+## Start here
 
-Use synthetic fixtures. Never commit credentials, personal paths, real project IDs, backups or media. Offline tests and builds must not contact live systems; live testing needs operator authorization and backups.
+1. Fork this repository on GitHub and clone your fork, or clone the original for local work.
+2. Install Node.js 22.22.0 and run `npm ci`.
+3. Read [Developer manual](docs/DEVELOPER-MANUAL.md), [current handoff](docs/PROJECT-HANDOFF.md) and [viewer development](docs/VIEWER-DEVELOPMENT.md). `AGENTS.md` also applies to coding assistants.
+4. Create a branch such as `codex/fix-out-navigation`, implement a focused change and add regression coverage where appropriate.
+5. Run `npm test` and `npm run package`. Run `npm run format:check`; avoid unrelated repository-wide formatting changes and report pre-existing failures separately.
+6. Submit a pull request describing the problem, behavior change, tests actually run and known limitations. Screenshots help for UI changes.
 
-Increment technical versions for changed published builds. Update the manifest, lockfile, release script and package filenames together. Do not overwrite release tags. Keep known limitations and third-party license notices intact.
+## Compatibility rules
+
+Keep UI and public documentation in English. Preserve the internal module ID, action/variable IDs and existing saved configurations. Designer calls belong behind the client/native-script boundary; Companion SDK access belongs behind its adapter. Browser and Stream Deck edits must share validation, ordering, selection and clock rules.
+
+VIEW must never mutate Designer. Keep expected-state checks, lock checks, request authentication and stale-response protection. OUT is a valid editing boundary even though playback has ended there. Quantized tracks require Designer time/beat conversion rather than a single assumed BPM. See the development guides for group, resource, waveform and concurrency details.
+
+## Testing and privacy
+
+Use synthetic fixtures. Offline tests and builds require no Designer or Companion installation. Live integration tests require your own licensed software, disposable project and operator authorization; they are not implied by a passing unit suite. Private probes from earlier development are intentionally not distributed. Never commit credentials, personal paths, real project identifiers, local settings, backups, logs or media. Use generated clean page exports, not exports from a configured live connection.
+
+## Releases and handoff
+
+See [Build](docs/BUILD.md) and [GitHub workflow](docs/GITHUB-SETUP.md). Update the handoff, user documentation and changelog when behavior changes. Include unresolved issues and actual test scope so another developer or coding assistant can continue without private conversation history. Publish a new version for changed builds; never overwrite published tags or binaries. Only authorized maintainers publish releases in this repository; fork owners can publish their own.

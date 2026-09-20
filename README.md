@@ -40,7 +40,7 @@ Transport presets provide PLAY, PLAY TO END, PLAY LOOP, STOP, PLAY / STOP (last 
 | VALUE | Edit the selected key or constant | Add a key at the playhead |
 | TIME | Seek, or move the locked key | Frame / 0.5 / 1 / 2 / 5 / 10 / 30 seconds / 1 / 2 / 5 minutes |
 
-- **SELECT KEYFRAME** locks the nearest in-range key; press again to unlock. TIME step changes keep it locked. **PREV/NEXT KEYFRAME** follow the selected parameter and stop at IN / OUT minus one frame.
+- **SELECT KEYFRAME** locks the nearest in-range key; press again to unlock. TIME step changes keep it locked. **PREV/NEXT KEYFRAME** follow the selected parameter and stop at exact IN / OUT. OUT is the end of the final displayed frame; a key may remain selected there although playback has ended.
 - **DELETE KEYFRAME** removes one key. With a constant, **DEFAULT** restores its native default. Hold either for one second to open the delete menu; red indicates ready. Bulk operations require confirmation. **DEFAULT ALL PARAMETERS** resets all supported parameters on the selected layer, including animation outside IN/OUT.
 - On beat-based tracks, SELECT KEYFRAME timing steps are 1/128, 1/64, 1/32, 1/16, 1/8, 1/4, 1/2, 1, 4 and 8 beats. Layer-edit steps are 1/4, 1, 4, 8, 16 and 32 beats. Displays remain timecode.
 - **LAYER EDIT** assigns IN / POSITION (centre) / OUT / FIT to the encoders. Press LAYER EDIT again to return.
@@ -70,6 +70,6 @@ Windows: `npm run release` creates archives in `releases/0.2.beta`. To replace a
 
 [Build details](docs/BUILD.md) · [Developer manual](docs/DEVELOPER-MANUAL.md) · [Contributing](CONTRIBUTING.md) · [Architecture](docs/ARCHITECTURE.md) · [Test report](docs/TRACK-6-TESTS.md)
 
-MIT licensed. The internal module ID remains `disguise-layer-control` for compatibility.
+Anyone may fork, modify and redistribute this project under the MIT license; contributions are welcome through pull requests. Start with [Contributing](CONTRIBUTING.md) for a complete development entry point. The internal module ID remains `disguise-layer-control` for compatibility.
 
 [Resume development](docs/PROJECT-HANDOFF.md) · [Viewer architecture](docs/VIEWER-DEVELOPMENT.md)

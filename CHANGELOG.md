@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0-beta.23
+
+- NEXT reaches exact OUT and never steps backward from an OUT key. Key and layer selection remain valid at this editing boundary, where playback has ended.
+- Refresh contributor, GitHub, build and developer guidance for independent development. Earlier 0.2 beta changes and their validation are recorded in docs/PROJECT-HANDOFF.md.
+- Validation: 204 local tests, packaged module checks and an isolated native Designer OUT navigation check.
+
 ## 0.2.0-beta.2
 
 - Shift-drag selects keys on one parameter row with a turquoise marquee. Move/delete groups through the shared editor. Mouse uses the grabbed member as anchor; Stream Deck uses the first key. Group value/type changes are disabled. Native group writes validate bounds, identity and collisions before modification.
