@@ -1,4 +1,6 @@
-# Current release — beta.141
+# Current release — beta.142
+
+Supersedes track-relative marker popup times: annotation_time reads a native label via resolve_timecode(time); annotation targetLabel resolves within annotation_edit against current TC segments. Unchanged times keep exact seconds. Direct layer-bar drag selects point=in before entering layer edit, matching click semantics for inactive layers.
 
 Marker popup track-relative time uses HH:MM:SS:FF (shared timecode formatter, fractional FPS conversion). Leaving the formatted field unchanged preserves the original subframe position. This is track-relative time, distinct from the TC marker's content.
 

@@ -148,6 +148,7 @@ function validEditRequest(value) {
     (value.targetValue === undefined || (value.mode === 'key' && Number.isFinite(value.targetValue) && Math.abs(value.targetValue)<=1e12)) &&
     validGrid(value.snapGrid) && (value.snapGrid === undefined || value.snap) &&
     Object.keys(value).every(key=>['action','token','mode','targetTime','targetValue','snap','snapOffset','snapGrid'].includes(key)))
+  if (value?.action === 'annotation_time') return Boolean(/^[a-f0-9]{64}$/.test(value.token || '') && Number.isFinite(value.time) && value.time>=0 && value.time<=1e8 && Object.keys(value).every(k=>['action','token','time'].includes(k)))
   if (value?.action === 'annotation') return Boolean(
     /^[a-f0-9]{64}$/.test(value.token || '') && ['add','move','update','delete'].includes(value.mode) &&
     ['cue','tc','midi','notes'].includes(value.kind) && Number.isFinite(value.targetTime) &&
@@ -156,7 +157,8 @@ function validEditRequest(value) {
     (value.mode === 'add' ? value.sourceTime === undefined && value.sourceText === undefined :
       Number.isFinite(value.sourceTime) && typeof value.sourceText === 'string' && value.sourceText.length <= 2000) &&
     validGrid(value.snapGrid) && (value.snapGrid === undefined || value.snap) &&
-    Object.keys(value).every(key=>['action','token','mode','kind','targetTime','text','sourceTime','sourceText','snap','snapGrid'].includes(key)))
+    (value.targetLabel===undefined || /^\d{2}:\d{2}:\d{2}:\d{2}$/.test(value.targetLabel)) &&
+    Object.keys(value).every(key=>['action','token','mode','kind','targetTime','targetLabel','text','sourceTime','sourceText','snap','snapGrid'].includes(key)))
   return Boolean(
     value &&
     typeof value === 'object' &&
@@ -257,6 +259,10 @@ async function editFromViewerCommand(editor, request) {
       await editor.adjustLayerTiming(request.mode,1,pointer)
     }
     return {ok:true,editor:describeEditor(editor),curve:request.mode === 'key' ? editor.field?.samples : undefined}
+  }
+  if (request.action === 'annotation_time') {
+    const annotation=await editor.remote(()=>editor.client.execute('resolve_timecode',{...editor.context(),time:request.time}))
+    return {ok:true,annotation,editor:describeEditor(editor)}
   }
   if (request.action === 'annotation') {
     if (editor.moveKey || editor.mediaMode || editor.clearKeysBrowser) return {ok:false,reason:'PRESS ESC TO RELEASE THE CURRENT EDIT'}

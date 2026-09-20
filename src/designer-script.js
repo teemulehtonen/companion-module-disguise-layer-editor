@@ -107,6 +107,10 @@ def checked_snap(seconds):
 
 def pointer_time(origin):
     target = float(p['targetTime'])
+    if p.get('targetLabel'):
+        target = resolve_marker_time(p['targetLabel'], float(p.get('sourceTime', target)))['time']
+        if target is None:
+            raise ValueError('Timecode is not on this track')
     if math.isnan(target) or math.isinf(target):
         raise ValueError('Invalid pointer time')
     if p.get('snap'):
@@ -346,8 +350,7 @@ ${waveformScript}
 ${viewerScript}
 if p['command'] == 'refresh':
     return snapshot()
-if p['command'] == 'resolve_timecode':
-    label = p.get('label', '')
+def resolve_marker_time(label, near):
     if not re.match(r'^\\d{2}:\\d{2}:\\d{2}:\\d{2}$', label):
         raise ValueError('Invalid timecode')
     requested = Timecode.fromStringWithFps(label, manager.smpteClockType(), manager.customFps())
@@ -369,7 +372,14 @@ if p['command'] == 'resolve_timecode':
         actual = str(manager.beatToTimecode(track.timeToBeat(candidate)))
         if re.sub(r'[.;]', ':', actual) == label:
             matches.append(candidate)
-    return {'time': min(matches, key=lambda value: abs(value-edit_seconds())) if matches else None}
+    return {'time': min(matches, key=lambda value: abs(value-near)) if matches else None}
+if p['command'] == 'resolve_timecode':
+    if 'time' in p:
+        seconds = float(p['time'])
+        if math.isnan(seconds) or math.isinf(seconds) or seconds < 0 or seconds > float(track.lengthInSec):
+            raise ValueError('Time is outside the track')
+        return {'label': re.sub(r'[.;]', ':', str(manager.beatToTimecode(track.timeToBeat(seconds))))}
+    return resolve_marker_time(p.get('label', ''), edit_seconds())
 if p['command'] == 'section_edit':
     operation = p.get('operation')
     if operation not in ('cut', 'merge'):

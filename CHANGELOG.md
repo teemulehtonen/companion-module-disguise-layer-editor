@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-beta.142
+
+- Start direct layer-bar drags through explicit IN selection, including layers outside the current editing time.
+- Marker popup positions now use Designer-native timecode mapping, including TC offsets. Entered destinations resolve inside the guarded native edit, using the original marker as the reference for repeated timecode labels.
+
 ## 0.1.0-beta.141
 
 - Show and edit marker track positions as HH:MM:SS:FF using track FPS. Unchanged displayed time preserves the original exact position; invalid frame/minute/second fields are rejected.

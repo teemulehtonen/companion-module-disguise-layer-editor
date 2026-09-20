@@ -3,11 +3,10 @@ const brandLogo = require('./viewer-logo.json')
 const { applyEditPatch } = require('./viewer-edit-model')
 const { discreteSegments } = require('./viewer-discrete')
 const { selectionScroll } = require('./viewer-selection-scroll')
-const { timecode } = require('./timecode')
 
 // Embedded at bundle time: the packaged module needs no external web runtime.
 // All project strings reach the DOM through textContent, never HTML parsing.
-function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode) {
+function browserMain(applyEditPatch, discreteSegments, selectionScroll) {
   const $ = (id) => document.getElementById(id)
   const viewport = $('viewport'),
     sheet = $('sheet')
@@ -554,7 +553,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
         try {
           const ok = g.keyMode ? await chooseKey(layer,parameter,g.originTime)
             : state.editor.layerUid === layer.uid && state.editor.layerEdit === 'edit' ? true
-            : await selectTarget(layer,undefined,action === 'layer' ? 'in' : action === 'value' ? 'out' : undefined)
+            : await selectTarget(layer,undefined,action === 'value' ? 'out' : 'in')
           if (!ok || mouseGesture !== g) { mouseGesture = null; return }
           if (g.keyMode && state.editor.mediaMode && !await sendEdit('media')) { mouseGesture = null; return }
           if (!g.keyMode && state.editor.layerEdit !== 'edit' && !await sendEdit('layer_edit')) { mouseGesture = null; return }
@@ -893,9 +892,12 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     lane.append(node)
     return node
   }
-  function annotationForm(kind,time,event,item) {
+  async function annotationForm(kind,time,event,item) {
     if (!state?.editEnabled || interactionBusy || editPending || mouseGesture) return
     closeKeyMenu()
+    if (!await sendEdit('annotation_time',{time})) return
+    const nativeLabel=state.lastAnnotationEdit?.label
+    if (!nativeLabel) return
     const panel = el('form','key-edit-menu'), input = el('input')
     keyMenu = panel
     Object.assign(panel.style,{left:Math.max(0,Math.min(event.clientX,window.innerWidth-270))+'px',top:Math.max(0,Math.min(event.clientY,window.innerHeight-235))+'px',width:'250px',padding:'9px'})
@@ -907,9 +909,9 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     input.required=true
     Object.assign(input.style,{width:'100%',margin:'8px 0',fontSize:'12px'})
     panel.append(input)
-    const at = el('input'), timeLabel = el('label','','TRACK TIME (HH:MM:SS:FF)')
+    const at = el('input'), timeLabel = el('label','','TIME (HH:MM:SS:FF)')
     at.type='text';at.required=true;at.placeholder='HH:MM:SS:FF'
-    at.value=timecode(time,state.fps || 25);at.setAttribute('aria-label','TRACK TIME (HH:MM:SS:FF)')
+    at.value=nativeLabel;at.setAttribute('aria-label','TIME (HH:MM:SS:FF)')
     const originalTimeLabel=at.value
     at.oninput=()=>at.setCustomValidity('')
     Object.assign(at.style,{width:'100%',margin:'6px 0 9px',fontSize:'12px'})
@@ -934,12 +936,13 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
         const parts=/^(\d{2,}):(\d{2}):(\d{2}):(\d{2})$/.exec(at.value.trim())
         const rate=state.fps || 25,nominal=Math.round(rate)
         const valid=parts && Number(parts[2])<60 && Number(parts[3])<60 && Number(parts[4])<nominal
-        const targetTime=at.value===originalTimeLabel ? time : valid ? ((Number(parts[1])*3600+Number(parts[2])*60+Number(parts[3]))*nominal+Number(parts[4]))/rate : NaN
-        if (!Number.isFinite(targetTime) || targetTime<0 || targetTime>state.length) {
-          at.setCustomValidity('ENTER A VALID TRACK TIME: HH:MM:SS:FF');at.reportValidity();return
+        const changed=at.value.trim()!==originalTimeLabel
+        if (!valid) {
+          at.setCustomValidity('ENTER A VALID TIME: HH:MM:SS:FF');at.reportValidity();return
         }
         if (!await releaseViewerMode()) return
-        const ok=await sendEdit('annotation',{kind,mode:item ? (targetTime===item.time ? 'update' : 'move') : 'add',targetTime,text,
+        const ok=await sendEdit('annotation',{kind,mode:item ? (changed ? 'move' : 'update') : 'add',targetTime:time,text,
+          ...(changed ? {targetLabel:at.value.trim()} : {}),
           ...(item ? {sourceTime:item.time,sourceText:String(item.text ?? item.value ?? '')} : {})})
         if (ok) closeKeyMenu()
       })
@@ -1831,4 +1834,4 @@ const stylesheet = `
 `
 const page = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Disguise Layer Editor · Timeline</title><link rel="stylesheet" href="/viewer.css"><script src="/viewer.js" defer></script></head><body><header><span class="brand-logo"><img src="${brandLogo}" alt="VEHKA AV"></span><div><h1>DISGUISE LAYER EDITOR</h1><small>TIMELINE VIEWER</small></div><div class="spacer"></div><div id="clockBlock"><span id="clock">—</span><span id="beat"></span><div id="editClock" hidden></div><div id="clockDetails"></div><div id="sectionRemaining" aria-live="off"></div></div><span id="status" role="status">CONNECTING</span></header><div class="toolbar"><strong id="track">TRACK</strong><div class="spacer"></div><button id="fitTrack" title="FIT TRACK">FIT TRACK</button><button id="fitLayer" title="CENTRE SELECTED LAYER">FIT LAYER</button><button id="follow" title="FOLLOW PLAYHEAD" aria-pressed="true">FOLLOW</button><button id="zoomOut" aria-label="ZOOM OUT" title="ZOOM OUT">−</button><button id="zoomIn" aria-label="ZOOM IN" title="ZOOM IN">+</button></div><main id="viewport" aria-label="Designer timeline"><div id="sheet"></div></main><footer>CTRL + WHEEL: ZOOM · SHIFT + WHEEL: PAN<span id="selectionMessage" role="status"></span><span id="warnings"></span></footer></body></html>`
 
-module.exports = { page, stylesheet, browserScript: '(' + browserMain.toString() + ')(' + applyEditPatch.toString() + ',' + discreteSegments.toString() + ',' + selectionScroll.toString() + ',' + timecode.toString() + ')' }
+module.exports = { page, stylesheet, browserScript: '(' + browserMain.toString() + ')(' + applyEditPatch.toString() + ',' + discreteSegments.toString() + ',' + selectionScroll.toString() + ')' }
