@@ -1,4 +1,12 @@
-# Current release - 0.2.0-beta.25
+# Current release - 0.2.0-beta.26
+
+Add reusable regression scripts and REGRESSION-TESTS.md. Run offline tests and packaged Companion actions with node scripts/regression.cjs. Native tests are opt-in; keep private reports under .tools. Preserve this runner for future development.
+
+Native testing found exact IN/OUT seconds-to-beat roundoff at 123 BPM. Layer-bound parameter, default, numeric/resource key operations now preserve exact native endpoints within 1e-7 seconds. No frame-size clamping was introduced.
+
+Validation: 209 local tests, package checks, 516 detached native checks across VIDEO/BITMAP/AUDIO and time/60/120/123 BPM tracks, plus three read-only installed Companion variable checks. Native mutations did not pass through the installed Raspberry Pi; packaged Companion callbacks and native commands were tested separately. No physical Stream Deck, browser gestures, show playback or reboot certification.
+
+# Previous release - 0.2.0-beta.25
 
 CLEAR MEDIA CACHE is a one-shot connection setting: select and save to clear waveform disk data and restart this connection's memory caches. Thumbnails now persist alongside waveform summaries under a shared 100 MiB cap. Native resource/file identity is revalidated before reuse; unsupported identities use the native endpoint. Reload viewers afterwards. Clearing respects other processes' writer lock and never recursively deletes folders. Validation: 209 local tests including pending-write ordering, foreign-file preservation, active-writer rejection and thumbnail reuse across client recreation. Native identity resolution passed for two current video resources. A physical Pi reboot was not tested.
 

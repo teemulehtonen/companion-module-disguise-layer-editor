@@ -557,6 +557,15 @@ matches = [layer for layer in all_layers() if str(layer.uid) == p['layerUid']]
 if len(matches) != 1:
     raise ValueError('Layer missing. Refresh before editing.')
 layer = matches[0]
+def layer_edit_beat(seconds):
+    # Native seconds/beat round trips can land just outside an exact IN/OUT
+    # (for example at 123 BPM). Preserve the boundary without accepting a frame
+    # outside it or quantizing legitimate sub-frame key positions.
+    if abs(seconds-float(track.beatToTime(layer.tStart))) <= 0.0000001:
+        return layer.tStart
+    if abs(seconds-float(track.beatToTime(layer.tEnd))) <= 0.0000001:
+        return layer.tEnd
+    return track.timeToBeat(seconds)
 if p['command'] == 'layer_manage':
     if layer.locked: raise ValueError('Layer is locked in Designer')
     if layer.name != p.get('expectedName') or abs(float(track.beatToTime(layer.tStart))-p['expectedStart'])>0.00001 or abs(float(track.beatToTime(layer.tEnd))-p['expectedEnd'])>0.00001:
@@ -597,7 +606,7 @@ if p['command'] == 'parameter_sequence':
     if mode not in ('enable', 'clear', 'reset') or (mode != 'enable' and p.get('confirmed') is not True):
         raise ValueError('Confirm before clearing parameter animation')
     seconds = edit_seconds()
-    beat = track.timeToBeat(seconds)
+    beat = layer_edit_beat(seconds)
     if beat < layer.tStart or beat > layer.tEnd:
         raise ValueError('Layer is outside the edit time')
     resource = isinstance(seq, ResourceSequence)
@@ -646,7 +655,7 @@ if p['command'] in ('key_clear_list', 'keys_clear', 'parameter_default', 'layer_
     if p.get('confirmed') is not True or not p.get('fields'):
         raise ValueError('Select parameters and confirm before clearing')
     seconds = edit_seconds()
-    beat = track.timeToBeat(seconds)
+    beat = layer_edit_beat(seconds)
     if beat < layer.tStart or beat > layer.tEnd:
         raise ValueError('Selected layer is not active at the playhead')
     if layer.locked:
@@ -747,7 +756,7 @@ if p['command'] == 'layer_edit':
     updated = next(l for l in result['layers'] if l['uid'] == p['layerUid'])
     return {'layer': updated, 'time': playhead}
 if (p.get('live') or p.get('editTime') is not None) and p['command'] in ('adjust_value', 'key_set', 'key_delete', 'key_clear', 'constant_set', 'key_type'):
-    now_beat = track.timeToBeat(edit_seconds())
+    now_beat = layer_edit_beat(edit_seconds())
     if now_beat < layer.tStart or now_beat > layer.tEnd:
         raise ValueError('Selected layer is not active at the playhead')
 field = layer.findSequence(p['field'])
@@ -755,12 +764,12 @@ if p['command'] in ('media_list', 'media_set', 'media_key_set'):
     if field is None or media_type(field) is None:
         raise ValueError('Media field is missing; refresh the layer')
     if p['command'] in ('media_set', 'media_key_set'):
-        beat = track.timeToBeat(edit_seconds())
+        beat = layer_edit_beat(edit_seconds())
         if p.get('targetTime') is not None and p['command'] == 'media_key_set':
             target_time = float(p['targetTime'])
             if math.isnan(target_time) or math.isinf(target_time):
                 raise ValueError('Invalid resource key time')
-            beat = track.timeToBeat(target_time)
+            beat = layer_edit_beat(target_time)
         if beat < layer.tStart or beat > layer.tEnd:
             raise ValueError('Layer is not active at the playhead')
         seq = field.sequence
@@ -812,7 +821,7 @@ if seq.nKeys() == 0:
 seconds = float(track.beatToTime(manager.player.tCurrent)) if p.get('live') else float(p['time'])
 if seconds < 0 or math.isnan(seconds) or math.isinf(seconds):
     raise ValueError('Invalid time')
-beat = track.timeToBeat(seconds)
+beat = layer_edit_beat(seconds)
 command = p['command']
 if command not in ('read_field', 'jump_key', 'select_key') and layer.locked:
     raise ValueError('Layer is locked in Designer')

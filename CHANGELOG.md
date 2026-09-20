@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0-beta.26
+
+- Add repeatable offline, native Designer and read-only installed Companion regression stages with local JSON reports and no AI requests.
+- Fix exact layer-boundary beat conversion roundoff affecting parameter edits at tempos such as 123 BPM.
+- Validation: 209 unit tests, packaged Companion checks and 516 detached native assertions; see docs/REGRESSION-TESTS.md for scope.
+
 ## 0.2.0-beta.25
 
 - Add one-shot CLEAR MEDIA CACHE setting for local waveform disk data and connection thumbnail/waveform memory. Select and save, then reload viewers. Does not delete source media or Designer data.
