@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-beta.137
+
+- Include visible parameter rows when revealing the selected layer. If the expanded layer exceeds the viewport, follow the selected parameter instead; account for sticky timeline/audio headers and preserve manual scrolling between selection changes.
+
 ## 0.1.0-beta.136
 
 - Press the first dial in normal mode to toggle LAYER/ZOOM while a viewer is active. Rotate to zoom around the editing playhead; other editing modes retain their controls.

@@ -2,10 +2,11 @@
 const brandLogo = require('./viewer-logo.json')
 const { applyEditPatch } = require('./viewer-edit-model')
 const { discreteSegments } = require('./viewer-discrete')
+const { selectionScroll } = require('./viewer-selection-scroll')
 
 // Embedded at bundle time: the packaged module needs no external web runtime.
 // All project strings reach the DOM through textContent, never HTML parsing.
-function browserMain(applyEditPatch, discreteSegments) {
+function browserMain(applyEditPatch, discreteSegments, selectionScroll) {
   const $ = (id) => document.getElementById(id)
   const viewport = $('viewport'),
     sheet = $('sheet')
@@ -1452,6 +1453,8 @@ function browserMain(applyEditPatch, discreteSegments) {
           p.side.replaceChildren(selectionButton(layer, field.label || field.name, field.name))
           p.side.dataset.parameterValue = field.name
           p.side.dataset.parameterLayer = layer.uid
+          p.root.dataset.ownerLayer = layer.uid
+          p.root.dataset.parameter = field.name
           const choice = field.choices?.find((c) => c.value === field.value)
           const value = field.unsupported
             ? 'UNAVAILABLE'
@@ -1510,16 +1513,17 @@ function browserMain(applyEditPatch, discreteSegments) {
       if (target.hasAttribute('aria-label')) target.setAttribute('aria-label', target.getAttribute('aria-label').toUpperCase())
     }
     viewport.scrollTop = top
-    const focus = state.trackUid + ':' + state.focusUid
+    const focus = JSON.stringify([state.trackUid, state.focusUid, state.parameter])
     if (state.focusUid && focus !== revealedLayer) {
       const selected = [...sheet.querySelectorAll('.layer[data-uid]')].find(node => node.dataset.uid === state.focusUid)
       if (selected) {
         revealedLayer = focus
         const headers = [...sheet.querySelectorAll('.timeline-header, .track-waveform')].reduce((height, node) => height + node.offsetHeight, 0)
-        const upper = selected.offsetTop - headers - 8
-        const lower = selected.offsetTop + selected.offsetHeight + 8 - viewport.clientHeight
-        if (top > upper) viewport.scrollTop = Math.max(0, upper)
-        else if (top < lower) viewport.scrollTop = Math.max(0, lower)
+        const parameters = [...sheet.querySelectorAll('.parameter[data-owner-layer]')].filter(node => node.dataset.ownerLayer === state.focusUid)
+        const parameter = parameters.find(node => node.dataset.parameter === state.parameter)
+        const bounds = node => ({ start: node.offsetTop, end: node.offsetTop + node.offsetHeight })
+        const block = { start: selected.offsetTop, end: Math.max(bounds(selected).end, ...parameters.map(node => bounds(node).end)) }
+        viewport.scrollTop = selectionScroll(top, viewport.clientHeight, headers, block, parameter ? bounds(parameter) : bounds(selected))
       }
     }
     updatePlayhead()
@@ -1802,4 +1806,4 @@ const stylesheet = `
 `
 const page = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Disguise Layer Editor · Timeline</title><link rel="stylesheet" href="/viewer.css"><script src="/viewer.js" defer></script></head><body><header><span class="brand-logo"><img src="${brandLogo}" alt="VEHKA AV"></span><div><h1>DISGUISE LAYER EDITOR</h1><small>TIMELINE VIEWER</small></div><div class="spacer"></div><div id="clockBlock"><span id="clock">—</span><span id="beat"></span><div id="editClock" hidden></div><div id="clockDetails"></div><div id="sectionRemaining" aria-live="off"></div></div><span id="status" role="status">CONNECTING</span></header><div class="toolbar"><strong id="track">TRACK</strong><div class="spacer"></div><button id="fitTrack" title="FIT TRACK">FIT TRACK</button><button id="fitLayer" title="CENTRE SELECTED LAYER">FIT LAYER</button><button id="follow" title="FOLLOW PLAYHEAD" aria-pressed="true">FOLLOW</button><button id="zoomOut" aria-label="ZOOM OUT" title="ZOOM OUT">−</button><button id="zoomIn" aria-label="ZOOM IN" title="ZOOM IN">+</button></div><main id="viewport" aria-label="Designer timeline"><div id="sheet"></div></main><footer>CTRL + WHEEL: ZOOM · SHIFT + WHEEL: PAN<span id="selectionMessage" role="status"></span><span id="warnings"></span></footer></body></html>`
 
-module.exports = { page, stylesheet, browserScript: '(' + browserMain.toString() + ')(' + applyEditPatch.toString() + ',' + discreteSegments.toString() + ')' }
+module.exports = { page, stylesheet, browserScript: '(' + browserMain.toString() + ')(' + applyEditPatch.toString() + ',' + discreteSegments.toString() + ',' + selectionScroll.toString() + ')' }
