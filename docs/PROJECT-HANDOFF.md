@@ -1,4 +1,8 @@
-# Current release - 0.2.0-beta.11
+# Current release - 0.2.0-beta.12
+
+Interface sizes are SMALL 100%, MEDIUM 110%, LARGE 120%. Geometry tests cover all three factors; saved size names automatically use the new factors.
+
+# Previous release - 0.2.0-beta.11
 
 Interface size buttons use the waveform height controls' one/two/three-line icons. SMALL/MEDIUM/LARGE remain accessible names and hover hints.
 

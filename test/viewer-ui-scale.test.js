@@ -3,7 +3,7 @@ const {test}=require('node:test'),assert=require('node:assert/strict')
 const {createUiGeometry}=require('../src/viewer-ui-scale')
 const close=(a,b)=>assert.ok(Math.abs(a-b)<1e-9,`${a} != ${b}`)
 test('all UI sizes preserve pointer times, drag distances, value positions and overlay coordinates',()=>{
- for(const scale of [1,1.05,1.1]) {
+ for(const scale of [1,1.1,1.2]) {
   const geo=createUiGeometry(()=>scale,{innerWidth:1280,innerHeight:800})
   const rect={x:240,y:160,left:240,top:160,right:1040,bottom:212,width:800,height:52}
   const node={getBoundingClientRect:()=>Object.fromEntries(Object.entries(rect).map(([k,v])=>[k,v*scale]))}

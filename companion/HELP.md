@@ -53,4 +53,4 @@ Click the connected viewer status to switch the module to VIEW. VIEW disables al
 
 In LIVE, Shift-click or Shift-drag layer rows to select siblings. Right-click the selection, enter a name and choose GROUP. Right-click a group for UNGROUP. Groups occupy the highest selected row; layer order and timing are preserved. Collapse/expand and hover time/value readouts are also available in VIEW.
 
-Viewer size: SMALL 100%, MEDIUM 105%, LARGE 110%, saved per browser. Track heading always shows @ FPS, then duration. TC IN: appears only when a transport timecode source is configured; hover for source status.
+Viewer size: SMALL 100%, MEDIUM 110%, LARGE 120%, saved per browser. Track heading always shows @ FPS, then duration. TC IN: appears only when a transport timecode source is configured; hover for source status.
