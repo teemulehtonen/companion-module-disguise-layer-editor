@@ -5,7 +5,7 @@ const { Editor } = require('../src/editor')
 const { DemoClient } = require('../src/demo')
 const { ViewerServer } = require('../src/viewer-server')
 
-test('browser selection preserves time and cannot select inactive layers or bypass a key lock', async () => {
+test('browser selection preserves active time, rejects inactive layers and respects key locks', async () => {
   const client = new DemoClient(),
     editor = new Editor(client)
   await editor.refresh()
@@ -22,6 +22,8 @@ test('browser selection preserves time and cannot select inactive layers or bypa
   client.data.layers.find((l) => l.uid === layer.uid).start = time + 10
   assert.equal((await editor.selectFromViewer(target)).ok, false)
   assert.equal(editor.time, time)
+  assert.equal((await editor.selectFromViewer({...target,point:'in'})).ok,true)
+  assert.equal(editor.time,time+10)
 })
 
 test('selection route accepts only authenticated selection data, never a value or seek', async (t) => {
@@ -102,4 +104,17 @@ test('timeline points seek and select the intended layer/parameter without modif
   assert.equal(editor.field.name,layer.fields[0].name)
   assert.equal((await editor.selectFromViewer({...target,point:'key',parameter:layer.fields[0].name,keyTime:999})).ok,false)
   assert.equal(JSON.stringify(client.data.layers),original)
+})
+
+test('inactive selection uses a pending seek instead of delayed native feedback', async () => {
+  const client = new DemoClient(), editor = new Editor(client)
+  await editor.refresh()
+  const layer = client.data.layers[0]
+  layer.start = 10
+  client.data.time = 15
+  await editor.refresh()
+  editor.pendingJump = { time: 0, until: Date.now() + 1500 }
+  const result = await editor.selectFromViewer({trackUid:editor.snapshot.trackUid,layerUid:layer.uid})
+  assert.equal(result.ok,false)
+  assert.notEqual(editor.time,10)
 })

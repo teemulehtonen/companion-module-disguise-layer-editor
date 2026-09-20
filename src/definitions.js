@@ -47,6 +47,7 @@ function actions(instance) {
   })
   return {
     refresh: action('Read layers and values from Designer', [], (e) => e.refresh()),
+    link_time: action('Toggle playhead follow while editing', [], (e) => e.setLinkTime(!e.linkTime)),
     play_stop: action('Play to end of section / stop', [], (e) => e.togglePlayback()),
     layer: action('Select active layer', [direction], (e, o) =>
       e.layerEdit === 'edit'

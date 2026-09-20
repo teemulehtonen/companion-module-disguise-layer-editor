@@ -6,7 +6,7 @@ Disguise layer, keyframe and resource control for Bitfocus Companion and Stream 
 
 ## Install
 
-**Downloads (beta.102):** [Companion module](../../releases/download/v0.1.0-beta.102/disguise-layer-control-0.1.0-beta.102.tgz) · [Companion page](../../releases/download/v0.1.0-beta.102/D3-Stream-Deck-Plus.companionconfig)
+**Downloads (beta.127):** [Companion module](../../releases/download/v0.1.0-beta.127/disguise-layer-control-0.1.0-beta.127.tgz) · [Companion page](../../releases/download/v0.1.0-beta.127/D3-Stream-Deck-Plus.companionconfig)
 
 Tested with Designer 32.4.17 and Companion 5.0.5.
 
@@ -30,7 +30,7 @@ Tested with Designer 32.4.17 and Companion 5.0.5.
 - **LAYER EDIT** assigns IN / POSITION (centre) / OUT / FIT to the encoders. Press LAYER EDIT again to return.
 - **RESOURCES** assigns SOURCE / FOLDER / RESOURCE / BACK. Press SOURCE to switch **REPLACE / KEYFRAME** for animatable resources. REPLACE edits the current resource; KEYFRAME schedules the preview at the playhead, preserving the earlier value. Press RESOURCE to apply and return; thumbnails apply directly in the selected mode. Reopening starts in REPLACE. BACK cancels browsing.
 - New numeric keyframes default to **SMOOTH**; existing key types are preserved. Resource keyframes are discrete switches, not crossfades.
-- **PLAY SECTION / STOP** controls playback. Float increments are 0.1 / 0.01 / 0.001. Absolute times use Designer's native timecode.
+- **LINK TIME** (on by default) links editing to Designer playback time. Turn it off to use the independent blue editing cursor from either the viewer or Stream Deck. Turning it on adopts Designer time and clears edit locks without seeking playback. The standalone playback action remains available. Float increments are 0.1 / 0.01 / 0.001. Absolute times use Designer's native timecode.
 
 ## Timeline viewer
 

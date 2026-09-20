@@ -41,10 +41,12 @@ function validateSnapshot(s) {
 class Editor {
   constructor(client) {
     this.client = client
+    this.linkTime = true
     this.snapshot = null
     this.layerIndex = 0
     this.fieldIndex = 0
     this.time = 0
+    this.transportTime = 0
     this.value = 0
     this.dirty = false
     this.precision = 'coarse'
@@ -130,8 +132,10 @@ class Editor {
     const order = new Map(timeline.layers.map((l, i) => [l.uid, i]))
     this.snapshot.layers.sort((a, b) => (order.get(a.uid) ?? Infinity) - (order.get(b.uid) ?? Infinity))
     this.layerIndex = this.snapshot.layers.findIndex((l) => l.uid === selectedUid)
+    this.transportTime = timeline.time
+    const activeTime = this.linkTime ? timeline.time : this.time
     const active = timeline.layers.filter(
-      (l) => (l.start ?? 0) <= timeline.time + 1e-7 && (l.end ?? Infinity) >= timeline.time - 1e-7,
+      (l) => (l.start ?? 0) <= activeTime + 1e-7 && (l.end ?? Infinity) >= activeTime - 1e-7,
     )
     const signature = active
       .map((l) => l.uid)
@@ -149,10 +153,11 @@ class Editor {
         (uid) => bounds.has(uid) && !this.snapshot.layers.some((l) => l.uid === uid),
       )
     ) {
+      this.receiveTransportTime(timeline.time)
       this.stale = true
       return // Reload only when layers at the playhead change (or the selected layer is deleted).
     }
-    this.followTime(timeline.time)
+    this.receiveTransportTime(timeline.time)
     if (timeline.timecodeSamples) this.acceptTimecodes(timeline)
     if (timeline.timecodeSample) this.liveTimecodeSample = timeline.timecodeSample
     this.followDesignerSelection(timeline)
@@ -160,7 +165,7 @@ class Editor {
   followDesignerSelection(state) {
     // Follow selection changes, not the same selection on every poll: otherwise
     // Designer would immediately override a layer chosen with the encoder.
-    if (this.moveKey) return
+    if (!this.linkTime || this.moveKey) return
     if (
       !this.snapshot ||
       !Array.isArray(state?.selectedLayerUids) ||
@@ -190,12 +195,18 @@ class Editor {
     const uid = eligible.filter((id) => !previous.includes(id)).at(-1) || eligible.at(-1)
     this.designerLayerUid = uid || null
     if (!uid || uid === this.layer?.uid) return
+    this.viewerPinnedLayerUid = null
     this.layerIndex = this.snapshot.layers.findIndex((l) => l.uid === uid)
     this.layerEdit = ''
     this.mediaMode = false
     this.mediaAll = []
     this.mediaFieldIndex = 0
     this.selectDefaultParameter()
+  }
+  receiveTransportTime(seconds, force = false) {
+    if (!Number.isFinite(seconds)) return
+    this.transportTime = seconds
+    if (this.linkTime) this.followTime(seconds, force)
   }
   followTime(seconds, force = false) {
     if (!Number.isFinite(seconds) || (this.busy && !force)) return
@@ -259,20 +270,23 @@ class Editor {
       const trackUid = this.snapshot?.trackUid,
         transportUid = this.snapshot?.transportUid
       const mediaName = this.mediaField?.name
-      const next = validateSnapshot(await this.client.execute('refresh'))
+      const next = validateSnapshot(await this.client.execute('refresh', this.snapshot && !this.linkTime ? {time:this.time,editTime:this.time,editTrackUid:this.snapshot.trackUid,keepPlayhead:true} : {}))
       next.layers.forEach(orderLayerParameters)
       const keep = preserve && next.trackUid === trackUid && next.transportUid === transportUid
       this.snapshot = next
+      this.transportTime = next.time
+      if (!keep || this.linkTime) this.time = next.time
       this.timecodeSamples = next.timecodeSamples
       this.liveTimecodeSample = null
       if (!keep) {
+        this.viewerPinnedLayerUid = null
         this.designerSelectionKey = null
         this.designerSelectionIds = []
         this.designerLayerUid = null
       }
       this.stale = false
       this.activeLayerSignature = next.layers
-        .filter((l) => (l.start ?? 0) <= next.time + 1e-7 && (l.end ?? Infinity) >= next.time - 1e-7)
+        .filter((l) => (l.start ?? 0) <= this.time + 1e-7 && (l.end ?? Infinity) >= this.time - 1e-7)
         .map((l) => l.uid)
         .sort()
         .join(',')
@@ -284,7 +298,6 @@ class Editor {
         0,
         (this.layer?.fields || []).findIndex((f) => f.name === fieldName),
       )
-      this.time = next.time
       if (keep && this.layer?.uid === layerUid && this.field?.name === fieldName) {
         const keys = this.field?.keys || []
         if (
@@ -302,6 +315,7 @@ class Editor {
             (k) =>
               Math.abs(k.time - this.moveKey.time) < 1e-5 &&
               k.value === this.moveKey.value &&
+              k.resourceUid === this.moveKey.resourceUid &&
               k.interpolation === this.moveKey.interpolation,
           )
         )
@@ -314,7 +328,8 @@ class Editor {
           this.mediaMode = false
           this.mediaAll = []
         }
-        this.followTime(next.time, true)
+        this.followTime(this.time, true)
+        if (!this.linkTime && this.field) this.acceptLive(await this.client.execute('read_field',this.liveArgs()))
         this.loadValue()
         this.followDesignerSelection(next)
         return
@@ -326,7 +341,7 @@ class Editor {
       this.selectedKeyTime = null
       this.mediaMode = false
       this.mediaAll = []
-      this.followTime(next.time, true)
+      this.followTime(this.time, true)
       if (!keep) this.selectDefaultParameter()
       this.loadValue()
       this.followDesignerSelection(next)
@@ -350,6 +365,7 @@ class Editor {
     this.dirty = false
   }
   get valueLabel() {
+    if (this.field?.resource) return this.field.resourceName || 'NONE'
     const choice = this.field?.choices?.find((c) => c.value === this.value)
     if (choice) return choice.label
     if (this.field?.integer) return String(Math.round(this.value))
@@ -390,7 +406,7 @@ class Editor {
       layerUid: this.layer?.uid,
       field: this.field?.name,
       keyTime: this.selectedKey?.time,
-      live: true,
+      live: this.linkTime,
     }
   }
   acceptLive(result) {
@@ -412,7 +428,9 @@ class Editor {
   }
   acceptTimecodes(result) {
     if (Array.isArray(result.timecodeSamples)) {
+      const editSample = !this.linkTime && this.timecodeSamples?.find(sample => Math.abs(sample.seconds-this.time)<1e-7)
       this.timecodeSamples = result.timecodeSamples
+      if (editSample && !this.timecodeSamples.some(sample => Math.abs(sample.seconds-this.time)<1e-7)) this.timecodeSamples = [...this.timecodeSamples,editSample]
       this.liveTimecodeSample = null
     }
   }
@@ -444,36 +462,59 @@ class Editor {
       await this.remote(async () => this.acceptLive(await this.client.execute('read_field', this.liveArgs())))
     if (this.mediaMode) await this.loadMedia()
   }
-  async seekFromViewer({ trackUid, time }) {
+  async seekFromViewer(target) {
+    return this.withEditTime(() => this.seekFromViewerTarget(target))
+  }
+  async seekFromViewerTarget({ trackUid, time }) {
+    this.viewerPinnedLayerUid = null
     this.local()
     if (!Number.isFinite(time)) return { ok: false, reason: 'Invalid time' }
     await this.refresh({ preserve: true })
     if (this.snapshot.trackUid !== trackUid) return { ok: false, reason: 'Track changed; try again' }
     const fps = this.snapshot.fps || 25
     const target = Math.max(0, Math.min(this.snapshot.length, Math.round(time * fps) / fps))
-    // Explicit transport seek, never the dial command that can move a selected key.
+    // Move the active clock, never the selected key. Native transport stays put when unlinked.
     const result = await this.remote(() => this.client.execute('seek', { ...this.context(), time: target }))
+    this.moveKey = null
+    this.selectedKeyTime = null
+    this.layerEdit = ''
+    this.mediaMode = false
+    this.mediaAll = []
+    this.navigationTime = null
     this.time = result.time
+    this.followTime(this.time, true)
+    if (!this.linkTime && this.field) await this.remote(async () => this.acceptLive(await this.client.execute('read_field',this.liveArgs())))
+    this.loadValue()
     this.acceptTimecodes(result)
-    this.pendingJump = { time: result.time, until: Date.now() + 1500 }
+    this.pendingJump = this.keepEditPlayhead ? null : { time: result.time, until: Date.now() + 1500 }
     return { ok: true, time: result.time }
   }
-  async selectFromViewer({ trackUid, layerUid, parameter, point, keyTime }) {
+  async selectFromViewer(target) {
+    const previous=this.viewerKeepPlayhead
+    this.viewerKeepPlayhead=target.keepPlayhead ?? previous ?? !this.linkTime
+    try {return await this.selectFromViewerTarget(target)}
+    finally {this.viewerKeepPlayhead=previous}
+  }
+  async selectFromViewerTarget({ trackUid, layerUid, parameter, point, keyTime }) {
     this.local()
     if (this.moveKey) return { ok: false, reason: 'Exit SELECT KEY before changing selection' }
     if (this.clearKeysBrowser) return { ok: false, reason: 'Close the DELETE menu before changing selection' }
     // Refresh before accepting a browser click: the layer may have moved or
-    // disappeared since rendering. Selection never seeks or writes a value.
+    // disappeared since rendering. An inactive layer selection seeks to its IN.
+    this.viewerPinnedLayerUid=this.keepEditPlayhead ? layerUid : null
+    const pendingTime = this.pendingJump && Date.now() < this.pendingJump.until ? this.pendingJump.time : this.time
     await this.refresh({ preserve: true })
     if (this.snapshot.trackUid !== trackUid) return { ok: false, reason: 'Track changed; select again' }
     const layer = this.snapshot.layers.find((item) => item.uid === layerUid)
-    if (!layer || (!point && (!this.activeLayers.includes(layer) || this.time >= layer.end)))
-      return { ok: false, reason: 'Select a layer at the current playhead' }
+    if (!layer) return { ok: false, reason: 'Layer is no longer available' }
+    const selectionTime = pendingTime ?? this.time
+    if (!point && (selectionTime < layer.start || selectionTime >= layer.end)) return {ok:false,reason:'LAYER IS OUTSIDE THE EDIT TIME'}
     const numeric = parameter === undefined ? -1 : layer.fields.findIndex((field) => field.name === parameter)
     const resource =
       parameter === undefined ? -1 : (layer.mediaFields || []).findIndex((field) => field.name === parameter)
     if (parameter !== undefined && numeric < 0 && resource < 0)
       return { ok: false, reason: 'Parameter is no longer available' }
+    let insertTime
     if (point) {
       const fps = this.snapshot.fps || 25
       let target
@@ -481,14 +522,23 @@ class Editor {
       else if (point === 'out') target = Math.max(layer.start, (Math.ceil(layer.end * fps - 1e-7) - 1) / fps)
       else if (point === 'key') {
         const field = numeric >= 0 ? layer.fields[numeric] : layer.mediaFields?.[resource]
-        const key = field?.sequenced && field.keys?.find(k => Math.abs(k.time-keyTime) < 1e-6)
-        if (!key || key.time < layer.start || key.time > layer.end) return {ok:false,reason:'Keyframe is no longer inside this layer'}
+        const key = field?.sequenced && field.keys?.find(k => Math.abs(k.time-keyTime) < 1e-5)
+        if (!key) return {ok:false,reason:'KEYFRAME CHANGED — VIEW REFRESHING'}
+        if (key.time < layer.start-1e-7 || key.time > layer.end+1e-7) return {ok:false,reason:'KEYFRAME IS OUTSIDE LAYER BOUNDS'}
         target = key.time
+      } else if (point === 'insert') {
+        const insertField = numeric >= 0 ? layer.fields[numeric] : layer.mediaFields[resource]
+        if (!insertField || insertField.canAnimate === false)
+          return {ok:false,reason:'THIS PARAMETER CANNOT BE KEYFRAMED'}
+        target = Math.round(keyTime*fps)/fps
+        if (!Number.isFinite(target) || target < layer.start || target > layer.end)
+          return {ok:false,reason:'CHOOSE A TIME INSIDE THE LAYER'}
+        insertTime = target
       } else return {ok:false,reason:'Invalid timeline point'}
       if (!Number.isFinite(target) || target < 0 || target > this.snapshot.length) return {ok:false,reason:'Layer is outside the track'}
       const result = await this.remote(() => this.client.execute('seek', {...this.context(),time:target}))
       this.time = result.time
-      this.pendingJump = {time:result.time,until:Date.now()+1500}
+      this.pendingJump = this.keepEditPlayhead ? null : {time:result.time,until:Date.now()+1500}
       this.activeLayerSignature = this.activeLayers.map(l => l.uid).sort().join(',')
     }
     this.layerIndex = this.snapshot.layers.indexOf(layer)
@@ -508,32 +558,85 @@ class Editor {
       this.fieldIndex = numeric
       this.loadValue()
     }
-    if (resource >= 0) {
+    if (resource >= 0 && point !== 'key') {
       this.mediaFieldIndex = resource
       this.mediaMode = true
       await this.loadMedia()
+      if (point === 'insert') {
+        if (!this.mediaCanAnimate) return {ok:false,reason:'THIS RESOURCE CANNOT BE KEYFRAMED'}
+        // Pin the clicked time after catalog reads. Delayed transport feedback
+        // must never turn insertion into replacement of the previous key.
+        this.mediaKeyframe = true
+        this.mediaKeyTime = insertTime
+        this.time = insertTime
+        this.pendingJump = this.keepEditPlayhead ? null : {time:insertTime,until:Date.now()+1500}
+      }
     }
-    return { ok: true }
+    if (point === 'insert' && resource < 0) {
+      await this.writeLive('key_set',insertTime)
+      await this.toggleMoveKey(insertTime)
+    }
+    return { ok: true, ...(point === 'insert' && this.linkTime ? {time:insertTime} : {}) }
   }
-  async adjustLiveValue(direction, step = 0) {
+  async adjustLiveValue(direction, step = 0, pointer = {}) {
+    if (this.moveKey && !Number.isFinite(pointer.targetValue)) this.guidesUntil = Date.now()+650
     if (!this.field) return
+    if (this.field.resource) return
     this.requireField()
     await this.remote(async () =>
       this.acceptLive(
         await this.client.execute('adjust_value', {
           ...this.liveArgs(),
+          expectedKey: this.moveKey || undefined,
           direction,
           step,
           fine: this.fine,
           precision: this.precision,
+          previewCurve: pointer.previewCurve === true,
+          ...(Number.isFinite(pointer.targetValue) ? {targetValue:pointer.targetValue,expectedValue:pointer.expectedValue} : {}),
         }),
       ),
     )
     if (this.moveKey && this.selectedKey) this.moveKey = { ...this.selectedKey }
   }
-  async adjustLiveTime(direction, stepOverride) {
+  setLinkTime(enabled) {
+    this.local()
+    const changed = this.linkTime !== Boolean(enabled)
+    this.linkTime = Boolean(enabled)
+    this.viewerPinnedLayerUid = null
+    this.pendingJump = null
+    if (changed) {
+      this.moveKey = null
+      this.selectedKeyTime = null
+      this.navigationTime = null
+      this.layerEdit = ''
+      this.mediaMode = false
+      this.mediaAll = []
+      this.clearKeysBrowser = null
+      this.clearKeysPrompt = null
+      this.deletePress = null
+      this.followTime(this.transportTime, true)
+      this.loadValue()
+    }
+  }
+  get keepEditPlayhead() {
+    return this.viewerKeepPlayhead ?? !this.linkTime
+  }
+  async withEditTime(fn) {
+    const previous = this.viewerKeepPlayhead
+    this.viewerKeepPlayhead = previous ?? !this.linkTime
+    if (this.viewerKeepPlayhead && this.layer) this.viewerPinnedLayerUid = this.layer.uid
+    try { return await fn() }
+    finally { this.viewerKeepPlayhead = previous }
+  }
+  async adjustLiveTime(direction, stepOverride, pointer = {}) {
+    if ((this.moveKey || this.layerEdit) && !Number.isFinite(pointer.targetTime)) this.guidesUntil = Date.now()+650
+    if (this.moveKey || this.layerEdit) return this.withEditTime(() => this.adjustLiveTimeTarget(direction, stepOverride, pointer))
+    return this.withEditTime(() => this.adjustLiveTimeTarget(direction, stepOverride, pointer))
+  }
+  async adjustLiveTimeTarget(direction, stepOverride, pointer = {}) {
     this.requireReady()
-    const cursor = this.pendingJump && Date.now() < this.pendingJump.until ? this.pendingJump.time : undefined
+    const cursor = this.pendingJump && Date.now() < this.pendingJump.until ? this.pendingJump.time : this.time
     this.navigationTime = null
     this.pendingJump = null
     const beats = !stepOverride && this.usesBeatSteps
@@ -553,7 +656,7 @@ class Editor {
         })
         Object.assign(this.layer, result.layer)
         this.selectedKeyTime = null
-        this.pendingJump = { time: result.time, until: Date.now() + 1500 }
+        this.pendingJump = this.keepEditPlayhead ? null : { time: result.time, until: Date.now() + 1500 }
         this.acceptLive(result)
       })
       return
@@ -567,11 +670,12 @@ class Editor {
         cursor,
         sourceTime: this.moveKey?.time,
         expectedKey: this.moveKey,
+        ...pointer,
       })
-      this.pendingJump = { time: result.time, until: Date.now() + 1500 }
+      this.pendingJump = this.keepEditPlayhead ? null : { time: result.time, until: Date.now() + 1500 }
       this.acceptLive(result)
       if (this.moveKey) {
-        this.moveKey = { ...this.field.keys.find((k) => Math.abs(k.time - this.time) < 1e-5) }
+        this.moveKey = { ...this.field.keys.find((k) => Math.abs(k.time - result.time) < 1e-5) }
         this.selectedKeyTime = this.moveKey.time
       } else {
         this.selectedKeyTime = null
@@ -581,6 +685,9 @@ class Editor {
     })
   }
   async keyLive(direction) {
+    return this.withEditTime(() => this.keyLiveTarget(direction))
+  }
+  async keyLiveTarget(direction) {
     // Read selection immediately before navigation; a button press can arrive
     // before the 500 ms background poll has observed a Designer mouse click.
     this.requireReady()
@@ -600,13 +707,16 @@ class Editor {
       if (Number.isFinite(result.time)) {
         this.selectedKeyTime = Number.isFinite(result.keyTime) ? result.keyTime : null
         this.navigationTime = result.time
-        this.pendingJump = { time: result.time, until: Date.now() + 1500 }
+        this.pendingJump = this.keepEditPlayhead ? null : { time: result.time, until: Date.now() + 1500 }
       }
       this.acceptLive(result)
     })
     this.loadValue()
   }
-  async toggleMoveKey() {
+  async toggleMoveKey(exactTime) {
+    return this.withEditTime(() => this.toggleMoveKeyTarget(exactTime))
+  }
+  async toggleMoveKeyTarget(exactTime) {
     if (!this.field) return
     this.requireField()
     if (this.moveKey) {
@@ -622,7 +732,7 @@ class Editor {
     this.navigationTime = null
     this.pendingJump = null
     await this.remote(async () => {
-      const result = await this.client.execute('select_key', this.liveArgs())
+      const result = await this.client.execute('select_key', {...this.liveArgs(),...(Number.isFinite(exactTime) ? {sourceTime:exactTime} : {})})
       if (!result.selectedKey) {
         this.acceptLive(result)
         return
@@ -630,11 +740,12 @@ class Editor {
       this.selectedKeyTime = result.selectedKey.time
       this.moveKey = result.selectedKey
       this.navigationTime = result.time
-      this.pendingJump = { time: result.time, until: Date.now() + 1500 }
+      this.pendingJump = this.keepEditPlayhead ? null : { time: result.time, until: Date.now() + 1500 }
       this.acceptLive(result)
     })
   }
   async cycleKeyType(type) {
+    if (this.field?.resource) return // Resource sequences are discrete HOLD keys.
     if (type !== undefined && ![0, 1, 2].includes(type)) throw new Error('Invalid keyframe type')
     if (!this.canSelectKey) return
     this.requireField()
@@ -646,17 +757,19 @@ class Editor {
     )
     if (this.moveKey && this.selectedKey) this.moveKey = { ...this.selectedKey }
   }
-  async writeLive(command) {
+  async writeLive(command, targetTime) {
     this.requireField()
     // Some Designer settings (for example Web dimensions) are constants by
     // design. Pressing the value dial must not send an impossible key write.
     if (command === 'key_set' && this.field.canAnimate === false) return
-    this.moveKey = null
+    const expectedKey = this.moveKey ? { ...this.moveKey } : undefined
     this.navigationTime = null
     this.pendingJump = null
     await this.remote(async () => {
-      this.acceptLive(await this.client.execute('read_field', this.liveArgs()))
-      const result = await this.client.execute(command, { ...this.liveArgs(), value: this.field.value })
+      const pinned = Number.isFinite(targetTime) ? {live:false,time:targetTime} : {}
+      this.acceptLive(await this.client.execute('read_field', {...this.liveArgs(),...pinned}))
+      const result = await this.client.execute(command, { ...this.liveArgs(), ...pinned, value: this.field.value, expectedKey })
+      this.moveKey = null
       this.selectedKeyTime = command === 'key_set' ? result.time : null
       this.acceptLive(result)
     })
@@ -679,7 +792,13 @@ class Editor {
       if (!this.currentMedia) return
       await this.setMedia(this.mediaIndex)
       this.mediaMode = false
-      this.selectDefaultParameter()
+      if (!this.field?.resource) this.selectDefaultParameter()
+      return
+    }
+    if (this.field?.resource) {
+      await this.toggleMedia()
+      this.mediaKeyframe = this.mediaCanAnimate
+      this.mediaKeyTime = this.time
       return
     }
     if (this.field) return this.writeLive('key_set')
@@ -712,7 +831,11 @@ class Editor {
     const steps = TIME_STEPS
     this.timeStep = steps[(steps.indexOf(this.timeStep) + 1) % steps.length]
   }
-  async adjustLayerTiming(mode, direction) {
+  async adjustLayerTiming(mode, direction, pointer = {}) {
+    if (!Number.isFinite(pointer.targetTime)) this.guidesUntil = Date.now()+650
+    return this.withEditTime(() => this.adjustLayerTimingTarget(mode, direction, pointer))
+  }
+  async adjustLayerTimingTarget(mode, direction, pointer = {}) {
     this.requireReady()
     if (!['in', 'move', 'out'].includes(mode) || !this.layer) throw new Error('Select a layer timing control')
     if (direction !== -1 && direction !== 1) throw new Error('Direction must be -1 or 1')
@@ -728,14 +851,18 @@ class Editor {
         frames: !this.beatMode && this.timeStep === 'frame',
         expectedStart: this.layer.start,
         expectedEnd: this.layer.end,
+        ...pointer,
       })
       Object.assign(this.layer, result.layer)
       this.selectedKeyTime = null
-      this.pendingJump = { time: result.time, until: Date.now() + 1500 }
+      this.pendingJump = this.keepEditPlayhead ? null : { time: result.time, until: Date.now() + 1500 }
       this.acceptLive(result)
     })
   }
   async fitLayerToContent() {
+    return this.withEditTime(() => this.fitLayerToContentTarget())
+  }
+  async fitLayerToContentTarget() {
     this.requireReady()
     if (!this.layer) throw new Error('Select a layer first')
     await this.remote(async () => {
@@ -751,7 +878,7 @@ class Editor {
       Object.assign(this.layer, result.layer)
       this.selectedKeyTime = null
       this.navigationTime = null
-      this.pendingJump = { time: result.time, until: Date.now() + 1500 }
+      this.pendingJump = this.keepEditPlayhead ? null : { time: result.time, until: Date.now() + 1500 }
       this.acceptLive(result)
     })
   }
@@ -769,9 +896,11 @@ class Editor {
     if (!this.mediaMode && !this.layer?.mediaFields?.length) return
     this.mediaMode = !this.mediaMode
     this.mediaKeyframe = false
-    this.moveKey = null
+    if (this.mediaMode && this.field?.resource) {
+      this.mediaFieldIndex = Math.max(0, this.layer.mediaFields.findIndex(f => f.name === this.field.name))
+    } else if (!this.field?.resource) this.moveKey = null
     if (this.mediaMode) await this.loadMedia()
-    else this.selectDefaultParameter()
+    else if (!this.field?.resource) this.selectDefaultParameter()
   }
   async loadMedia({ preserve = false, preservePreview = false } = {}) {
     const previousFolder = this.mediaFolder,
@@ -809,6 +938,7 @@ class Editor {
     })
   }
   async selectMediaField(direction) {
+    if (this.moveKey) return
     this.mediaKeyframe = false
     const count = this.layer?.mediaFields?.length || 0
     this.mediaFieldIndex = count ? (this.mediaFieldIndex + direction + count) % count : 0
@@ -830,9 +960,15 @@ class Editor {
         ...this.liveArgs(),
         field: this.mediaField.name,
         mediaUid: item.uid,
+        expectedKey: this.moveKey || undefined,
+        targetTime: this.mediaKeyframe ? this.mediaKeyTime : undefined,
       })
       this.mediaIndex = index
       this.mediaPage = Math.floor(index / 8)
+      if (this.field?.name === this.mediaField.name) {
+        this.acceptLive(await this.client.execute('read_field', this.liveArgs()))
+        if (this.moveKey && this.selectedKey) this.moveKey = { ...this.selectedKey }
+      }
     })
   }
   async browseMedia(direction) {
@@ -842,7 +978,11 @@ class Editor {
   }
   toggleMediaKeyframe() {
     this.local()
-    if (this.mediaMode && this.mediaCanAnimate) this.mediaKeyframe = !this.mediaKeyframe
+    if (this.moveKey) return // Replacing an explicitly selected key never creates another.
+    if (this.mediaMode && this.mediaCanAnimate) {
+      this.mediaKeyframe = !this.mediaKeyframe
+      this.mediaKeyTime = this.mediaKeyframe ? this.time : undefined
+    }
   }
   async pressPad(slot) {
     if (!Number.isInteger(slot) || slot < 0 || slot > 7) throw new Error('Invalid button')
@@ -865,7 +1005,7 @@ class Editor {
       () => this.keyLive(-1),
       () => this.keyLive(1),
       () => this.toggleLayerEditor(),
-      () => this.togglePlayback(),
+      () => this.setLinkTime(!this.linkTime),
       () => this.toggleMoveKey(),
       () => (this.canResetDefault ? this.resetDefault() : this.writeLive('key_delete')),
       () => this.cycleKeyType(),
@@ -1017,6 +1157,7 @@ class Editor {
     if (this.moveKey && (kind === 'layer' || kind === 'field')) return
     if (direction !== -1 && direction !== 1) throw new Error('Direction must be -1 or 1')
     if (kind === 'layer') {
+      this.viewerPinnedLayerUid = null
       const list = this.activeLayers
       const current = list.indexOf(this.layer)
       this.designerLayerUid = null
@@ -1069,7 +1210,7 @@ class Editor {
   context() {
     this.requireReady()
     if (this.stale) throw new Error('Connection or track changed. Refresh before sending edits.')
-    return { trackUid: this.snapshot.trackUid, transportUid: this.snapshot.transportUid, time: this.time }
+    return { trackUid: this.snapshot.trackUid, transportUid: this.snapshot.transportUid, time: this.time, ...(!this.linkTime ? {editTime:this.time,editTrackUid:this.snapshot.trackUid} : {}), ...(this.keepEditPlayhead ? {keepPlayhead:true} : {}) }
   }
   async seek() {
     return this.remote(() => this.client.execute('seek', this.context()))

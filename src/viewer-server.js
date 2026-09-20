@@ -135,6 +135,7 @@ class ViewerServer {
     return {
       ...this.cache,
       contentRevision: context.contentRevision,
+      editRevision: context.editRevision || 0,
       tempoKey: context.tempoKey,
       showAllParameters: this.options.showAll === true,
       seekEnabled: typeof this.options.seek === 'function',
@@ -310,9 +311,10 @@ class ViewerServer {
           (value.point !== undefined && !['in','out','key'].includes(value.point)) ||
           (value.point === 'key' && (!Number.isFinite(value.keyTime) || typeof value.parameter !== 'string')) ||
           (value.keyTime !== undefined && value.point !== 'key') ||
+          (value.keepPlayhead !== undefined && typeof value.keepPlayhead !== 'boolean') ||
           (value.parameter !== undefined &&
             (typeof value.parameter !== 'string' || value.parameter.length > 200)) ||
-          Object.keys(value).some((key) => !['trackUid', 'layerUid', 'parameter', 'point', 'keyTime'].includes(key))
+          Object.keys(value).some((key) => !['trackUid', 'layerUid', 'parameter', 'point', 'keyTime','keepPlayhead'].includes(key))
         )
           return send(400, 'application/json', JSON.stringify({ ok: false, reason: 'Invalid selection' }))
         const result = await this.options.select(value)

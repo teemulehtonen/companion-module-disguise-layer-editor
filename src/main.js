@@ -253,7 +253,7 @@ class DisguiseLayerControl extends InstanceBase {
             }
             if (this.editor?.snapshot && !this.editor.stale) {
               if (state.timeline) this.editor.followTimeline(state.timeline)
-              else this.editor.followTime(state.time)
+              else this.editor.receiveTransportTime(state.time)
             }
             const e = this.editor
             if (state.contentRevision && state.contentRevision !== this.lastContentRevision) {
@@ -272,7 +272,7 @@ class DisguiseLayerControl extends InstanceBase {
               !e.stale &&
               state.fieldTarget?.layerUid === e.layer.uid &&
               state.fieldTarget?.name === e.field.name &&
-              state.fieldValue
+              state.fieldValue && e.linkTime
             ) {
               e.acceptLive({ field: state.fieldValue })
             }
@@ -309,15 +309,16 @@ class DisguiseLayerControl extends InstanceBase {
             trackUid: this.editor?.snapshot?.trackUid,
             transportUid: this.editor?.snapshot?.transportUid,
             contentRevision: String(this.connection?.contentRevision || '') + ':' + (this.viewerEditRevision || 0),
+            editRevision: this.viewerEditRevision || 0,
             focusUid: this.editor?.layer?.uid,
             parameter: this.editor?.mediaMode ? this.editor?.mediaField?.name : this.editor?.field?.name,
-            layerEdit: Boolean(this.editor?.layerEdit),
-            moveKey: Boolean(this.editor?.moveKey),
+            layerEdit: Boolean(this.editor?.layerEdit) && Date.now() < (this.editor?.guidesUntil || 0),
+            moveKey: Boolean(this.editor?.moveKey) && Date.now() < (this.editor?.guidesUntil || 0),
             keyTime: this.editor?.moveKey?.time ?? this.editor?.selectedKeyTime,
             liveValue: this.editor?.value,
-            time: this.editor?.time,
+            time: this.editor?.transportTime,
             timecode: absoluteTimecode(
-              this.editor?.time,
+              this.editor?.transportTime,
               this.editor?.snapshot?.fps || 25,
               false,
               this.editor?.timecodeSamples,
@@ -348,12 +349,16 @@ class DisguiseLayerControl extends InstanceBase {
                   result = { ok: false, reason: 'DESIGNER IS NOT CONNECTED' }
                   return
                 }
-                try { result = await editFromViewer(editor, target) }
+                try {
+                  result = await editFromViewer(editor, target)
+                  if (result.ok && editor.layer) result.patch = {trackUid:editor.snapshot.trackUid,layer:structuredClone(editor.layer)}
+                }
                 catch {
                   editor.stale = true
                   result = { ok: false, reason: 'EDIT NOT CONFIRMED — REFRESHING DESIGNER STATE' }
                 }
               })
+              result.editRevision = this.viewerEditRevision || 0
               return result
             } : undefined,
             resourceDesignerRoot: config.resourceDesignerRoot || '',
@@ -381,6 +386,7 @@ class DisguiseLayerControl extends InstanceBase {
                 async (editor) => {
                   try {
                     result = await editor.selectFromViewer(target)
+                    if (result.ok && config.viewerEditEnabled === true) result.editor = describeEditor(editor)
                   } catch {
                     result = { ok: false, reason: 'Designer selection could not be refreshed' }
                   }
@@ -578,7 +584,7 @@ class DisguiseLayerControl extends InstanceBase {
       'PREV\nKEYFRAME',
       'NEXT\nKEYFRAME',
       layerMode || 'LAYER\nEDIT',
-      playbackLabel,
+      'LINK\nTIME',
       'SELECT\nKEYFRAME',
       e?.canResetDefault ? 'DEFAULT' : 'DELETE\nKEYFRAME',
       'TYPE\n' + keyType,
@@ -588,7 +594,7 @@ class DisguiseLayerControl extends InstanceBase {
       theme.groups.navigation,
       theme.groups.navigation,
       layerMode ? theme.active : theme.groups.layer,
-      e?.playing ? theme.active : theme.groups.playback,
+      e?.linkTime ? theme.active : theme.groups.playback,
       e?.moveKey ? theme.active : theme.groups.keyEdit,
       theme.groups.keyEdit,
       theme.groups.keyEdit,

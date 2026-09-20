@@ -147,7 +147,7 @@ class DemoClient {
         throw new Error('Layer timing changed')
       if (args.mode === 'fit') throw new Error('Demo content has no duration for FIT')
       const origin = args.mode === 'out' ? layer.end : layer.start
-      const target = args.frames
+      const target = Number.isFinite(args.targetTime) ? args.targetTime : args.frames
         ? (Math.round(origin * this.data.fps) + args.delta) / this.data.fps
         : origin + args.delta
       const minimum = 1 / this.data.fps,
@@ -206,7 +206,7 @@ class DemoClient {
       if (command === 'key_move' && !field.sequenced)
         throw new Error('A constant parameter has no keyframe to move')
       const k =
-        command === 'select_key'
+        command === 'select_key' && args.sourceTime === undefined
           ? field.keys
               .filter(
                 (k) =>
@@ -234,7 +234,7 @@ class DemoClient {
           Math.min(
             layer.end ?? this.data.length,
             this.data.length,
-            args.frames
+            Number.isFinite(args.targetTime) ? args.targetTime : args.frames
               ? (Math.round(k.time * this.data.fps) + args.delta) / this.data.fps
               : k.time + args.delta,
           ),
@@ -242,6 +242,7 @@ class DemoClient {
         if (field.keys.some((other) => other !== k && Math.abs(other.time - target) < 1e-5)) return result()
         if (target < 0 || target > this.data.length) throw new Error('Invalid keyframe destination')
         k.time = target
+        if (Number.isFinite(args.targetValue)) k.value=Math.max(field.min ?? -Infinity,Math.min(field.max ?? Infinity,args.targetValue))
         this.data.time = target
         field.keys.sort((a, b) => a.time - b.time)
       }
@@ -253,7 +254,12 @@ class DemoClient {
           ? field.keys[0]
           : field.keys.find((k) => Math.abs(k.time - args.keyTime) < 1e-5)
       if (!selected) throw new Error('Selected keyframe is missing')
-      if (field.choices?.length) {
+      if (Number.isFinite(args.targetValue)) {
+        if (Math.abs(selected.value-args.expectedValue)>1e-6) throw new Error('Value changed in Designer')
+        if (field.choices?.length && !field.choices.some(c=>c.value===args.targetValue)) throw new Error('Option is no longer available')
+        args.value=Math.max(field.min ?? -Infinity,Math.min(field.max ?? Infinity,args.targetValue))
+        if(field.integer) args.value=Math.round(args.value)
+      } else if (field.choices?.length) {
         const i = field.choices.findIndex((c) => c.value === selected.value)
         args.value = field.choices[Math.max(0, Math.min(field.choices.length - 1, i + args.direction))].value
       } else {
@@ -298,8 +304,10 @@ class DemoClient {
       field.sequenced = true
     } else if (command === 'key_delete') {
       if (index < 0) throw new Error('Select an exact keyframe using Previous/Next key')
-      if (field.keys.length <= 1) throw new Error('The last keyframe cannot be removed')
-      field.keys.splice(index, 1)
+      if (field.keys.length <= 1) {
+        field.keys[0] = { ...field.keys[0], time: layer.start ?? 0, value: field.value }
+        field.sequenced = false
+      } else field.keys.splice(index, 1)
     } else throw new Error('Unknown demo command')
     if (command !== 'key_delete') field.value = args.value
     return result()

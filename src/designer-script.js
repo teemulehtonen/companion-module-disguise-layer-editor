@@ -27,6 +27,11 @@ if p.get('trackUid') and str(track.uid) != p['trackUid']:
 if p.get('transportUid') and str(manager.uid) != p['transportUid']:
     raise ValueError('Transport changed. Refresh before editing.')
 
+def edit_seconds():
+    seconds = float(p.get('editTime', track.beatToTime(manager.player.tCurrent))) if p.get('editTrackUid',str(track.uid)) == str(track.uid) else float(track.beatToTime(manager.player.tCurrent))
+    if math.isnan(seconds) or math.isinf(seconds): raise ValueError('Invalid edit time')
+    return max(0, min(float(track.lengthInSec), seconds))
+
 def all_layers():
     return track.getLeafLayers(Module)
 
@@ -56,6 +61,69 @@ def reset_sequence_to_constant(field, value, start_beat):
 def fps():
     custom = float(manager.customFps().value_or(0))
     return custom if custom > 0 else float(manager.beatToTimecode(0).fps())
+
+def checked_snap(seconds):
+    grid = p.get('snapGrid')
+    if grid:
+        unit, step, index = grid['unit'], float(grid['step']), int(grid['index'])
+        if (unit == 'beat') != bool(track.quant):
+            raise ValueError('Timeline mode changed; drag again')
+        choices = [1,2,4,8,16,32,64,128,256,512,1024] if unit == 'beat' else [1.0/fps(),2.0/fps(),5.0/fps(),10.0/fps(),1,2,5,10,15,30,60,120,300,600,1800,3600]
+        if not any(abs(step-s)<1e-9 for s in choices):
+            raise ValueError('Timeline grid changed; drag again')
+        target = float(track.beatToTime(index*step)) if unit == 'beat' else index*step
+        if abs(target-seconds)>0.000001:
+            raise ValueError('Timeline grid changed; drag again')
+        return target
+    # Re-resolve every landmark in Designer immediately before a write. Cached
+    # browser geometry is only a preview and cannot authorize a stale snap.
+    for item in all_layers():
+        if p['command'] == 'layer_edit' and str(item.uid) == p.get('layerUid'):
+            continue
+        times = [float(track.beatToTime(item.tStart)), float(track.beatToTime(item.tEnd))]
+        for f in item.fields:
+            seq = f.sequence
+            if not isinstance(seq, (FloatSequence, ResourceSequence)) or f.disableSequencing:
+                continue
+            for i in range(seq.nKeys()):
+                t = float(track.beatToTime(seq.t(i)))
+                if p['command'] == 'key_move' and str(item.uid) == p.get('layerUid') and f.name == p.get('field') and abs(t - p.get('sourceTime', -1)) < 0.00001:
+                    continue
+                if item.tStart <= seq.t(i) <= item.tEnd:
+                    times.append(t)
+        if any(abs(t - seconds) < 0.000001 for t in times):
+            return seconds
+    for i in range(track.cues.n()):
+        t = float(track.beatToTime(track.cues.getT(i)))
+        if p['command'] == 'annotation_edit' and abs(t - p.get('sourceTime', -1)) < 0.00001:
+            continue
+        if abs(t - seconds) < 0.000001:
+            return seconds
+    for i in range(track.nSections()):
+        section = track.sectionInfo(i)
+        if any(abs(float(track.beatToTime(t)) - seconds) < 0.000001 for t in (section.tStart, section.tEnd)):
+            return seconds
+    raise ValueError('Snap target changed in Designer; drag again')
+
+def pointer_time(origin):
+    target = float(p['targetTime'])
+    if math.isnan(target) or math.isinf(target):
+        raise ValueError('Invalid pointer time')
+    if p.get('snap'):
+        offset = float(p.get('snapOffset', 0))
+        if offset and (p['command'] != 'layer_edit' or p.get('mode') != 'move' or abs(offset - float(track.beatToTime(layer.tEnd) - track.beatToTime(layer.tStart))) > 0.000001):
+            raise ValueError('Layer duration changed before snapping')
+        return checked_snap(target + offset) - offset
+    # Same step as the physical encoder. Only the input distance differs.
+    step = abs(float(p.get('delta', 1)))
+    if step <= 0:
+        raise ValueError('Invalid timing step')
+    if p.get('beats'):
+        beat = track.timeToBeat(origin)
+        return float(track.beatToTime(beat + round((track.timeToBeat(target) - beat) / step) * step))
+    if p.get('frames'):
+        return (round(origin * fps()) + round((target - origin) * fps() / step) * step) / fps()
+    return origin + round((target - origin) / step) * step
 
 def clock_info():
     mode = manager.smpteClockType()
@@ -112,20 +180,28 @@ def resource_media_info(r):
     return info
 
 def resource_items(field):
+    import os
     result = []
     for r in accessible_resources(field):
         path = str(r.path).replace('\\\\', '/')
         # Unnamed runtime render targets are not library entries.
         if not path or path.lower().startswith('internal/thumbnails/'):
             continue
-        parts = path.split('/')
+        parts = [part for part in path.split('/') if part]
         visual = field.typeName in ('VideoClip::RP', 'DxTexture::RP')
+        # Folder labels are project-relative, never drive letters or UNC hosts.
+        # Keep the native path/UID untouched for resolving the resource itself.
+        root = os.getcwd().replace(chr(92), '/').rstrip('/')
+        if path.lower().startswith(root.lower() + '/'):
+            parts = path[len(root)+1:].split('/')
+        elif os.path.isabs(path) or (len(path) > 1 and path[1] == ':'):
+            parts = ['External', parts[-1]]
         if parts[0].lower() == 'objects':
-            folder = '/'.join(['Library'] + parts[2:-1]) if field.typeName in ('VideoClip::RP', 'DxTexture::RP', 'AudioTrack::RP', 'AudioFile::RP') else '/'.join(['Project'] + parts[1:-1])
+            folder = '/'.join(['PROJECT'] + parts[2:-1]) if field.typeName in ('VideoClip::RP', 'DxTexture::RP', 'AudioTrack::RP', 'AudioFile::RP') else '/'.join(['PROJECT'] + parts[1:-1])
         elif parts[0].lower() == 'internal':
-            folder = '/'.join(['Internal'] + parts[1:-1])
+            folder = '/'.join(['PROJECT'] + parts[1:-1])
         else:
-            folder = '/'.join(parts[:-1]) or 'Project'
+            folder = '/'.join(['PROJECT'] + parts[:-1])
         item = {'uid': str(r.uid), 'name': r.description or parts[-1], 'path': path, 'folder': folder,
                 'thumbnail': visual, 'resourceType': field.typeName[:-4]}
         item.update(resource_media_info(r))
@@ -155,7 +231,7 @@ def media_snapshot(layer, field):
     if resource_type is None or not isinstance(field.sequence, ResourceSequence):
         raise ValueError('Selected field is not a supported media field')
     seq = field.sequence
-    resource = (seq.key(0).r if field.disableSequencing else seq.evalResource(track.timeToBeat(float(track.beatToTime(manager.player.tCurrent))))) if seq.nKeys() else None
+    resource = (seq.key(0).r if field.disableSequencing else seq.evalResource(track.timeToBeat(edit_seconds()))) if seq.nKeys() else None
     resources = resource_items(field)
     return {'media': resources, 'selectedUid': str(resource.uid) if resource else '', 'field': field.name,
             'canAnimate': not field.notSequencable, 'sequenced': not field.disableSequencing}
@@ -174,6 +250,9 @@ def metadata(layer, field):
     except pyerrors.Exception:
         pass
     labels = list(field.options())
+    result['discrete'] = bool(labels) or field.typeName == 'bool'
+    if field.typeName == 'bool' and not labels:
+        result['choices'] = [{'label': 'OFF', 'value': 0}, {'label': 'ON', 'value': 1}]
     if labels:
         values = None
         try:
@@ -207,16 +286,35 @@ def metadata(layer, field):
             result['choiceError'] = 'Option values are not available from Designer'
     return result
 
-def field_snapshot(layer, field, seconds):
+def field_snapshot(layer, field, seconds, curve=True):
     seq = field.sequence
+    if isinstance(seq, ResourceSequence):
+        resource = (seq.key(0).r if field.disableSequencing else seq.evalResource(track.timeToBeat(seconds))) if seq.nKeys() else None
+        return {'name': field.name, 'label': friendly_label(field), 'resource': True,
+                'value': 0, 'resourceName': (resource.description or str(resource.path).rsplit('/', 1)[-1]) if resource else 'NONE', 'choices': [],
+                'canAnimate': not field.notSequencable, 'sequenced': not field.disableSequencing,
+                'keys': [{'time': float(track.beatToTime(seq.t(i))), 'value': 0, 'interpolation': 0,
+                          'resourceUid': str(seq.key(i).r.uid) if seq.key(i).r else ''} for i in range(seq.nKeys())]}
     result = metadata(layer, field)
     result.update({'value': float(field.eval(track.timeToBeat(seconds), 16)),
                    'sequenced': not field.disableSequencing,
                    'keys': [{'time': float(track.beatToTime(seq.t(i))), 'value': float(seq.key(i).v), 'interpolation': int(seq.key(i).interpolation)} for i in range(seq.nKeys())]})
+    if curve and not result.get('discrete') and p.get('previewCurve') and p.get('command') in ('key_move','adjust_value') and not field.disableSequencing:
+        lo, hi = float(track.beatToTime(layer.tStart)), float(track.beatToTime(layer.tEnd))
+        times = set(lo+(hi-lo)*i/95.0 for i in range(96))
+        keys = [k['time'] for k in result['keys'] if lo <= k['time'] <= hi]
+        if len(keys) <= 256:
+            times.update(keys)
+            times.update(t-0.000001 for t in keys if t>lo)
+        result['samples'] = []
+        for at in sorted(times):
+            v = float(field.eval(track.timeToBeat(at),16))
+            if not math.isnan(v) and not math.isinf(v):
+                result['samples'].append({'time':at,'value':v})
     return result
 
 def snapshot():
-    seconds = float(track.beatToTime(manager.player.tCurrent))
+    seconds = edit_seconds()
     beat = track.timeToBeat(seconds)
     layers = []
     skipped = []
@@ -226,9 +324,9 @@ def snapshot():
         for field in layer.fields:
             seq = field.sequence
             if isinstance(seq, ResourceSequence) and media_type(field) is not None:
-                media_fields.append({'name': field.name, 'label': friendly_label(field),
-                                     'sequenced': not field.disableSequencing,
-                                     'keys': [{'time': float(track.beatToTime(seq.t(i)))} for i in range(seq.nKeys())]})
+                resource_field = field_snapshot(layer, field, seconds)
+                media_fields.append(resource_field)
+                fields.append(resource_field)
             if not isinstance(seq, FloatSequence) or seq.nKeys() == 0:
                 continue
             value = float(field.eval(beat, 16))
@@ -239,7 +337,7 @@ def snapshot():
         layers.append({'uid': str(layer.uid), 'name': layer.name, 'moduleType': layer.module._classInfo.name,
                        'start': float(track.beatToTime(layer.tStart)), 'end': float(track.beatToTime(layer.tEnd)), 'fields': fields, 'mediaFields': media_fields,
                        'controlOrder': [f.name for f in layer.fields if any(x['name'] == f.name for x in fields + media_fields)]})
-    result = {'trackUid': str(track.uid), 'transportUid': str(manager.uid), 'trackName': str(track.path), 'time': seconds, 'length': float(track.lengthInSec), 'layers': layers,
+    result = {'trackUid': str(track.uid), 'transportUid': str(manager.uid), 'trackName': str(track.path), 'editTime':seconds, 'time': float(track.beatToTime(manager.player.tCurrent)), 'length': float(track.lengthInSec), 'layers': layers,
               'selectedLayerUids': [str(l.uid) for l in guisystem.selectedLayers if isinstance(l, Layer)]}
     result.update(clock_info())
     return result
@@ -248,6 +346,58 @@ ${waveformScript}
 ${viewerScript}
 if p['command'] == 'refresh':
     return snapshot()
+if p['command'] == 'annotation_edit':
+    kind, mode = p['kind'], p['mode']
+    if kind not in ('cue', 'tc', 'midi', 'notes') or mode not in ('add', 'move', 'update'):
+        raise ValueError('Invalid marker edit')
+    if track.locked:
+        raise ValueError('Track is locked')
+    text = p['text']
+    if not isinstance(text, basestring) or not text.strip() or len(text) > 2000:
+        raise ValueError('Enter marker text')
+    if kind == 'cue' and not re.match(r'^\\d+(?:\\.\\d+){0,2}$', text):
+        raise ValueError('Cue must be a number')
+    if kind == 'tc' and not re.match(r'^\\d{1,2}:\\d{1,2}:\\d{1,2}[:.;]\\d{1,2}$', text):
+        raise ValueError('Timecode must be HH:MM:SS:FF')
+    if kind == 'midi' and not re.match(r'^\\d{1,3}(?:\\.\\d{1,3})?$', text):
+        raise ValueError('MIDI must be NOTE or CHANNEL.NOTE')
+    target = float(p['targetTime'])
+    if math.isnan(target) or math.isinf(target) or target < 0 or target > float(track.lengthInSec):
+        raise ValueError('Marker time is outside the track')
+    target = checked_snap(target) if p.get('snap') else round(target * fps()) / fps()
+    target = max(0, min(float(track.lengthInSec), target))
+    tag_type = {'cue':Tag.CUE, 'tc':Tag.TC, 'midi':Tag.MIDI}.get(kind)
+    def marker_at(seconds):
+        index = next((i for i in range(track.cues.n()) if abs(float(track.beatToTime(track.cues.getT(i))) - seconds) < 0.00001), None)
+        if index is None:
+            return None
+        cue = track.cues.getV(index)
+        if kind == 'notes':
+            return cue.getNote() if cue.hasNote() else None
+        return next((tag.text for tag in cue.getTags() if tag.type == tag_type), None)
+    source = p.get('sourceTime')
+    if mode == 'update':
+        if source is None or abs(float(source) - float(p['targetTime'])) > 0.00001:
+            raise ValueError('An update cannot move a marker')
+        target = float(source)
+    if mode != 'add' and (source is None or marker_at(float(source)) != p.get('sourceText')):
+        raise ValueError('Marker changed in Designer; select it again')
+    if marker_at(target) is not None and (mode == 'add' or abs(target - float(source)) > 0.00001):
+        raise ValueError('A marker of this type already exists at the target')
+    # Validate everything before changing a cue. Other tag types, sections and
+    # notes sharing either cue remain intact; never delete the whole cue.
+    tag = None if kind == 'notes' else Tag(tag_type, text)
+    markDirty(track)
+    if kind == 'notes':
+        track.setNoteAtBeat(track.timeToBeat(target), text)
+    else:
+        track.setTagAtBeat(track.timeToBeat(target), tag)
+    if mode == 'move' and abs(target - float(source)) > 0.00001:
+        if kind == 'notes':
+            track.removeNoteAtBeat(track.timeToBeat(float(source)))
+        else:
+            track.removeTagAtBeat(track.timeToBeat(float(source)), tag_type)
+    return {'time':target, 'text':text, 'kind':kind}
 if p['command'] == 'live_state':
     seconds = float(track.beatToTime(manager.player.tCurrent))
     layers = all_layers()
@@ -259,15 +409,15 @@ if p['command'] == 'live_state':
     if target:
         chosen = next((l for l in layers if str(l.uid) == target['layerUid']), None)
         f = chosen.findSequence(target['name']) if chosen else None
-        if f is not None and isinstance(f.sequence, FloatSequence):
-            result['fieldValue'] = field_snapshot(chosen, f, seconds)
+        if f is not None and isinstance(f.sequence, (FloatSequence, ResourceSequence)):
+            result['fieldValue'] = field_snapshot(chosen, f, edit_seconds())
     return result
 if p['command'] == 'playback_state':
     return {'playing': bool(manager.player.playing)}
 if p['command'] in ('seek', 'nudge_time'):
     seconds = float(p['time'])
     if p['command'] == 'nudge_time':
-        current = float(p['cursor']) if p.get('cursor') is not None else float(track.beatToTime(manager.player.tCurrent))
+        current = float(p['cursor']) if p.get('cursor') is not None else edit_seconds()
         if p.get('beats'):
             seconds = float(track.beatToTime(track.timeToBeat(current) + float(p['delta'])))
         elif p.get('frames'):
@@ -277,15 +427,85 @@ if p['command'] in ('seek', 'nudge_time'):
         seconds = max(0, min(float(track.lengthInSec), seconds))
     if seconds < 0 or math.isnan(seconds) or math.isinf(seconds):
         raise ValueError('Invalid time')
-    manager.addCommand(TransportCommand.makeJumpToTime(state, manager, seconds))
+    if not p.get('keepPlayhead'): manager.addCommand(TransportCommand.makeJumpToTime(state, manager, seconds))
     result = {'time': seconds}
     result.update(clock_info())
     return result
+
+if p['command'] == 'layer_reorder':
+    def find_siblings(container):
+        if any(str(item.uid)==p['layerUid'] for item in container.layers): return container
+        for item in container.layers:
+            if isinstance(item, GroupLayer):
+                found=find_siblings(item)
+                if found is not None: return found
+        return None
+    container=find_siblings(track)
+    if container is None: raise ValueError('Layer is no longer available')
+    siblings=list(container.layers)
+    if [str(item.uid) for item in siblings] != p.get('expectedOrder'):
+        raise ValueError('Layer order changed in Designer; drag again')
+    source=next(item for item in siblings if str(item.uid)==p['layerUid'])
+    if source.locked or (isinstance(container,GroupLayer) and container.locked): raise ValueError('Layer is locked in Designer')
+    remaining=[item for item in siblings if item!=source]
+    targets=[i for i,item in enumerate(remaining) if str(item.uid)==p['targetUid']]
+    if len(targets)!=1: raise ValueError('Reorder inside the same group')
+    index=targets[0]+(1 if p.get('after') else 0)
+    markDirty(track)
+    if isinstance(container,GroupLayer):
+        markDirty(container)
+        track.moveLayerToIndexInGroup(source,index)
+    else: track.moveLayerToIndex(source,index)
+    return {'layerUid':str(source.uid),'group':isinstance(source,GroupLayer)}
+if p['command'] == 'layer_manage' and p.get('operation') == 'create':
+    classes = {'video': VariableVideoModule, 'audio': AudioModule, 'bitmap': BitmapModule}
+    if p.get('kind') not in classes: raise ValueError('Unsupported layer type')
+    seconds = float(p['targetTime'])
+    limit = float(track.lengthInSec)
+    if math.isnan(seconds) or math.isinf(seconds) or seconds < 0 or seconds >= limit:
+        raise ValueError('Choose a time inside the track')
+    start_beat = track.timeToBeat(seconds)
+    end_seconds = min(limit, seconds + 10)
+    end_beat = track.timeToBeat(end_seconds)
+    if clock_info()['beatMode']:
+        start_beat = math.floor(start_beat * 4) / 4.0
+        end_beat = min(track.timeToBeat(limit), start_beat + 4)
+    if end_beat <= start_beat: raise ValueError('No room for a layer')
+    markDirty(track)
+    created = track.addNewLayer(classes[p['kind']], start_beat, end_beat-start_beat, p['kind'].upper())
+    created.setExtents(start_beat, end_beat)
+    return {'layerUid': str(created.uid)}
 
 matches = [layer for layer in all_layers() if str(layer.uid) == p['layerUid']]
 if len(matches) != 1:
     raise ValueError('Layer missing. Refresh before editing.')
 layer = matches[0]
+if p['command'] == 'layer_manage':
+    if layer.locked: raise ValueError('Layer is locked in Designer')
+    if layer.name != p.get('expectedName') or abs(float(track.beatToTime(layer.tStart))-p['expectedStart'])>0.00001 or abs(float(track.beatToTime(layer.tEnd))-p['expectedEnd'])>0.00001:
+        raise ValueError('Layer changed in Designer; reopen the menu')
+    operation=p.get('operation')
+    if operation == 'rename':
+        name=p.get('name','').strip()
+        if not name or len(name)>128 or any(ord(c)<32 for c in name): raise ValueError('Invalid layer name')
+        markDirty(layer)
+        layer.name=name
+        return {'layerUid': str(layer.uid)}
+    elif operation == 'duplicate':
+        markDirty(track)
+        created=track.duplicateLayer(layer,layer.name+' COPY')
+        # Reapply unchanged extents through the native layer update path so the
+        # timeline sees the new instance immediately, without moving its keys.
+        created.setExtents(created.tStart,created.tEnd)
+        return {'layerUid': str(created.uid)}
+    elif operation == 'delete':
+        markDirty(track)
+        track.removeLayer(layer)
+        return {'deletedLayerUid': p['layerUid']}
+    elif operation == 'fit':
+        p['command']='layer_edit'
+        p['mode']='fit'
+    else: raise ValueError('Unsupported layer operation')
 if p['command'] in ('key_clear_list', 'keys_clear', 'parameter_default', 'layer_default'):
     reset_constant = p['command'] == 'parameter_default'
     if reset_constant:
@@ -310,7 +530,7 @@ if p['command'] in ('key_clear_list', 'keys_clear', 'parameter_default', 'layer_
         return {'cleared': []}
     if p.get('confirmed') is not True or not p.get('fields'):
         raise ValueError('Select parameters and confirm before clearing')
-    seconds = float(track.beatToTime(manager.player.tCurrent))
+    seconds = edit_seconds()
     beat = track.timeToBeat(seconds)
     if beat < layer.tStart or beat > layer.tEnd:
         raise ValueError('Selected layer is not active at the playhead')
@@ -361,14 +581,22 @@ if p['command'] == 'layer_edit':
     if mode == 'fit':
         resource_sequence = layer.module.defaultResourceSequence()
         if not resource_sequence:
-            return {'layer': next(l for l in snapshot()['layers'] if l['uid'] == p['layerUid']), 'time': float(track.beatToTime(manager.player.tCurrent))}
+            return {'layer': next(l for l in snapshot()['layers'] if l['uid'] == p['layerUid']), 'time': edit_seconds()}
+        content_field = layer.findSequence(resource_sequence)
+        if content_field is None or not isinstance(content_field.sequence, ResourceSequence) or content_field.sequence.nKeys() == 0:
+            return {'layerUid': str(layer.uid)} if p.get('operation') == 'fit' else {'layer': next(l for l in snapshot()['layers'] if l['uid'] == p['layerUid']), 'time': edit_seconds()}
+        content_resource = content_field.sequence.key(0).r if content_field.disableSequencing else content_field.sequence.evalResource(track.timeToBeat(edit_seconds()))
+        if content_resource is None:
+            return {'layer': next(l for l in snapshot()['layers'] if l['uid'] == p['layerUid']), 'time': edit_seconds()}
         content_duration = float(layer.module.resourceDuration(resource_sequence))
         if content_duration <= 0 or math.isnan(content_duration) or math.isinf(content_duration):
-            return {'layer': next(l for l in snapshot()['layers'] if l['uid'] == p['layerUid']), 'time': float(track.beatToTime(manager.player.tCurrent))}
+            return {'layer': next(l for l in snapshot()['layers'] if l['uid'] == p['layerUid']), 'time': edit_seconds()}
         target = float(track.beatToTime(layer.tStart + content_duration))
     else:
         origin = end if mode == 'out' else start
         target = float(track.beatToTime(track.timeToBeat(origin) + float(p['delta']))) if p.get('beats') else ((round(origin * fps()) + float(p['delta'])) / fps() if p.get('frames') else origin + float(p['delta']))
+        if p.get('targetTime') is not None:
+            target = pointer_time(origin)
     if math.isnan(target) or math.isinf(target):
         raise ValueError('Invalid layer time')
     delta = 0
@@ -396,15 +624,15 @@ if p['command'] == 'layer_edit':
             desired = track.timeToBeat(key_seconds + (delta if mode == 'move' else 0))
             seq.key(i).localT = desired - offset
         f.notifyEdit()
-    cursor = float(p['cursor']) if p.get('cursor') is not None else float(track.beatToTime(manager.player.tCurrent))
+    cursor = float(p['cursor']) if p.get('cursor') is not None else edit_seconds()
     playhead = max(new_start, min(new_end, cursor + (delta if mode == 'move' else 0)))
     if abs(playhead - float(track.beatToTime(manager.player.tCurrent))) > 0.000001:
-        manager.addCommand(TransportCommand.makeJumpToTime(state, manager, playhead))
+        if not p.get('keepPlayhead'): manager.addCommand(TransportCommand.makeJumpToTime(state, manager, playhead))
     result = snapshot()
     updated = next(l for l in result['layers'] if l['uid'] == p['layerUid'])
     return {'layer': updated, 'time': playhead}
-if p.get('live') and p['command'] in ('adjust_value', 'key_set', 'key_delete', 'key_clear', 'constant_set', 'key_type'):
-    now_beat = track.timeToBeat(float(track.beatToTime(manager.player.tCurrent)))
+if (p.get('live') or p.get('editTime') is not None) and p['command'] in ('adjust_value', 'key_set', 'key_delete', 'key_clear', 'constant_set', 'key_type'):
+    now_beat = track.timeToBeat(edit_seconds())
     if now_beat < layer.tStart or now_beat > layer.tEnd:
         raise ValueError('Selected layer is not active at the playhead')
 field = layer.findSequence(p['field'])
@@ -412,7 +640,12 @@ if p['command'] in ('media_list', 'media_set', 'media_key_set'):
     if field is None or media_type(field) is None:
         raise ValueError('Media field is missing; refresh the layer')
     if p['command'] in ('media_set', 'media_key_set'):
-        beat = track.timeToBeat(float(track.beatToTime(manager.player.tCurrent)))
+        beat = track.timeToBeat(edit_seconds())
+        if p.get('targetTime') is not None and p['command'] == 'media_key_set':
+            target_time = float(p['targetTime'])
+            if math.isnan(target_time) or math.isinf(target_time):
+                raise ValueError('Invalid resource key time')
+            beat = track.timeToBeat(target_time)
         if beat < layer.tStart or beat > layer.tEnd:
             raise ValueError('Layer is not active at the playhead')
         seq = field.sequence
@@ -420,6 +653,12 @@ if p['command'] in ('media_list', 'media_set', 'media_key_set'):
             raise ValueError('Media field is not a ResourceSequence')
         if layer.locked:
             raise ValueError('Layer is locked')
+        if p.get('expectedKey'):
+            expected = p['expectedKey']
+            current = next((k for k in field_snapshot(layer, field, float(track.beatToTime(beat)))['keys'] if abs(k['time'] - expected['time']) < 0.00001), None)
+            if current != expected:
+                raise ValueError('Resource keyframe changed in Designer')
+            beat = track.timeToBeat(expected['time'])
         resource = None
         if p.get('mediaUid') is not None:
             matches = [r for r in accessible_resources(field) if str(r.uid) == p['mediaUid']]
@@ -449,9 +688,10 @@ if p['command'] in ('media_list', 'media_set', 'media_key_set'):
             seq.key(index).r = resource
         field.notifyEdit()
     return media_snapshot(layer, field)
-if field is None or not isinstance(field.sequence, FloatSequence):
-    raise ValueError('Parameter is not a numeric FloatSequence')
+if field is None or not isinstance(field.sequence, (FloatSequence, ResourceSequence)):
+    raise ValueError('Parameter is not an editable sequence')
 seq = field.sequence
+is_resource = isinstance(seq, ResourceSequence)
 if seq.nKeys() == 0:
     raise ValueError('Parameter has no keys')
 seconds = float(track.beatToTime(manager.player.tCurrent)) if p.get('live') else float(p['time'])
@@ -459,6 +699,15 @@ if seconds < 0 or math.isnan(seconds) or math.isinf(seconds):
     raise ValueError('Invalid time')
 beat = track.timeToBeat(seconds)
 command = p['command']
+if command not in ('read_field', 'jump_key', 'select_key') and layer.locked:
+    raise ValueError('Layer is locked in Designer')
+if is_resource and command not in ('read_field', 'jump_key', 'select_key', 'key_move', 'key_delete'):
+    raise ValueError('Use the resource picker to change this parameter')
+if p.get('expectedKey') and command in ('key_delete', 'adjust_value'):
+    expected = p['expectedKey']
+    current = next((k for k in field_snapshot(layer, field, seconds)['keys'] if abs(k['time'] - expected['time']) < 0.00001), None)
+    if current != expected:
+        raise ValueError('Selected keyframe changed in Designer')
 if command == 'read_field':
     return {'field': field_snapshot(layer, field, seconds), 'time': seconds}
 if command == 'jump_key':
@@ -474,7 +723,7 @@ if command == 'jump_key':
     candidates = [t for t in times if t < cursor - 0.00001] if p['direction'] < 0 else [t for t in times if t > cursor + 0.00001]
     target = (max(candidates) if p['direction'] < 0 else min(candidates)) if candidates else (start if p['direction'] < 0 else last_visible)
     seconds = max(start, min(end, target))
-    manager.addCommand(TransportCommand.makeJumpToTime(state, manager, seconds))
+    if not p.get('keepPlayhead'): manager.addCommand(TransportCommand.makeJumpToTime(state, manager, seconds))
     key_time = next((t for t in times if abs(t - seconds) < 0.00001), None)
     return {'field': field_snapshot(layer, field, seconds), 'time': seconds, 'keyTime': key_time, 'atBoundary': key_time is None}
 if command in ('select_key', 'key_type', 'key_move'):
@@ -485,16 +734,21 @@ if command in ('select_key', 'key_type', 'key_move'):
         key_times = [] if field.disableSequencing else [float(track.beatToTime(seq.t(i))) for i in range(seq.nKeys()) if layer.tStart <= seq.t(i) <= layer.tEnd]
         if not key_times:
             return {'selectedKey': None, 'field': field_snapshot(layer, field, seconds), 'time': seconds}
-        source = min(key_times, key=lambda t: (round(abs(t - seconds), 9), -t))
+        if p.get('sourceTime') is not None:
+            source = float(p['sourceTime'])
+            if not any(abs(t - source) < 0.000001 for t in key_times):
+                raise ValueError('Clicked keyframe changed; select it again')
+        else:
+            source = min(key_times, key=lambda t: (round(abs(t - seconds), 9), -t))
     indices = [i for i in range(seq.nKeys()) if abs(float(track.beatToTime(seq.t(i))) - source) < 0.00001]
     if len(indices) != 1:
         raise ValueError('Move to an exact keyframe with PREV / NEXT KEY first')
     index = indices[0]
     key = seq.key(index)
-    selected = {'time': source, 'value': float(key.v), 'interpolation': int(key.interpolation)}
+    selected = next(k for k in field_snapshot(layer, field, seconds, False)['keys'] if abs(k['time'] - source) < 0.00001)
     if command == 'select_key':
         seconds = max(0, min(float(track.lengthInSec), source))
-        manager.addCommand(TransportCommand.makeJumpToTime(state, manager, seconds))
+        if not p.get('keepPlayhead'): manager.addCommand(TransportCommand.makeJumpToTime(state, manager, seconds))
         return {'selectedKey': selected, 'field': field_snapshot(layer, field, seconds), 'time': seconds}
     if p.get('expectedKey') and p['expectedKey'] != selected:
         raise ValueError('Selected keyframe changed in Designer; select it again')
@@ -508,7 +762,22 @@ if command in ('select_key', 'key_type', 'key_move'):
         markDirty(seq)
         key.interpolation = next_type
     else:
+        pointer_value = p.get('targetValue')
+        if pointer_value is not None:
+            if is_resource:
+                raise ValueError('Resource keys only support time editing')
+            meta = metadata(layer, field)
+            if meta.get('choices') or meta.get('choiceError'):
+                raise ValueError('Option keys only support time editing')
+            pointer_value = float(pointer_value)
+            if math.isnan(pointer_value) or math.isinf(pointer_value):
+                raise ValueError('Invalid pointer value')
+            if meta['min'] is not None: pointer_value=max(meta['min'],pointer_value)
+            if meta['max'] is not None: pointer_value=min(meta['max'],pointer_value)
+            if meta['integer']: pointer_value=round(pointer_value)
         target = float(track.beatToTime(track.timeToBeat(source) + float(p['delta']))) if p.get('beats') else (((round(source * fps()) + float(p['delta'])) / fps()) if p.get('frames') else source + float(p['delta']))
+        if p.get('targetTime') is not None:
+            target = pointer_time(source)
         # Read current Designer bounds on every detent, including GUI trims
         # made since the key was selected. Clamp again after beat conversion so
         # floating-point conversion cannot put a key beyond either layer edge.
@@ -522,13 +791,21 @@ if command in ('select_key', 'key_type', 'key_move'):
             return {'field': field_snapshot(layer, field, source), 'time': source}
         if abs(target_beat - seq.t(index)) > Key.tEpsilon:
             markDirty(seq)
-            seq.setFloat(target_beat, key.v)
+            if is_resource:
+                seq.setResource(target_beat, key.r)
+            else:
+                seq.setFloat(target_beat, key.v)
             target_index = next(i for i in range(seq.nKeys()) if abs(seq.t(i) - target_beat) <= Key.tEpsilon)
-            seq.key(target_index).interpolation = selected['interpolation']
+            if not is_resource:
+                seq.key(target_index).interpolation = selected['interpolation']
             source_index = next(i for i in range(seq.nKeys()) if abs(float(track.beatToTime(seq.t(i))) - source) < 0.00001)
             seq.remove(source_index, 1)
+        if pointer_value is not None:
+            markDirty(seq)
+            value_index=next(i for i in range(seq.nKeys()) if abs(seq.t(i)-target_beat)<=Key.tEpsilon)
+            seq.key(value_index).v=pointer_value
         seconds = target
-        manager.addCommand(TransportCommand.makeJumpToTime(state, manager, seconds))
+        if not p.get('keepPlayhead'): manager.addCommand(TransportCommand.makeJumpToTime(state, manager, seconds))
     field.notifyEdit()
     return {'field': field_snapshot(layer, field, seconds), 'time': seconds}
 if command == 'adjust_value':
@@ -545,7 +822,19 @@ if command == 'adjust_value':
         edit_index = indices[0]
     value = float(seq.key(edit_index).v)
     choices = meta['choices']
-    if choices:
+    if 'targetValue' in p:
+        if 'expectedValue' not in p or abs(value-float(p['expectedValue'])) > 0.000001:
+            raise ValueError('Value changed in Designer; reopen the value editor')
+        value = float(p['targetValue'])
+        if math.isnan(value) or math.isinf(value):
+            raise ValueError('Invalid value')
+        if choices and value not in [c['value'] for c in choices]:
+            raise ValueError('Option is no longer available')
+        if not choices:
+            if meta['min'] is not None: value = max(meta['min'], value)
+            if meta['max'] is not None: value = min(meta['max'], value)
+            if meta['integer']: value = round(value)
+    elif choices:
         values = [c['value'] for c in choices]
         if value not in values:
             raise ValueError('Current option is unknown; refresh before changing it')
@@ -613,9 +902,13 @@ elif command == 'key_delete':
     if len(indices) != 1:
         raise ValueError('Select an exact keyframe using Previous/Next key')
     if seq.nKeys() <= 1:
-        raise ValueError('The last keyframe cannot be removed')
-    markDirty(seq)
-    seq.remove(indices[0], 1)
+        # Delete animation, not its current value. Designer needs one carrier
+        # key for a constant, including resources; do not restore the default.
+        value = seq.evalResource(beat) if is_resource else field_snapshot(layer, field, seconds)['value']
+        reset_sequence_to_constant(field, value, layer.tStart)
+    else:
+        markDirty(seq)
+        seq.remove(indices[0], 1)
 else:
     raise ValueError('Unknown command')
 field.notifyEdit()
@@ -635,7 +928,7 @@ if isinstance(result, dict):
     def collect_positions(value):
         if isinstance(value, dict):
             for name, item in value.items():
-                if name in ('time', 'start', 'end') and isinstance(item, (int, long, float)):
+                if name in ('time', 'start', 'end', 'editTime') and isinstance(item, (int, long, float)):
                     positions.add(float(item))
                 else:
                     collect_positions(item)

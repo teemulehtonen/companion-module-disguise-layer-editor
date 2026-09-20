@@ -7,7 +7,7 @@ function hasKeyframes(field) {
 }
 
 function orderLayerParameters(layer) {
-  const parameters = [...(layer.fields || []), ...(layer.resources || layer.mediaFields || [])]
+  const parameters = [...new Map([...(layer.fields || []), ...(layer.resources || layer.mediaFields || [])].map(field => [field.name, field])).values()]
   const nativeOrder = layer.controlOrder || parameters.map((field) => field.name)
   const index = new Map(nativeOrder.map((name, i) => [name, i]))
   const compare = (a, b) =>

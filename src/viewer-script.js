@@ -82,7 +82,7 @@ if p['command'] == 'viewer_snapshot':
                         lo = max(start, row['start'])
                         hi = min(end, row['end'])
                         f['samples'] = []
-                        if hi >= lo:
+                        if hi >= lo and not f.get('discrete'):
                             # Fixed bound on sampling cost; include key times as well as uniform samples.
                             times = set([lo + (hi-lo)*i/95.0 for i in range(96)])
                             times.update(k['time'] for k in f['keys'] if lo <= k['time'] <= hi)
@@ -111,7 +111,7 @@ if p['command'] == 'viewer_snapshot':
         first = int(math.ceil(b0/step))
         for i in range(first, min(first+1000, int(math.floor(b1/step))+1)):
             at = float(track.beatToTime(i*step))
-            result['grid'].append({'time': at, 'beat': i*step, 'major': i % major == 0,
+            result['grid'].append({'time': at, 'beat': i*step, 'snapGrid': {'unit':'beat','step':step,'index':i}, 'major': i % major == 0,
                                   'label': str(manager.beatToTimecode(track.timeToBeat(at)))})
     else:
         choices = sorted(set([1.0/fps(), 2.0/fps(), 5.0/fps(), 10.0/fps(), 1,2,5,10,15,30,60,120,300,600,1800,3600]))
@@ -120,7 +120,7 @@ if p['command'] == 'viewer_snapshot':
         first = int(math.ceil(start/step))
         for i in range(first,min(first+1000,int(math.floor(end/step))+1)):
             at = i*step
-            result['grid'].append({'time': at,'major': i % major == 0,
+            result['grid'].append({'time': at,'snapGrid': {'unit':'second','step':step,'index':i},'major': i % major == 0,
                                   'label': str(manager.beatToTimecode(track.timeToBeat(at)))})
     result['beatGrid'] = []
     if result['trackAudio']:

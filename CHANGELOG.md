@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.0-beta.127
+
+- Add shared LINK TIME and an independent blue editing cursor/clock; mouse and Stream Deck use the same active edit time.
+- Improve direct keyframe, value and resource editing, stale-target guards, insertion, deletion and categorical parameter display.
+- Add layer creation, rename, duplicate, delete and group-safe reordering.
+- Replace the default PLAY SECTION context pad with LINK TIME; keep the standalone playback action.
+- Show snap/alignment guides only during adjustments; refresh duplicate extents without changing timing.
+- Update user/developer handoff documentation. 165 local tests and package checks pass; live verification is targeted, not exhaustive.
+
 ## 0.1.0-beta.102
 
 - Add optional mouse editing through the same Companion command queue, selection, locks and timing steps. Disabled by default.

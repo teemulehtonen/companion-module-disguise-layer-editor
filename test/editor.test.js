@@ -246,7 +246,7 @@ test('constants cannot silently disable an animated sequence', async () => {
   assert.equal(e.field.keys[0].value, 2)
   assert.equal(e.field.sequenced, false)
 })
-test('deletion requires exact key and preserves last key', async () => {
+test('deletion requires exact key and preserves the final value as a constant', async () => {
   const e = await ready()
   e.adjustTime(1)
   await assert.rejects(e.write('key_delete'), /exact keyframe/)
@@ -258,7 +258,11 @@ test('deletion requires exact key and preserves last key', async () => {
   )
   e.select('layer', 1)
   e.time = 0
-  await assert.rejects(e.write('key_delete'), /last keyframe/)
+  const value = e.field.value
+  await e.write('key_delete')
+  assert.equal(e.field.sequenced, false)
+  assert.equal(e.field.keys.length, 1)
+  assert.equal(e.field.keys[0].value, value)
 })
 test('rejects non-finite input and clamps negative time', async () => {
   const e = await ready()

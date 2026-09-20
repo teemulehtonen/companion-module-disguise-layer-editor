@@ -1,5 +1,17 @@
 # Viewer development guide
 
+## Direct mouse editing (beta.103 candidate)
+
+Beta.108 synchronization: viewer-edit-model.js merges confirmed layer patches without losing resource thumbnails. Update data-key-time on every representation of a moved key and read it at gesture/click time. Never capture a mutable key's timestamp permanently in a handler. main.js returns editRevision after its shared queue completes; stale browser live/geometry reads are discarded against the last confirmed revision. Suppress heavy snapshot requests while interacting, but keep the small live channel. Local requestAnimationFrame previews are disposable; only guarded native responses update canonical keys. drag_time optionally includes targetValue for one native time/value edit, rejecting resource/enum values before mutation. A single write is in flight and only the newest unsent pointer survives. Do not retry ambiguous writes.
+
+Beta.105: resource folder navigation displays one horizontal row per hierarchy level, expanding only the current branch. Intermediate nodes without resources are browser-only navigation; actual folder changes still use server-owned indices. Explicit key clicks send a validated keyTime through key_move to Editor.toggleMoveKey(exactTime), then native select_key validates sourceTime. Never use delayed transport position to infer a clicked key. drag_value reuses the shared numeric adjustment operation with expected-key protection; resource and enum fields reject that command. The mouse can switch key targets by confirmed release followed by exact selection, while regular layer/parameter browsing retains the key-lock rules.
+
+There is no top edit-tool strip. Viewer gestures choose the shared Editor target/mode, then invoke the same key/layer operations as Companion. `drag_time` adds an absolute pointer request to those native operations; it does not implement a second timeline engine. Native `pointer_time` quantizes to the selected step, validates a snap landmark when requested, and then uses the existing bounds/lock/collision checks. Never replay an uncertain write. During a pending write retain only the latest pointer position, not every pointer event.
+
+Resource fields have a `resource` discriminator, placeholder numeric value 0 for the legacy snapshot contract, and `resourceUid` on each key. Display `resourceName`; never treat 0 as the resource's value. Interpolation and numeric value adjustment are inapplicable. A resource picker opened from a selected key retains its expected identity and time. The catalog comes from that field's native ResourceSequence type for both filesystem and internal resources.
+
+`annotation` requests pass a strict schema and the shared state token. Native source text/time checks and destination collision checks run before writes. Only the requested tag/note is removed from the source when moving; co-located tags and section boundaries remain. Tag formats are documented in the [Designer tag guide](https://help.disguise.one/designer/timeline-tracks-transports/tags). These commands are opt-in through ALLOW VIEWER EDIT and share the existing same-origin/token protections.
+
 ## Responsibilities
 
 - main.js: Companion lifecycle, ordered command queue, viewer lifecycle and edit revision.
@@ -38,3 +50,21 @@ Native player.tCurrent is beats: convert it through track.beatToTime before publ
 viewer-script.js resolves mode / at end point choices from metadata even for collapsed layers. Never share numeric enum mappings between audio and video. viewer-page.js uses a single pixel position and transition for all playhead segments. Waveform SVG width derives from source duration; clipping depends on endpoint mode.
 
 The token-protected POST /api/resources/test endpoint tests authentication and connecting the configured share only; it accepts no target paths and never reads media. STATUS_SUCCESS on a failed protocol test is a known misleading diagnostic when the dependency reports status zero. Improve error classification before relying on this endpoint for user-facing troubleshooting.
+
+## Beta.113 insertion and selection rules
+
+Blank parameter-lane double-click sends key_insert with explicit track/layer/parameter/time. Editor.selectFromViewer(point: insert) seeks and pins that time. Numeric writeLive accepts the pinned time with live:false; resource insertion retains mediaKeyTime until confirmation and uses media_key_set. Never infer insertion time from delayed transport feedback or replace the previous resource key. Existing-key double-click remains replacement.
+
+Inactive layer clicks seek to IN; active clicks preserve time. Both initial button rendering and live disabled-state updates permit inactive layers. Resolve activity against an outstanding confirmed seek before stale refresh feedback. Keep lock release in the mouse adapter, not in shared Deck selection rules. Resource thumbnails must set draggable=false: native image drag otherwise interrupts the pointer gesture. Resource key drags change time only and retain resource UID.
+
+## Pinned mouse editing and deletion (beta.122)
+
+PIN TIME is on by default. keepPlayhead is scoped to a viewer select/edit request, never a global transport override. Native edit results still return the target time for key identity; Editor must not adopt that target as transport time while pinned. Keep explicit /api/seek independent. Preserve the pinned selected layer across clock refreshes, and clear it on explicit seek/layer/track changes or deletion. Layer deletion uses the guarded layer_manage command; return after refresh instead of attempting to select the deleted UID. Keyboard deletion gives selected keys priority and requires an explicit layer selection for layer deletion.
+
+## Shared LINK TIME (beta.123)
+
+Supersedes the viewer-only PIN TIME policy. Editor.linkTime defaults true. The browser sends link_time with an explicit boolean through the existing token-protected command queue; describeEditor exposes it to all viewers. withEditTime scopes transport preservation for Deck timing/key selection and viewer requests use the same policy. withTransportTime explicitly overrides preservation for seeks, key navigation and normal time rotation. Keep native result target times separate from the actual transport time when unlinked. Do not make keepPlayhead a blanket transport lock.
+
+## Separate editing clock (beta.125)
+
+Supersedes beta.123 transport-navigation exception. Editor.time is edit time, transportTime is Designer time. receiveTransportTime updates edit time only when linked. Native edit_seconds resolves editTime only for the matching track; keepPlayhead prevents transport jumps. Use edit time for field/resource evaluation, nudge origins, layer timing and clear operations. Real transport remains the source for viewer green cursor, clock and section countdown. Unlinked edit time is blue and drives selection, FOLLOW and zoom. LINK TIME changes cancel stale edit modes and adopt transport time without seeking. Include unlinked edit time in command fingerprints; never include the continuously running linked clock. Native LiveUpdate evaluated values are not adopted for an unlinked edit target. Targeted read_field and content refresh evaluate at edit time.

@@ -1,3 +1,7 @@
+# Beta.127 targeted release checks
+
+165 local tests and the packaged Companion lifecycle smoke check passed. Isolated native checks covered linked/unlinked numeric and resource key moves, edit-time numeric/Video/Mapping/Palette insertion away from the real playhead, layer IN/OUT/move and unchanged duplicate extents/key times. Browser and actual Companion HTTP rotary checks verified independent blue edit time, shared LINK TIME, green transport display and no idle extra guides. Browser errors and Companion last_error were empty after the final check. No exhaustive live layer or external-system test was performed. Immediate duplicate display in the Designer GUI remains subject to user acceptance.
+
 # Local viewer verification
 
 Development verification against Designer 32.4.17. The initial results below describe the earlier development batch. Subsequent installed-build verification is recorded at the end.
