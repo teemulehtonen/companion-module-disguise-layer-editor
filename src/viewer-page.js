@@ -3,10 +3,12 @@ const brandLogo = require('./viewer-logo.json')
 const { applyEditPatch } = require('./viewer-edit-model')
 const { discreteSegments } = require('./viewer-discrete')
 const { selectionScroll } = require('./viewer-selection-scroll')
+const { timecode } = require('./timecode')
+const { duplicateMarkerKeys } = require('./viewer-marker-duplicates')
 
 // Embedded at bundle time: the packaged module needs no external web runtime.
 // All project strings reach the DOM through textContent, never HTML parsing.
-function browserMain(applyEditPatch, discreteSegments, selectionScroll) {
+function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode, duplicateMarkerKeys) {
   const $ = (id) => document.getElementById(id)
   const viewport = $('viewport'),
     sheet = $('sheet')
@@ -30,6 +32,26 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll) {
   let resizingWaveform = false
   let editPending = false
   let mouseGesture = null
+  const dragLabels = []
+  function clearDragTimes() { for(const node of dragLabels) node.remove(); dragLabels.length=0 }
+  function showDragTimes(times, clientY, lane) {
+    clearDragTimes()
+    const rect=lane.getBoundingClientRect()
+    for(const entry of times) {
+      const anchor=(state.dragTimecodes || []).filter(a=>a.time<=entry.time+1e-7).at(-1)
+      const rate=state.fps || 25
+      const drop=anchor && timecode(anchor.probeSeconds,rate,true)===anchor.probeLabel.replace(/[.;]/g,':') && timecode(anchor.probeSeconds,rate,false)!==anchor.probeLabel.replace(/[.;]/g,':')
+      const label=timecode(anchor ? anchor.seconds+entry.time-anchor.time : entry.time,rate,Boolean(drop))
+      const node=el('div','drag-time-label',(entry.prefix || '')+label)
+      Object.assign(node.style,{position:'fixed',zIndex:90,pointerEvents:'none',background:'#10232fee',color:'#bdeaff',border:'1px solid #397b94',borderRadius:'4px',padding:'3px 5px',font:'11px Consolas,monospace',whiteSpace:'nowrap',top:Math.max(4,Math.min(window.innerHeight-24,clientY-28+(entry.row || 0)*24))+'px'})
+      document.body.append(node)
+      node.style.left=Math.max(4,Math.min(window.innerWidth-node.offsetWidth-4,rect.left+x(entry.time)*rect.width/100))+'px'
+      dragLabels.push(node)
+    }
+  }
+  document.addEventListener('pointerup',clearDragTimes)
+  document.addEventListener('pointercancel',clearDragTimes)
+  document.addEventListener('keydown',event=>{if(event.key==='Escape')clearDragTimes()})
   let suppressClickUntil = 0
   let renderedEditor = ''
   let resourceBranch = ''
@@ -492,6 +514,8 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll) {
       if (mouseGesture!==g || !g.moved) return
       const target=snappedTime(g.originTime+(g.lastX-g.originX)*span/g.width,g.points,g.lastEvent?.altKey,g.width,!g.keyMode && action==='field' ? layer.end-layer.start : 0)
       const time=Math.max(layer.start,Math.min(layer.end,target.time))
+      const destination=g.keyMode ? time : Math.max(0,Math.min(action==='field' ? state.length-(layer.end-layer.start) : state.length,target.time))
+      showDragTimes(!g.keyMode && action==='field' ? [{time:destination,prefix:'IN '},{time:Math.min(state.length,destination+layer.end-layer.start),prefix:'OUT ',row:1}] : [{time:destination}],g.lastY,node.parentElement)
       if (g.keyMode) {
         node.style.left=x(time)+'%'
         const lo=Number(node.dataset.curveMin),hi=Number(node.dataset.curveMax)
@@ -634,6 +658,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll) {
       if(g.previewFrame)cancelAnimationFrame(g.previewFrame)
       mouseGesture = null
       showSnap(null)
+      clearDragTimes()
       rendered = ''; lastFullRead = 0; updateEditorControls()
       if(g.moved) draw()
     }
@@ -976,11 +1001,13 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll) {
       const raw=Math.max(0,Math.min(state.length,g.originTime+(event.clientX-g.originX)*span/g.width))
       g.target=snappedTime(raw,g.points,event.altKey,g.width)
       node.style.left=x(g.target.time)+'%'
+      showDragTimes([{time:g.target.time}],event.clientY,lane)
     })
     const end=async event=>{
       const g=mouseGesture
       if(!g?.annotation || g.node!==node) return
       mouseGesture=null; showSnap(null)
+      clearDragTimes()
       if(g.moved && event.type==='pointerup') {
         suppressClickUntil=performance.now()+400
         if(state.editor.token!==g.token) { $('selectionMessage').textContent='EDITOR CHANGED — DRAG CANCELLED'; rendered=''; return }
@@ -1243,6 +1270,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll) {
   function draw() {
     if (mouseGesture || layerReorder || editPending || interactionBusy) return
     if (!state || resizingWaveform) return
+    clearDragTimes()
     const top = viewport.scrollTop
     for (const node of sheet.querySelectorAll('[data-waveform-uid]'))
       waveformHeights.set(node.dataset.waveformUid, node.getBoundingClientRect().height)
@@ -1259,6 +1287,8 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll) {
     }
 
     const annotations = state.annotations || {}
+    const duplicateFlags=duplicateMarkerKeys(annotations.tags)
+    const duplicates=new Set((annotations.tags || []).filter((tag,index)=>duplicateFlags[index]))
     for (const [title, kind] of [
       ['CUES', 'cue'],
       ['TIMECODE', 'tc'],
@@ -1273,6 +1303,11 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll) {
           : (annotations.tags || []).filter((t) => String(t.type).toLowerCase().includes(kind))
       for (const item of entries) {
         const node = marker(r.lane, item.time, String(item.text ?? item.value ?? ''), 'cue-marker ' + kind)
+        if (node && kind!=='notes' && duplicates.has(item)) {
+          Object.assign(node.style,{background:'#76252d',borderColor:'#ff6268',color:'#fff0f1'})
+          node.title='DUPLICATE '+title+' VALUE: '+node.textContent
+          node.setAttribute('aria-label',node.title)
+        }
         if (!node || !state.seekEnabled) continue
         seekTarget(node, item.time, 'GO TO ' + title + ' ' + node.textContent)
         annotationMouse(r.lane,kind,node,item)
@@ -1834,4 +1869,4 @@ const stylesheet = `
 `
 const page = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Disguise Layer Editor · Timeline</title><link rel="stylesheet" href="/viewer.css"><script src="/viewer.js" defer></script></head><body><header><span class="brand-logo"><img src="${brandLogo}" alt="VEHKA AV"></span><div><h1>DISGUISE LAYER EDITOR</h1><small>TIMELINE VIEWER</small></div><div class="spacer"></div><div id="clockBlock"><span id="clock">—</span><span id="beat"></span><div id="editClock" hidden></div><div id="clockDetails"></div><div id="sectionRemaining" aria-live="off"></div></div><span id="status" role="status">CONNECTING</span></header><div class="toolbar"><strong id="track">TRACK</strong><div class="spacer"></div><button id="fitTrack" title="FIT TRACK">FIT TRACK</button><button id="fitLayer" title="CENTRE SELECTED LAYER">FIT LAYER</button><button id="follow" title="FOLLOW PLAYHEAD" aria-pressed="true">FOLLOW</button><button id="zoomOut" aria-label="ZOOM OUT" title="ZOOM OUT">−</button><button id="zoomIn" aria-label="ZOOM IN" title="ZOOM IN">+</button></div><main id="viewport" aria-label="Designer timeline"><div id="sheet"></div></main><footer>CTRL + WHEEL: ZOOM · SHIFT + WHEEL: PAN<span id="selectionMessage" role="status"></span><span id="warnings"></span></footer></body></html>`
 
-module.exports = { page, stylesheet, browserScript: '(' + browserMain.toString() + ')(' + applyEditPatch.toString() + ',' + discreteSegments.toString() + ',' + selectionScroll.toString() + ')' }
+module.exports = { page, stylesheet, browserScript: '(' + browserMain.toString() + ')(' + applyEditPatch.toString() + ',' + discreteSegments.toString() + ',' + selectionScroll.toString() + ',' + timecode.toString() + ',' + duplicateMarkerKeys.toString() + ')' }

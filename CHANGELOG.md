@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-beta.143
+
+- Show compact destination timecodes while dragging keys, resource keys, markers and layer bounds; whole-layer moves show IN and OUT. Native TC anchors keep preview updates local.
+- Highlight duplicate CUE, MIDI and TC values in red across the track. Compare within each type, normalize numeric padding and TC separators, and allow repeated NOTES.
+
 ## 0.1.0-beta.142
 
 - Start direct layer-bar drags through explicit IN selection, including layers outside the current editing time.

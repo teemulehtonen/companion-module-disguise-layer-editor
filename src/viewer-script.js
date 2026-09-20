@@ -11,6 +11,16 @@ if p['command'] == 'viewer_snapshot':
               'length': float(track.lengthInSec), 'time': seconds, 'fps': fps(),
               'timecode': str(manager.beatToTimecode(track.timeToBeat(seconds))), 'layers': [], 'warnings': [], 'ticks': []}
     result['sections'] = []
+    # Compact native TC anchors let drag labels update locally without requests.
+    tc_starts = sorted(set([0.0] + [float(track.beatToTime(track.cues.getT(i))) for i in range(track.cues.n())
+        if any(tag.type == Tag.TC for tag in track.cues.getV(i).getTags())]))
+    result['dragTimecodes'] = []
+    for index, at in enumerate(tc_starts):
+        tc = manager.beatToTimecode(track.timeToBeat(at))
+        finish = tc_starts[index+1] if index+1 < len(tc_starts) else float(track.lengthInSec)
+        probe = manager.beatToTimecode(track.timeToBeat(min(at+61, max(at, finish-1.0/fps()))))
+        result['dragTimecodes'].append({'time':at, 'seconds':float(tc.t),
+            'probeSeconds':float(probe.t), 'probeLabel':str(probe)})
     try:
         for index in range(track.nSections()):
             section = track.sectionInfo(index)

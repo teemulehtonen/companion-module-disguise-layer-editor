@@ -1,4 +1,6 @@
-# Current release — beta.142
+# Current release — beta.143
+
+Drag labels use viewer_snapshot.dragTimecodes (segment starts, native TC seconds and a probe label to identify drop-frame numbering) and the shared browser timecode formatter. No native calls per pointer event. Labels are disposable and removed on pointer release/cancel, Escape or redraw. Duplicate marker highlighting uses all annotation tags, grouped by type; NOTES are excluded. Public helper viewer-marker-duplicates.js is embedded in the viewer and unit tested.
 
 Supersedes track-relative marker popup times: annotation_time reads a native label via resolve_timecode(time); annotation targetLabel resolves within annotation_edit against current TC segments. Unchanged times keep exact seconds. Direct layer-bar drag selects point=in before entering layer edit, matching click semantics for inactive layers.
 
