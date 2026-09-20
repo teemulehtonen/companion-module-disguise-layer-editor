@@ -8,6 +8,10 @@ const paths = Object.freeze({
   annotations: (uid) => '/api/session/transport/annotations?uid=' + encodeURIComponent(uid),
   liveUpdate: '/api/session/liveupdate',
   thumbnail: (uid) => `/api/v1/thumbnail/${uid}?width=160&height=90`,
+  transport: (operation) => {
+    if (!['play','playsection','stop','gotonextsection','gotoprevsection'].includes(operation)) throw new Error('Invalid transport operation')
+    return '/api/session/transport/' + operation
+  },
   playback: (playing) => `/api/session/transport/${playing ? 'stop' : 'playsection'}`,
 })
 

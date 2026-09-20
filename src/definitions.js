@@ -29,7 +29,7 @@ function actions(instance) {
     options,
     callback: (event) =>
       instance.perform((editor) => {
-        if (editor.clearKeysBrowser && !name.startsWith('Context button')) {
+        if (editor.clearKeysBrowser && !name.startsWith('Context button') && name !== 'Transport control') {
           const id = {
             'Select parameter / media folder': 'field',
             'Cycle COARSE / FINE / ULTRA': 'fine',
@@ -46,6 +46,8 @@ function actions(instance) {
       }, queueOptions),
   })
   return {
+    time_step_set: action('Select adaptive timing step', [numeric('slot','Step slot (0–9)',0,0,9)], (e,o)=>e.setTimeStep(Number(o.slot))),
+    transport: action('Transport control', [{type:'dropdown',id:'operation',label:'Operation',default:'play',choices:[{id:'play',label:'Play'},{id:'playsection',label:'Play to end of section'},{id:'stop',label:'Stop'},{id:'toggle',label:'Play / stop (last mode)'},{id:'gotoprevsection',label:'Previous section'},{id:'gotonextsection',label:'Next section'}]}], (e,o)=>e.controlTransport(o.operation)),
     refresh: action('Read layers and values from Designer', [], (e) => e.refresh()),
     link_time: action('Toggle playhead follow while editing', [], (e) => e.setLinkTime(!e.linkTime)),
     play_stop: action('Play to end of section / stop', [], (e) => e.togglePlayback()),
@@ -188,6 +190,17 @@ function presets(label = 'd3layers') {
   })) {
     for (const name of names) p[name].style.bgcolor = theme.groups[group]
   }
+  for(let i=0;i<10;i++) {
+    p['timing_'+i]=button('Adaptive timing step '+(i+1),'$(this:timing_step_'+i+')',[entry('time_step_set',{slot:i})])
+    p['timing_'+i].feedbacks=[{feedbackId:'timing_step_selected',options:{slot:i},style:{bgcolor:theme.active}},{feedbackId:'timing_step_unavailable',options:{slot:i},style:{bgcolor:0,color:theme.secondary}}]
+  }
+  for(const [operation,text] of [['play','PLAY'],['playsection','PLAY\nTO END'],['stop','STOP'],['toggle','PLAY /\nSTOP'],['gotoprevsection','PREV\nSECTION'],['gotonextsection','NEXT\nSECTION']]) {
+    p['transport_'+operation]=button(text,text,[entry('transport',{operation})])
+    p['transport_'+operation].style.bgcolor=theme.groups.playback
+    if(['play','playsection','stop'].includes(operation)) p['transport_'+operation].feedbacks=[{feedbackId:'transport_state',options:{operation},style:{bgcolor:theme.active}}]
+  }
+  p.link_time=button('Link editing time to Designer','LINK\nTIME',[entry('link_time')])
+  p.link_time.feedbacks=[{feedbackId:'link_time',options:{},style:{bgcolor:theme.active}}]
   p.connection.feedbacks = [{ feedbackId: 'connected', options: {}, style: { bgcolor: theme.active } }]
   p.fine.feedbacks = [{ feedbackId: 'fine', options: {}, style: { bgcolor: theme.active } }]
   p.dial_value.feedbacks = [{ feedbackId: 'dirty', options: {}, style: { bgcolor: theme.active } }]
@@ -222,6 +235,12 @@ function presets(label = 'd3layers') {
         id: 'context',
         name: 'Context buttons (left to right)',
         definitions: Array.from({ length: 8 }, (_, i) => `pad_${i}`),
+      },
+      {
+        id: 'timing', name: 'Adaptive timing steps', definitions:Array.from({length:10},(_,i)=>'timing_'+i),
+      },
+      {
+        id: 'transport', name:'Transport and time linking', definitions:['transport_gotoprevsection','transport_play','transport_playsection','transport_stop','transport_gotonextsection','transport_toggle','link_time'],
       },
       {
         id: 'additional',

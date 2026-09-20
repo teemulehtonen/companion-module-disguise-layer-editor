@@ -68,3 +68,7 @@ Supersedes the viewer-only PIN TIME policy. Editor.linkTime defaults true. The b
 ## Separate editing clock (beta.125)
 
 Supersedes beta.123 transport-navigation exception. Editor.time is edit time, transportTime is Designer time. receiveTransportTime updates edit time only when linked. Native edit_seconds resolves editTime only for the matching track; keepPlayhead prevents transport jumps. Use edit time for field/resource evaluation, nudge origins, layer timing and clear operations. Real transport remains the source for viewer green cursor, clock and section countdown. Unlinked edit time is blue and drives selection, FOLLOW and zoom. LINK TIME changes cancel stale edit modes and adopt transport time without seeking. Include unlinked edit time in command fingerprints; never include the continuously running linked clock. Native LiveUpdate evaluated values are not adopted for an unlinked edit target. Targeted read_field and content refresh evaluate at edit time.
+
+## Transport controls (beta.128)
+
+Viewer transport actions use controlTransport and DesignerClient.transport. Validate operation allowlists, reread playback state before toggling and never retry ambiguous writes. Keep the nested section-jump request shape separate from the flat playback shape. Shared lastPlaybackMode is session state; stopping does not reset it. Do not route explicit transport commands through the editing seek path or keepPlayhead. See the [native transport API](https://developer.disguise.one/api/session/transport/).

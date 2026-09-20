@@ -42,6 +42,7 @@ class Editor {
   constructor(client) {
     this.client = client
     this.linkTime = true
+    this.lastPlaybackMode = 'playsection'
     this.snapshot = null
     this.layerIndex = 0
     this.fieldIndex = 0
@@ -375,6 +376,26 @@ class Editor {
   get beatMode() { return this.snapshot?.beatMode === true }
   get usesBeatSteps() { return this.beatMode }
   get timeStepAmount() { return this.usesBeatSteps ? (this.layerEdit ? this.layerBeatStep : this.moveKey ? (this.keyBeatStep ?? 1/128) : this.beatStep) : TIME_STEP_SECONDS[this.timeStep] }
+  get timeStepChoices() {
+    const values = this.beatMode
+      ? this.layerEdit ? [0.25,1,4,8,16,32] : this.moveKey ? [1/128,1/64,1/32,1/16,1/8,1/4,1/2,1,4,8] : [0.25,1,2,4,8,16,32]
+      : TIME_STEPS
+    const selected = this.beatMode ? this.timeStepAmount : this.timeStep
+    return values.map(value => ({value,selected:value===selected,label:this.beatMode
+      ? (value<1 ? '1/'+Math.round(1/value) : String(value))+' BEAT'+(value>1?'S':'')
+      : {frame:'1 FRAME',second:'1 SEC',two:'2 SEC',five:'5 SEC',ten:'10 SEC',minute:'1 MIN'}[value]}))
+  }
+  setTimeStep(index) {
+    this.local()
+    if (!Number.isInteger(index) || index<0 || index>=10) throw new Error('Invalid timing step slot')
+    if (this.mediaMode || this.clearKeysBrowser || this.clearKeysPrompt) return
+    const choice=this.timeStepChoices[index]
+    if (!choice) return
+    if (!this.beatMode) this.timeStep=choice.value
+    else if (this.layerEdit) this.layerBeatStep=choice.value
+    else if (this.moveKey) this.keyBeatStep=choice.value
+    else this.beatStep=choice.value
+  }
   get timeStepLabel() {
     if (this.usesBeatSteps) return this.timeStepAmount < 1 ? '1/' + Math.round(1 / this.timeStepAmount) + ' BEAT' : this.timeStepAmount + (this.timeStepAmount === 1 ? ' BEAT' : ' BEATS')
     return { frame: '1 FRAME', second: '1 SEC', two: '2 SEC', five: '5 SEC', ten: '10 SEC', minute: '1 MIN' }[
@@ -1142,6 +1163,19 @@ class Editor {
     if (id === 'field') return this.browseClearKeys(Number(options.direction))
     // Other dials are intentionally inert while choosing deletion targets.
   }
+  async controlTransport(operation) {
+    this.requireReady()
+    const context = {trackUid:this.snapshot.trackUid,transportUid:this.snapshot.transportUid}
+    const result = await this.remote(() => this.client.transport(context,operation,this.lastPlaybackMode))
+    if (['play','playsection'].includes(result.command)) this.lastPlaybackMode=result.command
+    this.playing=result.playing
+    this.pendingJump=null
+    this.navigationTime=null
+    if (this.linkTime && ['gotonextsection','gotoprevsection'].includes(operation)) {
+      this.moveKey=null;this.selectedKeyTime=null;this.layerEdit=''
+      this.mediaMode=false;this.mediaAll=[]
+    }
+  }
   async togglePlayback() {
     this.requireReady()
     this.navigationTime = null
@@ -1149,6 +1183,7 @@ class Editor {
     if (!this.moveKey) this.selectedKeyTime = null
     await this.remote(async () => {
       this.playing = (await this.client.togglePlayback(this.context())).playing
+      if (this.playing) this.lastPlaybackMode = 'playsection'
     })
   }
   select(kind, direction) {

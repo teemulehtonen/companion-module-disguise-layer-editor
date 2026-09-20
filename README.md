@@ -6,7 +6,7 @@ Disguise layer, keyframe and resource control for Bitfocus Companion and Stream 
 
 ## Install
 
-**Downloads (beta.127):** [Companion module](../../releases/download/v0.1.0-beta.127/disguise-layer-control-0.1.0-beta.127.tgz) · [Companion page](../../releases/download/v0.1.0-beta.127/D3-Stream-Deck-Plus.companionconfig)
+**Downloads (beta.129):** [Companion module](../../releases/download/v0.1.0-beta.129/disguise-layer-control-0.1.0-beta.129.tgz) · [Companion page](../../releases/download/v0.1.0-beta.129/D3-Stream-Deck-Plus.companionconfig)
 
 Tested with Designer 32.4.17 and Companion 5.0.5.
 
@@ -14,6 +14,12 @@ Tested with Designer 32.4.17 and Companion 5.0.5.
 2. In Companion, import `disguise-layer-control-<version>.tgz` under **Modules**. Add **Disguise Layer Editor** and enter the Designer host and port (default 80).
 3. Import `D3-Stream-Deck-Plus.companionconfig`, choose a destination page and link the connection. Import replaces that page; export it first if needed.
 4. Assign Stream Deck + to that page. **HTTP + SYNC** indicates automatic feedback.
+
+## Additional Stream Deck presets
+
+In Companion **Presets**, select this connection and drag buttons from **Adaptive timing steps** or **Transport and time linking** onto any page or Stream Deck. Timing slots automatically follow the current track and editing mode: frame/seconds on time tracks, beats on quantized tracks, with finer fractions while moving keys. The selected step is highlighted; unused slots display a dash and do nothing. Selecting a step keeps the selected key/layer editing mode.
+
+Transport presets provide PLAY, PLAY TO END, STOP, PLAY / STOP (last play mode), PREVIOUS/NEXT SECTION and LINK TIME. They share state with the viewer.
 
 ## Controls
 
@@ -33,6 +39,8 @@ Tested with Designer 32.4.17 and Companion 5.0.5.
 - **LINK TIME** (on by default) links editing to Designer playback time. Turn it off to use the independent blue editing cursor from either the viewer or Stream Deck. Turning it on adopts Designer time and clears edit locks without seeking playback. The standalone playback action remains available. Float increments are 0.1 / 0.01 / 0.001. Absolute times use Designer's native timecode.
 
 ## Timeline viewer
+
+The transport icon group before +VIDEO provides previous section, PLAY, PLAY TO END OF SECTION, STOP and next section. Space toggles playback using the last selected play mode while the viewer has focus; typing and open popups are excluded. Transport controls always affect Designer, independently of LINK TIME.
 
 Enable **ENABLE TIMELINE VIEWER** in module settings and open `http://127.0.0.1:8765`. Select layers/parameters, seek from timeline points, and inspect native curves and resource thumbnails. Optional **ALLOW VIEWER EDIT** enables shared Companion editing and a compact resource picker; it defaults to off. [Viewer guide and limitations](docs/TIMELINE-VIEWER.md).
 

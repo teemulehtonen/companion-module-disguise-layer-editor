@@ -31,6 +31,8 @@ function describeEditor(editor) {
   const items = editor.mediaMode ? editor.mediaItems : []
   const currentMedia = items[editor.mediaIndex]
   const state = {
+    playing: Boolean(editor.playing),
+    playbackMode: editor.lastPlaybackMode || 'playsection',
     linkTime: Boolean(editor.linkTime),
     editTime: editor.time,
     editTimecode: editor.linkTime ? '' : absoluteTimecode(editor.time,editor.snapshot?.fps || 25,false,editor.timecodeSamples,editor.liveTimecodeSample),
@@ -81,7 +83,7 @@ function describeEditor(editor) {
   state.token = createHash('sha256')
     .update(
       JSON.stringify([
-        {...state,editTime:editor.linkTime ? undefined : editor.time},
+        {...state,playing:undefined,editTime:editor.linkTime ? undefined : editor.time},
         editor.layer?.start,
         editor.layer?.end,
         editor.field?.sequenced,
@@ -105,6 +107,7 @@ function validGrid(grid) {
     Object.keys(grid).every(key=>['unit','step','index'].includes(key)))
 }
 function validEditRequest(value) {
+  if (value?.action === 'transport') return /^[a-f0-9]{64}$/.test(value.token || '') && ['play','playsection','stop','toggle','gotonextsection','gotoprevsection'].includes(value.operation) && Object.keys(value).every(k=>['action','token','operation'].includes(k))
   if (value?.action === 'link_time') return typeof value.enabled === 'boolean' && /^[a-f0-9]{64}$/.test(value.token || '') && Object.keys(value).every(k => ['action','token','enabled'].includes(k))
   if(value && Object.hasOwn(value,'keepPlayhead')) {
     const {keepPlayhead,...command}=value
@@ -194,6 +197,10 @@ async function editFromViewerCommand(editor, request) {
     return { ok: false, reason: 'SELECTION OR VALUE CHANGED — TRY AGAIN' }
   // The caller owns the real Companion queue. This adapter executes exactly one
   // normal action, including its menu, locking, precision and beat/frame policy.
+  if (request.action === 'transport') {
+    await editor.controlTransport(request.operation)
+    return {ok:true,editor:describeEditor(editor)}
+  }
   if (request.action === 'link_time') {
     editor.setLinkTime(request.enabled)
     return {ok:true,editor:describeEditor(editor)}

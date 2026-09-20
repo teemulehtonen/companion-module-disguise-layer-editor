@@ -69,6 +69,20 @@ class DesignerClient {
     if (String(body.result?.uid) !== uid) throw new Error('Annotation track mismatch')
     return body.result.annotations
   }
+  async transport(context, operation, lastMode = 'playsection') {
+    if (!['play','playsection','stop','toggle','gotonextsection','gotoprevsection'].includes(operation)) throw new Error('Invalid transport operation')
+    const state = await this.execute('playback_state', context)
+    const command = operation === 'toggle' ? (state.playing ? 'stop' : lastMode) : operation
+    const section = command === 'gotonextsection' || command === 'gotoprevsection'
+    const response = await this.fetch(this.baseUrl + paths.transport(command), {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({transports:[section ? {transport:{uid:context.transportUid}} : {uid:context.transportUid}]}),
+      signal:AbortSignal.any([this.controller.signal,AbortSignal.timeout(5000)]),
+    })
+    if (!response.ok) throw new Error('Designer HTTP '+response.status+' ('+command+')')
+    requireSuccess(await response.json(),'Transport command failed')
+    return {playing:section ? state.playing : command !== 'stop',command}
+  }
   async togglePlayback(context) {
     const state = await this.execute('playback_state', context)
     const endpoint = state.playing ? 'stop' : 'playsection'

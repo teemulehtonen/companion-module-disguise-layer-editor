@@ -34,6 +34,7 @@ class DisguiseLayerControl extends InstanceBase {
           time: 'Live time in seconds',
           step_mode: 'Adjustment mode',
           time_step: 'Time step',
+          ...Object.fromEntries(Array.from({length:10},(_,i)=>['timing_step_'+i,'Adaptive timing step '+(i+1)])),
           fps: 'Timeline FPS',
           tc_mode: 'Designer timecode mode',
           move_key: 'Key move mode',
@@ -95,6 +96,10 @@ class DisguiseLayerControl extends InstanceBase {
     )
     this.setActionDefinitions(actions(this))
     this.setFeedbackDefinitions({
+      link_time:{type:'boolean',name:'Time linked',options:[],defaultStyle:{bgcolor:theme.active},callback:()=>Boolean(this.editor?.linkTime)},
+      timing_step_selected:{type:'boolean',name:'Timing step selected',options:[{type:'number',id:'slot',label:'Slot',default:0,min:0,max:9}],defaultStyle:{bgcolor:theme.active},callback:f=>Boolean(this.editor?.timeStepChoices[Number(f.options.slot)]?.selected)},
+      timing_step_unavailable:{type:'boolean',name:'Timing step unavailable',options:[{type:'number',id:'slot',label:'Slot',default:0,min:0,max:9}],defaultStyle:{bgcolor:0,color:theme.secondary},callback:f=>!this.editor?.timeStepChoices[Number(f.options.slot)]},
+      transport_state:{type:'boolean',name:'Transport mode',options:[{type:'dropdown',id:'operation',label:'Mode',default:'play',choices:[{id:'play',label:'Play'},{id:'playsection',label:'Play to section end'},{id:'stop',label:'Stop'}]}],defaultStyle:{bgcolor:theme.active},callback:f=>f.options.operation==='stop' ? !this.editor?.playing : Boolean(this.editor?.playing && this.editor.lastPlaybackMode===f.options.operation)},
       fine: {
         type: 'boolean',
         name: 'Fine mode',
@@ -782,6 +787,7 @@ class DisguiseLayerControl extends InstanceBase {
       parameter_step: e?.field?.step ?? '-',
       value_label: e?.valueLabel ?? '',
       time_step: e?.timeStepLabel ?? '',
+      ...Object.fromEntries(Array.from({length:10},(_,i)=>['timing_step_'+i,e?.timeStepChoices[i]?.label || '—'])),
       fps: e?.snapshot?.fps ?? '',
       layer_edit: layerMode || 'SCRUB',
       selected_key_time: here?.time ?? '',
@@ -819,7 +825,7 @@ class DisguiseLayerControl extends InstanceBase {
               : 'HTTP'
           : 'DISCONNECTED',
     })
-    this.checkFeedbacks('fine', 'dirty', 'connected')
+    this.checkFeedbacks('fine', 'dirty', 'connected', 'link_time', 'timing_step_selected', 'timing_step_unavailable', 'transport_state')
     void this.loadThumbnails()
   }
   async destroy() {

@@ -45,6 +45,16 @@ test('Companion lifecycle supports demo load, action execution and shutdown', as
   assert.equal(state.dial_value_0, 'BACKGROUND')
   assert.equal(state.dial_value_1, state.parameter.toUpperCase())
   assert.equal(state.parameter_animated, true)
+  assert.equal(state.timing_step_0, '1 FRAME')
+  assert.equal(state.timing_step_9, '—')
+  await instance.actions.time_step_set.callback({ options: { slot: 2 } })
+  assert.equal(instance.editor.timeStep, 'two')
+  instance.editor.snapshot.beatMode = true
+  instance.publish()
+  assert.equal(state.timing_step_0, '1/4 BEAT')
+  await instance.actions.time_step_set.callback({ options: { slot: 3 } })
+  assert.equal(instance.editor.beatStep, 4)
+  instance.editor.snapshot.beatMode = false
   Object.assign(instance.editor.field, { min: 0, max: 1.000000047 })
   instance.publish()
   assert.equal(state.dial_info_1, '0–1')

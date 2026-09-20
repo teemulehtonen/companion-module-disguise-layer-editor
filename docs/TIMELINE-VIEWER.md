@@ -11,6 +11,10 @@ Enable **ENABLE TIMELINE VIEWER** and open `http://127.0.0.1:8765` (configurable
 - Layer selection is limited to the active editing time. Clicking an explicit IN/OUT/key point moves that active clock. Designer playback cannot steal the unlinked edit target.
 - FOLLOW and zoom use the active clock. CTRL+wheel zooms; SHIFT+wheel pans. FIT LAYER leaves 4% space at the edges.
 
+## Transport
+
+The icon group before +VIDEO contains PREVIOUS SECTION, PLAY, PLAY TO END OF SECTION, STOP and NEXT SECTION. Hover for labels. Space toggles play/stop using the last successful PLAY or PLAY TO END choice (initially section end). Typing, open popups and held-key repeats do not trigger it. These controls always command Designer transport, even when LINK TIME is off; the blue editing cursor stays independent.
+
 ## Mouse editing
 
 - Drag a layer bar to move it; drag its edges for IN/OUT. Native timing limits and frame/beat steps apply.

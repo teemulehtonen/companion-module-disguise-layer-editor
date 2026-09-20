@@ -129,7 +129,27 @@ function browserMain(applyEditPatch, discreteSegments) {
     })
     addLayers.append(b)
   }
-  $('fitTrack').before(addLayers)
+  const transportControls=document.createElement('div')
+  transportControls.className='transport-controls'
+  transportControls.setAttribute('role','group');transportControls.setAttribute('aria-label','TRANSPORT')
+  Object.assign(transportControls.style,{display:'flex',gap:'4px',paddingRight:'10px',marginRight:'3px',borderRight:'1px solid #34444d'})
+  const transportButtons=new Map()
+  for (const [operation,label,path] of [
+    ['gotoprevsection','PREVIOUS SECTION','M4 3V13 M12 3L6 8L12 13Z'],
+    ['play','PLAY','M4 2L13 8L4 14Z'],
+    ['playsection','PLAY TO END OF SECTION','M2 3L10 8L2 13Z M13 3V13'],
+    ['stop','STOP','M4 4H12V12H4Z'],
+    ['gotonextsection','NEXT SECTION','M12 3V13 M4 3L10 8L4 13Z'],
+  ]) {
+    const button=document.createElement('button');button.title=label;button.setAttribute('aria-label',label)
+    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg')
+    svg.setAttribute('viewBox','0 0 16 16');svg.setAttribute('width','16');svg.setAttribute('height','16');svg.setAttribute('aria-hidden','true')
+    Object.assign(svg.style,{display:'block',fill:'none',stroke:'currentColor',strokeWidth:'1.6',strokeLinejoin:'round',strokeLinecap:'round'})
+    const shape=document.createElementNS(svg.namespaceURI,'path');shape.setAttribute('d',path);svg.append(shape);button.append(svg)
+    button.onclick=()=>void interact(()=>sendEdit('transport',{operation}))
+    transportButtons.set(operation,button);transportControls.append(button)
+  }
+  $('fitTrack').before(transportControls,addLayers)
   snapButton.textContent = 'SNAP ON ▾'
   snapButton.title = 'SNAP SETTINGS · ALT BYPASSES SNAP'
   $('fitLayer').after(snapButton)
@@ -191,6 +211,11 @@ function browserMain(applyEditPatch, discreteSegments) {
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && keyMenu) { event.preventDefault(); closeKeyMenu(); return }
     if (event.target.closest('input,textarea,select,[contenteditable="true"]')) return
+    if ((event.code==='Space' || event.key===' ') && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && state?.editEnabled && state.connected) {
+      event.preventDefault()
+      if (!event.repeat && !keyMenu && !layerReorder) void interact(()=>sendEdit('transport',{operation:'toggle'}))
+      return
+    }
     if (event.key === 'Escape') {
       if(layerReorder){layerReorder.line?.remove();layerReorder=null;suppressClickUntil=performance.now()+500}
       closeKeyMenu(); mouseGesture = null; showSnap(null); rendered = ''
@@ -296,6 +321,12 @@ function browserMain(applyEditPatch, discreteSegments) {
     linkTimeButton.setAttribute('aria-pressed',String(Boolean(state?.editor?.linkTime)))
     linkTimeButton.disabled=!state?.editEnabled || !state?.connected || editPending || interactionBusy || Boolean(mouseGesture || layerReorder)
     const enabled = state?.editEnabled && state.editor
+    transportControls.hidden=!enabled
+    transportControls.style.display=enabled?'flex':'none'
+    for (const [operation,button] of transportButtons) {
+      button.disabled=!enabled || !state.connected || editPending || interactionBusy || Boolean(mouseGesture || layerReorder)
+      if (['play','playsection','stop'].includes(operation)) button.setAttribute('aria-pressed',String(operation==='stop' ? !state.editor?.playing : state.editor?.playing && state.editor?.playbackMode===operation))
+    }
     addLayers.hidden=!enabled
     addLayers.style.display=enabled?'flex':'none'
     for(const b of addLayers.querySelectorAll('button')) b.disabled=!enabled || !state.connected || editPending || interactionBusy

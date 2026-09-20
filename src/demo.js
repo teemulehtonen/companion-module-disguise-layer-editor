@@ -48,6 +48,11 @@ class DemoClient {
       }
   }
   close() {}
+  async transport(context,operation,lastMode='playsection') {
+    const command=operation==='toggle' ? (this.playing?'stop':lastMode) : operation
+    if (['play','playsection','stop'].includes(command)) this.playing=command!=='stop'
+    return {command,playing:Boolean(this.playing)}
+  }
   async togglePlayback() {
     this.playing = !this.playing
     return { playing: this.playing }

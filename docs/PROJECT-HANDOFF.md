@@ -1,3 +1,15 @@
+# Beta.129 — adaptive presets
+
+Editor.timeStepChoices is the shared ordered step catalog; setTimeStep selects a slot without seeking or releasing the key/layer mode. definitions.js exposes ten adaptive presets and transport/link controls, while main.js publishes timing_step_0–9 and selection/availability/transport feedback on every publish. Unused slots are no-ops. Transport controls bypass delete-menu dial routing so STOP remains available. Presets use connection-scoped variables and can be placed on other decks without changing the generated page.
+
+Validation: 168 local tests and packaged lifecycle checks passed. Installed beta.129 on Companion; both preset groups were visible. Viewer transport and add-layer buttons all measure 24 px high, with no browser errors. No broad native playback matrix was run for this update.
+
+# Beta.128 — compact transport controls
+
+Viewer transport controls use the shared queue and guarded native transport identity, with HTTP paths isolated in designer-api.js. PLAY/PLAYSECTION/STOP use the flat transport reference envelope; section jumps use the nested reference envelope. State is read immediately before toggle. Last successful PLAY or PLAYSECTION mode is shared in Editor and retained through stop; initial mode is PLAYSECTION. These controls always affect real Designer transport, leaving unlinked edit time intact. Space is handled only within the viewer document, excluding input/contenteditable fields, popups, modifiers and repeat.
+
+Targeted client/editor tests passed; Designer live playback was not exercised as part of this small UI update.
+
 # Current release — beta.127
 
 Authorized for GitHub publication. Installed on Raspberry Pi: beta.127. Uses separate editing/transport clocks, green Designer time and smaller blue edit time. Stale unlinked refresh no longer calls a write-context guard; background timecode samples retain the edit-time label. 165 local tests pass, including updated expectations for LINK TIME and active-time layer selection. Source/package publication excludes private probes, credentials and local media. Final browser check verified a Deck time step at blue 00:00:00:01 independently of the real transport, idle guides absent, browser errors empty and Companion last_error empty. LINK TIME restored ON after verification. Read the beta.125 notes below as the current timing specification; beta.122–124 policies are superseded.

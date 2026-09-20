@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.0-beta.129
+
+- Add ten adaptive timing-step preset slots with live labels, selected-state feedback and inactive unused slots. Time/beat choices follow track and key/layer editing mode.
+- Add standalone play, play to section end, stop, toggle, previous/next section and LINK TIME presets for additional decks.
+- Include the beta.128 viewer transport controls.
+
+## 0.1.0-beta.128
+
+- Add a compact transport icon group before layer creation: previous section, play, play to section end, stop and next section.
+- Space toggles playback using the last successful play mode. Ignore typing, open popups, modifiers and key repeat.
+- Transport commands remain independent of the unlinked editing clock.
+
 ## 0.1.0-beta.127
 
 - Add shared LINK TIME and an independent blue editing cursor/clock; mouse and Stream Deck use the same active edit time.
