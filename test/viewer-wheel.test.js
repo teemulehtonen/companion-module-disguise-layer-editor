@@ -4,7 +4,7 @@ test('wheel edits use shared value action, bound pending events, and respect zoo
  const source=browserScript.slice(browserScript.indexOf('  let wheelEdit=null'),browserScript.indexOf('  function pointClick('))
  const state={trackUid:'t',editEnabled:true,connected:true,editor:{layerUid:'l',parameter:'x',moveKey:{time:1,value:0},precision:'fine'} ,layers:[{uid:'l',fields:[{name:'x',min:0,max:10}]}]}
  let release,done;const writes=[]
- const context={document:{addEventListener(){}},sheet:{querySelectorAll(){return []}},state,mouseGesture:null,editPending:false,interactionBusy:false,interact:fn=>(done=fn()),sendEdit:async(a,o)=>{writes.push([a,o]);if(writes.length===1)await new Promise(r=>release=r);return true}}
+ const context={document:{addEventListener(){}},sheet:{addEventListener(){},querySelectorAll(){return []}},state,mouseGesture:null,editPending:false,interactionBusy:false,interact:fn=>(done=fn()),sendEdit:async(a,o)=>{writes.push([a,o]);if(writes.length===1)await new Promise(r=>release=r);return true}}
  vm.createContext(context);vm.runInContext(source,context)
  const layer={uid:'l',fields:[{name:'x'}]},node={dataset:{keyTime:'1'}}
  const event={target:{closest(){return null}},deltaY:-1,preventDefault(){},stopPropagation(){}}

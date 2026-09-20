@@ -846,7 +846,18 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     for(const mark of sheet.querySelectorAll('[data-key-time]')) {
       if(mark.dataset.keyLayer!==job.layer.uid || mark.dataset.keyParameter!==job.field.name || Math.abs(Number(mark.dataset.keyTime)-job.time)>1e-6)continue
       const lo=Number(mark.dataset.curveMin),hi=Number(mark.dataset.curveMax)
-      if(hi>lo) mark.style.top=(44-(job.value-lo)/(hi-lo)*42)+'px'
+      if(hi>lo) {
+        mark.style.top=(44-(job.value-lo)/(hi-lo)*42)+'px'
+        const path=mark.parentElement.querySelector('svg path')
+        if(path && job.samples?.length) {
+          path.setAttribute('d',job.samples.map((sample,index)=>{
+            const edge=sample.time<=job.time?job.before:job.after
+            const weight=sample.time<job.before || sample.time>job.after ? 0 : Math.abs(job.time-edge)>1e-9 ? (sample.time-edge)/(job.time-edge) : 1
+            const value=sample.value+(job.value-job.originValue)*weight
+            return (index?'L':'M')+x(sample.time)*10+','+(48-(value-lo)/(hi-lo)*42)
+          }).join(' '))
+        }
+      }
     }
     for(const row of sheet.querySelectorAll('[data-parameter-layer]')) {
       if(row.dataset.parameterLayer===job.layer.uid && row.dataset.parameterValue===job.field.name) {
@@ -866,7 +877,10 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     if((editPending || interactionBusy) && !wheelEdit) return
     event.preventDefault();event.stopPropagation()
     if(wheelEdit && wheelEdit.identity!==identity)return
-    const job=wheelEdit || {identity,layer,field,time:e.moveKey.time,value:e.moveKey.value,pending:false}
+    const job=wheelEdit || {identity,layer,field,time:e.moveKey.time,value:e.moveKey.value,pending:false,originValue:e.moveKey.value,
+      samples:field.samples?.map(sample=>({...sample})),
+      before:(field.keys || []).filter(k=>k.time<e.moveKey.time).sort((a,b)=>a.time-b.time).at(-1)?.time ?? layer.start,
+      after:(field.keys || []).filter(k=>k.time>e.moveKey.time).sort((a,b)=>a.time-b.time)[0]?.time ?? layer.end}
     const step=field.integer ? Math.max(1,Math.round(field.step || 1)) : ({coarse:0.1,fine:0.01,ultra:0.001}[e.precision] || 0.1)
     job.value=Number(Math.max(Number.isFinite(field.min)?field.min:-Infinity,Math.min(Number.isFinite(field.max)?field.max:Infinity,job.value+(event.deltaY<0?step:-step))).toFixed(9))
     job.pending=true;previewWheel(job)
@@ -883,6 +897,14 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     })
   }
   document.addEventListener('wheel',keyWheel,{passive:false,capture:true})
+  sheet.addEventListener('click',event=>{
+    if(event.button!==0 || event.ctrlKey || event.shiftKey || event.altKey || event.metaKey ||
+      event.target.closest('.timeline-target,button,input,select,textarea,.label') ||
+      !state?.editor?.moveKey || !state.editEnabled || editPending || interactionBusy || mouseGesture || performance.now()<suppressClickUntil)return
+    event.preventDefault();event.stopPropagation()
+    void interact(async()=>{if(await releaseViewerMode())updateEditorControls()})
+  },true)
+
   function pointClick(node, layer, point, parameter, keyTime) {
     if (!node || layer.group) return
     if (point === 'key') {
