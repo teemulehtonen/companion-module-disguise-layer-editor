@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.0-beta.24
+
+- Persist waveform summaries on the Companion host with a 100 MiB quota, revision-aware identity, corruption fallback and explicit refresh invalidation. No source media is copied.
+- Validation: 207 local tests; physical Pi restart not tested.
+
 ## 0.2.0-beta.23
 
 - NEXT reaches exact OUT and never steps backward from an OUT key. Key and layer selection remain valid at this editing boundary, where playback has ended.

@@ -1,3 +1,18 @@
+## Persistent waveform cache
+
+Waveform summaries are cached on the machine running Companion, not on Designer or in the project share. Only peak amplitudes, duration and sampling step are stored; source audio/video is never copied. The cache is shared by local module instances and limited to 100 MiB of peak files (oldest-written entries are evicted); each entry is limited to 256 KiB. The memory cache still holds at most 32 owners.
+
+Keys hash the Designer endpoint, project directory, media path, resource UID, source size/modification-time revision and container. Filenames and credentials are not written into cache records. Designer metadata is checked before reuse, so offline sources are not silently replaced by stale cached data. Replacing content while preserving both size and modification time requires REFRESH. REFRESH invalidates the disk record and decodes again. Removing a layer releases its memory entry; reusable disk summaries remain until quota eviction.
+
+Cache location belongs to the OS account running Companion:
+- Windows: `%LOCALAPPDATA%/disguise-layer-editor/waveforms-v1`
+- Linux/Raspberry Pi: `$XDG_CACHE_HOME/disguise-layer-editor/waveforms-v1`, or `~/.cache/disguise-layer-editor/waveforms-v1`
+- macOS: `~/Library/Caches/disguise-layer-editor/waveforms-v1`
+
+A container needs a persistent writable cache directory to retain data across container replacement. Read-only/full disks and invalid cache records fall back to normal waveform decoding. Writes are serialized and use an exclusive cross-process lock plus atomic rename. An interrupted process may leave `.write-lock`; this conservatively disables disk writes until the cache directory is cleared with Companion stopped. Existing readable peaks remain usable. OS/account changes or module removal do not necessarily delete this cache; it can be removed safely while Companion is stopped.
+
+The implementation is `src/waveform-disk-cache.js`; tests use temporary directories. This is an expendable cache, not a backup or a source of Designer state.
+
 ## OUT boundary semantics
 
 Treat layer playback as ending at OUT: the last displayed frame begins one frame earlier. Editing bounds include exact OUT for numeric, choice and resource keys, and layer/parameter focus must survive an exact OUT seek. NEXT falls back to exact OUT, never OUT minus one frame; otherwise repeated NEXT at an OUT key can move backwards. LINK TIME can move the native playhead to OUT, where ended playback is expected. Do not extend layer duration or alter key time to hide this distinction.

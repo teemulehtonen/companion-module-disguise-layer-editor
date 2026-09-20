@@ -2,6 +2,7 @@
 const fs = require('node:fs/promises')
 const { readMovWaveform } = require('./viewer-mov-waveform')
 const { readSmbAudio } = require('./smb-audio')
+const { WaveformDiskCache } = require('./waveform-disk-cache')
 
 // Streaming, bounded-memory WAV peak extraction. Disk reads yield between
 // chunks so decoding cannot stall Companion's event loop or Designer's UI.
@@ -94,13 +95,17 @@ class WaveformCache {
     this.entries = new Map()
     this.tail = Promise.resolve()
     this.controller = new AbortController()
+    this.disk = new WaveformDiskCache(options.waveformCacheDirectory)
+    this.refreshOwners = new Set()
   }
   close() {
     this.controller.abort()
     for (const entry of this.entries.values()) entry.controller.abort()
     this.entries.clear()
+    this.refreshOwners.clear()
   }
-  invalidate(owner) {
+  invalidate(owner, refresh = false) {
+    if (refresh) this.refreshOwners.add(owner)
     this.entries.get(owner)?.controller.abort()
     this.entries.delete(owner)
   }
@@ -116,17 +121,25 @@ class WaveformCache {
       return { status: 'unavailable', reason: 'Audio source requires local file access' }
     const source = await this.client.execute('viewer_audio_source', { uid })
     if (source.status !== 'ready') return { status: 'unavailable', reason: source.reason || 'Audio source unavailable' }
+    const diskKey = this.disk.key([this.client.baseUrl, source.projectDirectory, source.filename, uid, source.revision, source.container])
     let entry = this.entries.get(owner)
-    if (!entry || entry.uid !== uid || entry.revision !== source.revision) {
+    if (!entry || entry.uid !== uid || entry.revision !== diskKey) {
       this.invalidate(owner)
       if (this.entries.size >= 32) this.invalidate(this.entries.keys().next().value)
-      entry = { uid, controller: new AbortController(), revision: source.revision, status: 'loading' }
+      entry = { uid, controller: new AbortController(), revision: diskKey, status: 'loading' }
       this.entries.set(owner, entry)
+      const force = this.refreshOwners.delete(owner)
       entry.pending = this.tail
         .then(async () => {
           this.controller.signal.throwIfAborted()
           const signal = entry.controller.signal
           signal.throwIfAborted()
+          if (force) await this.disk.remove(diskKey)
+          if (!force) {
+            const saved = await this.disk.read(diskKey)
+            signal.throwIfAborted()
+            if (saved) return saved
+          }
           const decode = source.container === 'mov' ? readMovWaveform : readWaveform
           if (/^http:\/\/(127\.0\.0\.1|localhost):/.test(this.client.baseUrl || '')) {
             try { return await decode(source.filename, signal) }
@@ -136,7 +149,12 @@ class WaveformCache {
           }
           return readSmbAudio(this.options, source, signal, decode)
         })
-        .then((data) => Object.assign(entry, data, { status: 'ready' }))
+        .then(async (data) => {
+          entry.controller.signal.throwIfAborted()
+          // Only completed waveform summaries are persisted, never source media.
+          if (force || !(await this.disk.read(diskKey))) await this.disk.write(diskKey, data)
+          return Object.assign(entry, data, { status: 'ready' })
+        })
         .catch((error) =>
           Object.assign(entry, {
             status: 'unavailable',

@@ -1,4 +1,10 @@
-# Current release - 0.2.0-beta.23
+# Current release - 0.2.0-beta.24
+
+Add a 100 MiB persistent waveform-summary cache on the Companion host. Identity includes resource, project/file path and source revision; only peaks are stored. REFRESH bypasses and replaces disk data. Cache failures fall back to decoding. See VIEWER-DEVELOPMENT for paths, eviction, crash-lock cleanup and deployment limitations.
+
+Validation: 207 local tests, including persistence, identity misses, corruption, quota eviction, failed writes and forced refresh. No physical Pi restart or SMB throughput test was run for this change.
+
+# Previous release - 0.2.0-beta.23
 
 OUT is the end of the final displayed frame, not its start. Editing and key selection include exact OUT; playback visibility does not. NEXT with no later key now targets exact OUT in native and local navigation, preventing a backward one-frame jump after an OUT key. Do not move OUT keys earlier to compensate for black playback at that boundary. Existing OUT focus retention remains in effect.
 

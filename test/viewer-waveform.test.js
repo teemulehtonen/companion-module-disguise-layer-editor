@@ -54,7 +54,7 @@ test('waveform cache reuses a decoded resource and strips internal metadata', as
   const cache = new WaveformCache({
     baseUrl: 'http://127.0.0.1:80',
     execute: async () => ({ status: 'ready', filename: file, revision: '1' }),
-  })
+  }, { waveformCacheDirectory: path.join(path.dirname(file), 'cache') })
   t.after(() => cache.close())
   assert.equal((await cache.get('1')).status, 'loading')
   await cache.entries.get('1').pending
@@ -67,7 +67,7 @@ test('waveform cache reuses a decoded resource and strips internal metadata', as
 
 test('layer-owned waveforms refresh independently and removed layers release their data', async t => {
   const file = await fixture(t, [1200,1200])
-  const cache = new WaveformCache({baseUrl:'http://127.0.0.1:80',execute:async()=>({status:'ready',filename:file,revision:'1'})})
+  const cache = new WaveformCache({baseUrl:'http://127.0.0.1:80',execute:async()=>({status:'ready',filename:file,revision:'1'})}, {waveformCacheDirectory:path.join(path.dirname(file),'cache')})
   t.after(()=>cache.close())
   await cache.get('audio-1','layer-1')
   await cache.get('audio-1','layer-2')

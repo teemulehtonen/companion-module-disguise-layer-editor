@@ -284,7 +284,7 @@ class ViewerServer {
             'application/json',
             JSON.stringify({ ok: false, reason: 'Audio layer changed; retry' }),
           )
-        this.waveforms.invalidate(value.layerUid)
+        this.waveforms.invalidate(value.layerUid, true)
         this.updated = 0
         return send(200, 'application/json', JSON.stringify({ ok: true }))
       }
