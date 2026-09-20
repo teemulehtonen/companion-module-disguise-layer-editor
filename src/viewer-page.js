@@ -43,7 +43,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       const drop=anchor && timecode(anchor.probeSeconds,rate,true)===anchor.probeLabel.replace(/[.;]/g,':') && timecode(anchor.probeSeconds,rate,false)!==anchor.probeLabel.replace(/[.;]/g,':')
       const label=timecode(anchor ? anchor.seconds+entry.time-anchor.time : entry.time,rate,Boolean(drop))
       const node=el('div','drag-time-label',(entry.prefix || '')+label)
-      Object.assign(node.style,{position:'fixed',zIndex:90,pointerEvents:'none',background:'#10232fee',color:'#bdeaff',border:'1px solid #397b94',borderRadius:'4px',padding:'3px 5px',font:'11px Consolas,monospace',whiteSpace:'nowrap',top:Math.max(4,Math.min(window.innerHeight-24,clientY-28+(entry.row || 0)*24))+'px'})
+      Object.assign(node.style,{position:'fixed',zIndex:90,pointerEvents:'none',background:'#10232fee',color:'#bdeaff',border:'1px solid #397b94',borderRadius:'4px',padding:'4px 7px',font:'13px Consolas,monospace',whiteSpace:'nowrap',top:Math.max(4,Math.min(window.innerHeight-30,clientY-34+(entry.row || 0)*28))+'px'})
       document.body.append(node)
       node.style.left=Math.max(4,Math.min(window.innerWidth-node.offsetWidth-4,rect.left+x(entry.time)*rect.width/100))+'px'
       dragLabels.push(node)

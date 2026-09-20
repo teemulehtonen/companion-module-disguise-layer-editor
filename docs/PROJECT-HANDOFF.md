@@ -1,4 +1,4 @@
-# Current release — beta.145
+# Current release — beta.146
 
 curvePreviewDue limits additional native curve sampling to 100 ms per track/layer/field, not writes or validation. Skipped requests must not return stale samples as authoritative curves. Browser re-applies latest local preview after older acknowledgements; normal post-release geometry restores the complete native curve. Isolated 200-key native benchmark measured ~1.2 ms field snapshot versus ~3.2 ms including 490 curve samples; this excludes network/Companion/UI latency and is not an end-to-end speed claim.
 
