@@ -90,27 +90,16 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       points.push(item.time)
     }
     if (options.sections) for (const section of state.sections || []) points.push(section.start,section.end)
+    const objectTargets = new Set(points)
     const gridTargets = new Map()
     if (options.grid) for (const tick of state.grid || []) {
       if (tick.snapGrid && tick.time >= start && tick.time <= start+span) { points.push(tick.time); gridTargets.set(tick.time,tick.snapGrid) }
     }
     const targets = [...new Set(points.filter(t=>Number.isFinite(t) && t>=0 && t<=state.length))].sort((a,b)=>a-b)
+    targets.objectTargets = objectTargets
     targets.gridTargets = gridTargets
     targets.keyTargets = [...keyTargets].sort((a,b)=>a-b)
     return targets
-  }
-  function updateDragGuides(gesture) {
-    const e=state.editor
-    for(const line of sheet.querySelectorAll('.alignment-guide')) line.remove()
-    const points=gesture.keyMode ? [e.moveKey?.time] : [e.layerStart,e.layerEnd]
-    for(const time of points) {
-      if(!Number.isFinite(time))continue
-      const matched=gesture.alignmentPoints.some(t=>Math.abs(t-time)<1e-6)
-      if(gesture.keyMode && !matched)continue
-      const line=el('i','alignment-guide'+(matched?' matched':''))
-      line.style.left='calc(240px + (100% - 240px) * '+x(time)/100+')'
-      sheet.append(line)
-    }
   }
   function snappedTime(raw,points,bypass,width,offset=0) {
     let best = {time:raw,snap:false,snapOffset:0}, distance = Infinity, priority = Infinity
@@ -126,12 +115,12 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
         const time = candidates[index], pixels = Math.abs(time-target)*width/span
         if (pixels<=10 && (rank<priority || rank===priority && pixels<distance)) {
           distance=pixels;priority=rank
-          best={time:time-anchor,snap:true,snapOffset:anchor,...(rank && points.gridTargets?.has(time) ? {snapGrid:points.gridTargets.get(time)} : {})}
+          best={time:time-anchor,snap:true,snapOffset:anchor,...(rank && !points.objectTargets?.has(time) && points.gridTargets?.has(time) ? {snapGrid:points.gridTargets.get(time)} : {})}
         }
       }
       }
     }
-    showSnap(best.snap ? best.time+best.snapOffset : null)
+    showSnap(best.snap && !best.snapGrid ? best.time+best.snapOffset : null)
     return best
   }
   const snapButton = document.createElement('button')
@@ -638,7 +627,6 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       if (!ok) mouseGesture = null
       else if (mouseGesture === g) {
         g.token = state.editor.token
-        updateDragGuides(g)
         if (g.keyMode && state.editor.moveKey) {
           const oldTime=Number(node.dataset.keyTime), newTime=state.editor.moveKey.time
           for(const mark of sheet.querySelectorAll('[data-key-time]')) {
@@ -1325,14 +1313,6 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     sheet.replaceChildren()
     sheet.dataset.origin = start
     grid()
-    for (const guide of state.alignmentGuides || []) {
-      if (guide.time < start || guide.time > start + span) continue
-      const line = el('i', 'alignment-guide' + (guide.subtle ? ' subtle' : '') + (guide.count > 0 ? ' matched' : ''))
-      line.style.left = 'calc(240px + (100% - 240px) * ' + x(guide.time) / 100 + ')'
-      line.title = (guide.count > 0 ? 'ALIGNED\n' : '') + guide.labels.join('\n')
-      sheet.append(line)
-    }
-
     const annotations = state.annotations || {}
     const duplicateFlags=duplicateMarkerKeys(annotations.tags)
     const duplicates=new Set((annotations.tags || []).filter((tag,index)=>duplicateFlags[index]))

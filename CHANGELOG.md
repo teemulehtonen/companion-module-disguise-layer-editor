@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-beta.148
+
+- Remove passive alignment guides. Show snap guides only for object/section targets, not time or beat grid targets. Objects sharing a grid time retain their guide.
+
 ## 0.1.0-beta.147
 
 - Keep the final drag preview until fresh geometry arrives and update every parameter display copy after confirmed edits.
