@@ -1993,7 +1993,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     if (!state) return
     const external = state.externalTimecode
     $('externalTc').hidden = !external
-    $('externalTc').textContent = external ? ' \u00b7 IN: ' + (external.value || '\u2014') : ''
+    $('externalTc').textContent = external ? ' \u00b7 TC IN: ' + (external.value || '\u2014') : ''
     $('externalTc').title = external ? String(external.status || '').toUpperCase() : ''
     $('clock').textContent = state.timecode || '—'
     $('editClock').hidden = state.editor?.linkTime !== false
@@ -2245,7 +2245,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
         }
         const trackName = String(state.trackName || '').replace(/\.apx$/i, '').toUpperCase()
         const trackFps = Number(state.fps) || 25
-        $('track').textContent = trackName + ' @ ' + Number(trackFps.toFixed(3)) + ' · ' + timecode(Math.max(0,Number(state.length)||0),trackFps,false) + ' · ' + (state.quantized ? 'BEAT' : 'TC')
+        $('track').textContent = trackName + ' @ ' + Number(trackFps.toFixed(3)) + ' \u00b7 ' + timecode(Math.max(0,Number(state.length)||0),trackFps,false)
         updateEditorControls()
         $('status').textContent = state.connected ? (state.viewOnly ? 'VIEW' : 'LIVE') : 'CONNECTION LOST'
         $('status').className = state.connected ? 'live' : 'error'

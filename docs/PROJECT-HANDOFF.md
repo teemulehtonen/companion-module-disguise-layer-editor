@@ -1,4 +1,8 @@
-# Current release — 0.2.0-beta.9
+# Current release - 0.2.0-beta.10
+
+Track header: NAME @ FPS, duration, then optional TC IN: and incoming timecode. No redundant TC mode suffix. Typography remains shared.
+
+# Previous release — 0.2.0-beta.9
 
 Incoming timecode label shortened to IN:. Both track metadata and input timecode use 11px text and share UI scaling.
 
