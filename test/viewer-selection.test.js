@@ -94,6 +94,20 @@ test('viewer seek clamps and frame-snaps without moving selected keys', async ()
   assert.equal((await editor.seekFromViewer({ trackUid, time: NaN })).ok, false)
   assert.equal(JSON.stringify(client.data.layers), keys)
 })
+test('viewer seek works after refresh without a selected layer in either clock mode', async () => {
+  for (const linked of [true, false]) {
+    const client = new DemoClient(), editor = new Editor(client)
+    client.data.layers = []
+    await editor.refresh()
+    editor.setLinkTime(linked)
+    const trackUid = editor.snapshot.trackUid
+    await editor.refresh({ preserve: true })
+    assert.equal(editor.layer, undefined)
+    assert.equal((await editor.seekFromViewer({ trackUid, time: 7 })).time, 7)
+    assert.equal((await editor.seekFromViewer({ trackUid, time: 0 })).time, 0)
+  }
+})
+
 test('seek route checks token, origin and exact payload', async (t) => {
   let calls = 0
   const server = new ViewerServer({}, () => ({}), {

@@ -338,7 +338,7 @@ class Editor {
         0,
         (this.layer?.fields || []).findIndex((f) => f.name === fieldName),
       )
-      if (keep && this.layer?.uid === layerUid && this.field?.name === fieldName) {
+      if (keep && this.layer && this.layer.uid === layerUid && this.field?.name === fieldName) {
         const keys = this.field?.keys || []
         if (
           this.selectedKeyTime !== null &&

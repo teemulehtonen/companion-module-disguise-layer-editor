@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-beta.138
+
+- Fix timeline seek when no layer is selected: preserving two absent selections must not enter the existing-layer resource refresh branch. Covers linked and independent editing clocks.
+
 ## 0.1.0-beta.137
 
 - Include visible parameter rows when revealing the selected layer. If the expanded layer exceeds the viewport, follow the selected parameter instead; account for sticky timeline/audio headers and preserve manual scrolling between selection changes.

@@ -1,4 +1,6 @@
-# Current release — beta.137
+# Current release — beta.138
+
+Refresh's preserve-selection branch requires an actual layer. Undefined previous/current layer and parameter IDs otherwise compare equal and crash on mediaFields before viewer seek. Regression covers empty tracks with both linked and independent clocks. Reproduced against Designer and verified fixed at the current native time.
 
 Selection reveal includes visible parameter rows. viewer-selection-scroll.js is embedded into the browser bundle and tested as a pure geometry function: fit the entire layer block when possible, otherwise reveal the chosen parameter (fall back to the layer header). Reveal identity includes track, layer and parameter. Manual scroll remains unchanged until selection changes.
 
@@ -6,7 +8,7 @@ The normal first dial toggles LAYER/ZOOM while a browser has polled the viewer w
 
 XL uses larger 25% control text and 60% numeric keys. Timecode stays on one line at 17%. The keypad is an eight-digit shift register: explicit leading zeros are accepted, excess input replaces the oldest digit, BACK removes the newest, and pressing the time display clears input. Keep numeric input local; only JUMP refreshes Designer context.
 
-Validation: 174 local tests and package checks passed; seven isolated native section checks preserved notes and layer timing. Native timecode resolution was verified without seeking. The XL page is installed on Companion page 5 using the existing connection. Numeric input is local and bypasses stale-selection refresh; JUMP refreshes and validates the original track before resolving time.
+Validation: 175 local tests and package checks passed; seven isolated native section checks preserved notes and layer timing. Native timecode resolution was verified without seeking. The XL page is installed on Companion page 5 using the existing connection. Numeric input is local and bypasses stale-selection refresh; JUMP refreshes and validates the original track before resolving time.
 
 Maintain both generated Companion pages through scripts/build-page.cjs. The XL export shares preset definitions and Plus typography; never maintain a hand-exported page containing user settings. The builder must preserve feedback options (timing slot / playback operation) and both foreground/background overrides. test/xl-page.test.js guards these contracts. release.ps1 includes both pages in the install ZIP; GitHub releases must attach both page assets.
 
