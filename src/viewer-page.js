@@ -1902,6 +1902,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       if (right >= left) {
         const clip = selectionButton(layer, layer.name)
         clip.className = 'clip'
+        if(layer.group) {clip.disabled=false;clip.onclick=()=>{}} 
         const clipLabel = el('span', 'clip-label', layer.name)
         if (layer.playback?.mode) clipLabel.append(el('span', 'playback-mode', ' ' + layer.playback.mode.toUpperCase()))
         const endpoint = layer.playback?.endpoint
