@@ -899,6 +899,28 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       const context=el('div','',state.editor.moveKey ? 'KEYFRAME · '+Number(state.editor.moveKey.time.toFixed(3))+' S' : 'CONSTANT')
       Object.assign(context.style,{color:'#849aa5',fontSize:'10px',margin:'4px 0 8px'})
       panel.append(context)
+      const precisionRow=el('div','')
+      Object.assign(precisionRow.style,{display:'flex',gap:'4px',margin:'6px 0'})
+      for(const [index,mode] of ['coarse','fine','ultra'].entries()) {
+        const button=el('button','');button.type='button'
+        button.title=mode.toUpperCase();button.setAttribute('aria-label',mode.toUpperCase())
+        button.setAttribute('aria-pressed',String(state.editor.precision===mode))
+        Object.assign(button.style,{width:'30px',height:'24px',padding:'3px'})
+        const svg=document.createElementNS('http://www.w3.org/2000/svg','svg')
+        svg.setAttribute('viewBox','0 0 24 16');svg.setAttribute('width','22');svg.setAttribute('height','16')
+        for(let i=0;i<=index;i++) {
+          const line=document.createElementNS(svg.namespaceURI,'path')
+          const y=8+(i-index/2)*4
+          line.setAttribute('d','M4 '+y+'H20');line.setAttribute('stroke','currentColor');line.setAttribute('stroke-width',String(3-index*.7))
+          svg.append(line)
+        }
+        button.append(svg)
+        button.onclick=()=>{closeKeyMenu();void interact(async()=>{
+          for(let n=0;n<2 && state.editor.precision!==mode;n++) if(!await sendEdit('fine'))break
+        })}
+        precisionRow.append(button)
+      }
+      panel.append(precisionRow)
       const apply=async value=>{if(await sendEdit('value_set',{token,expectedValue,targetValue:value}))closeKeyMenu()}
       if(field.choices?.length) {
         for(const choice of field.choices) {
