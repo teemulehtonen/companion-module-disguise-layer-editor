@@ -1,4 +1,6 @@
-# Current release — beta.144
+# Current release — beta.145
+
+curvePreviewDue limits additional native curve sampling to 100 ms per track/layer/field, not writes or validation. Skipped requests must not return stale samples as authoritative curves. Browser re-applies latest local preview after older acknowledgements; normal post-release geometry restores the complete native curve. Isolated 200-key native benchmark measured ~1.2 ms field snapshot versus ~3.2 ms including 490 curve samples; this excludes network/Companion/UI latency and is not an end-to-end speed claim.
 
 Parameter gear/reset use parameter_sequence, strict request schema and current selection token. Native code validates locks, active edit time and expected sequencing before evaluating current/default values. Clear/reset reuse reset_sequence_to_constant and cover keys outside layer bounds. Enable writes native current resource/float at edit time (numeric SMOOTH). Confirmation binds to the selected parameter token. Eight isolated native assertions passed for FloatSequence and ResourceSequence.
 

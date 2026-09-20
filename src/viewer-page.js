@@ -639,6 +639,9 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
           if (action === 'field') node.style.width = (x(e.layerEnd)-x(e.layerStart))+'%'
         }
       }
+      // Acknowledgement may describe an older pointer position. Keep the newest
+      // local preview visible while the next guarded write is queued.
+      if(mouseGesture===g && !g.released && Math.max(Math.abs(g.lastX-g.x),Math.abs(g.lastY-g.y))>=2) preview(g)
       if (mouseGesture === g && g.released) end({type:'pointerup'})
       else if(mouseGesture===g && g.lastEvent && Math.max(Math.abs(g.lastX-g.x),Math.abs(g.lastY-g.y))>=2) void move(g.lastEvent)
     }

@@ -1,4 +1,5 @@
 'use strict'
+const { curvePreviewDue } = require('./viewer-curve-preview')
 const { createHash } = require('node:crypto')
 const { actions } = require('./definitions')
 const { absoluteTimecode } = require('./timecode')
@@ -244,12 +245,14 @@ async function editFromViewerCommand(editor, request) {
     if (!Number.isFinite(delta)) return {ok:false,reason:'KEYFRAME VALUE UNAVAILABLE'}
     // Reuse native bounds, integer rounding and expected-key validation. Compensate
     // encoder precision because this delta already represents the pointer position.
-    if (Math.abs(delta) > 1e-9) await editor.adjustLiveValue(Math.sign(delta),Math.abs(delta)*(editor.field.integer ? 1 : editor.precision === 'ultra' ? 100 : editor.fine ? 10 : 1),{previewCurve:true})
-    return {ok:true,editor:describeEditor(editor),curve:editor.field?.samples}
+    const previewCurve=curvePreviewDue(editor)
+    if (Math.abs(delta) > 1e-9) await editor.adjustLiveValue(Math.sign(delta),Math.abs(delta)*(editor.field.integer ? 1 : editor.precision === 'ultra' ? 100 : editor.fine ? 10 : 1),{previewCurve})
+    return {ok:true,editor:describeEditor(editor),curve:previewCurve ? editor.field?.samples : undefined}
   }
   if (request.action === 'drag_time') {
     if (editor.mediaMode || editor.clearKeysBrowser) return {ok:false,reason:'CLOSE THE RESOURCE OR DELETE MENU FIRST'}
-    const pointer = {targetTime:request.targetTime,targetValue:request.targetValue,snap:request.snap,snapOffset:request.snapOffset || 0,snapGrid:request.snapGrid,previewCurve:true}
+    const previewCurve=request.mode==='key' && curvePreviewDue(editor)
+    const pointer = {targetTime:request.targetTime,targetValue:request.targetValue,snap:request.snap,snapOffset:request.snapOffset || 0,snapGrid:request.snapGrid,previewCurve}
     if (request.mode === 'key') {
       if (!editor.moveKey) return {ok:false,reason:'SELECT A KEYFRAME FIRST'}
       if (request.targetValue !== undefined && (editor.field?.resource || editor.field?.choices?.length))
@@ -259,7 +262,7 @@ async function editFromViewerCommand(editor, request) {
       if (editor.layerEdit !== 'edit') return {ok:false,reason:'SELECT LAYER EDIT FIRST'}
       await editor.adjustLayerTiming(request.mode,1,pointer)
     }
-    return {ok:true,editor:describeEditor(editor),curve:request.mode === 'key' ? editor.field?.samples : undefined}
+    return {ok:true,editor:describeEditor(editor),curve:previewCurve ? editor.field?.samples : undefined}
   }
   if (request.action === 'parameter_sequence') {
     if (!editor.layer || editor.moveKey || editor.layerEdit || editor.clearKeysBrowser) return {ok:false,reason:'RELEASE THE CURRENT EDIT FIRST'}
