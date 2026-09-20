@@ -27,6 +27,24 @@ class ViewerServer {
     this.pickerThumbnails = new Set()
     this.waveforms = new WaveformCache(client, options)
     this.selectionToken = randomBytes(24).toString('hex')
+    this.zoomSteps = 0
+    this.zoomMode = false
+    this.lastViewerRead = 0
+  }
+  zoomAvailable(now = Date.now()) {
+    if (this.closed || !this.lastViewerRead || now - this.lastViewerRead > 3000) {
+      this.zoomMode = false
+      return false
+    }
+    return true
+  }
+  toggleZoom() {
+    if (this.zoomAvailable()) this.zoomMode = !this.zoomMode
+  }
+  rotateZoom(direction) {
+    if (!this.zoomAvailable() || !this.zoomMode) return false
+    if (Number.isFinite(direction)) this.zoomSteps += Math.sign(direction)
+    return true
   }
   async start(port = 8765, lan = false) {
     if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('Invalid viewer port')
@@ -179,12 +197,15 @@ class ViewerServer {
     try {
       const url = new URL(req.url, 'http://localhost')
       if (['GET', 'HEAD'].includes(req.method) && url.pathname === '/api/live') {
+        this.zoomAvailable()
+        this.lastViewerRead = Date.now()
         const current = this.context()
         return send(
           200,
           'application/json',
           JSON.stringify({
             ...current,
+            viewerZoom: { session: this.selectionToken, steps: this.zoomSteps },
             alignmentGuides:
               this.cache?.trackUid === current.trackUid ? alignmentGuides(this.cache, current) : [],
           }),

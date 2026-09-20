@@ -1,8 +1,10 @@
-# Current release — beta.135
+# Current release — beta.136
+
+The normal first dial toggles LAYER/ZOOM while a browser has polled the viewer within three seconds. ViewerServer owns a cumulative zoom counter, consumed once per browser through the lightweight live channel; rotation never writes Designer data. Browser reload/visibility changes reset the cursor to prevent replay. Existing resource, layer-edit and selected-key modes keep their normal routing. Closing the viewer expires zoom mode. Zoom uses the existing active-playhead-centred browser function. After draw, a changed track/layer identity reveals its header vertically, accounting for sticky annotation/audio rows; routine redraws retain manual scroll.
 
 XL uses larger 25% control text and 60% numeric keys. Timecode stays on one line at 17%. The keypad is an eight-digit shift register: explicit leading zeros are accepted, excess input replaces the oldest digit, BACK removes the newest, and pressing the time display clears input. Keep numeric input local; only JUMP refreshes Designer context.
 
-Validation: 172 local tests and package checks passed; seven isolated native section checks preserved notes and layer timing. Native timecode resolution was verified without seeking. The XL page is installed on Companion page 5 using the existing connection. Numeric input is local and bypasses stale-selection refresh; JUMP refreshes and validates the original track before resolving time.
+Validation: 173 local tests and package checks passed; seven isolated native section checks preserved notes and layer timing. Native timecode resolution was verified without seeking. The XL page is installed on Companion page 5 using the existing connection. Numeric input is local and bypasses stale-selection refresh; JUMP refreshes and validates the original track before resolving time.
 
 Maintain both generated Companion pages through scripts/build-page.cjs. The XL export shares preset definitions and Plus typography; never maintain a hand-exported page containing user settings. The builder must preserve feedback options (timing slot / playback operation) and both foreground/background overrides. test/xl-page.test.js guards these contracts. release.ps1 includes both pages in the install ZIP; GitHub releases must attach both page assets.
 

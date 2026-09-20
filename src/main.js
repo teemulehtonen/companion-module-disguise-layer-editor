@@ -765,6 +765,11 @@ class DisguiseLayerControl extends InstanceBase {
       padVars.dial_title_3 = ''
       padVars.dial_value_3 = 'BACK'
     }
+    if (this.viewer?.zoomAvailable() && this.viewer.zoomMode && !mediaMode && !e?.layerEdit && !e?.moveKey && !clearBrowser) {
+      padVars.dial_title_0 = 'ZOOM'
+      padVars.dial_value_0 = 'VIEWER'
+      padVars.dial_info_0 = '− / +'
+    }
     // Capitalise display text only. Resource paths, parameter IDs, image data
     // and public raw-value variables must retain their original case.
     for (const name of Object.keys(padVars)) {

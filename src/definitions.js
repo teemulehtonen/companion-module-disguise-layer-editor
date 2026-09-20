@@ -58,7 +58,9 @@ function actions(instance) {
         ? e.adjustLayerTiming('in', Number(o.direction))
         : e.mediaMode
           ? e.selectMediaField(Number(o.direction))
-          : e.selectLive('layer', Number(o.direction)),
+          : !e.moveKey && !e.layerEdit && instance.viewer?.rotateZoom(Number(o.direction))
+            ? undefined
+            : e.selectLive('layer', Number(o.direction)),
     ),
     field: action('Select parameter / media folder', [direction], (e, o) =>
       e.layerEdit === 'edit'
@@ -94,7 +96,7 @@ function actions(instance) {
     value_press: action('Add numeric keyframe / confirm media and return', [], (e) => e.pressValue()),
     layer_edit: action('Open layer timing editor / return', [], (e) => e.toggleLayerEditor()),
     layer_press: action('Layer timing step / resource write mode', [], (e) =>
-      e.layerEdit === 'edit' ? e.cycleLayerStep() : e.mediaMode ? e.toggleMediaKeyframe() : undefined,
+      e.layerEdit === 'edit' ? e.cycleLayerStep() : e.mediaMode ? e.toggleMediaKeyframe() : !e.moveKey && !e.layerEdit ? instance.viewer?.toggleZoom() : undefined,
     ),
     constant_set: action('Apply constant value (unsequenced parameter only)', [], (e) =>
       e.write('constant_set'),

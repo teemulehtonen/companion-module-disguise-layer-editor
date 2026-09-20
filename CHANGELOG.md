@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.0-beta.136
+
+- Press the first dial in normal mode to toggle LAYER/ZOOM while a viewer is active. Rotate to zoom around the editing playhead; other editing modes retain their controls.
+- Reveal the selected layer vertically when selection changes, without overriding manual scrolling on routine refreshes.
+
 ## 0.1.0-beta.135
 
 - Add a maintained Stream Deck XL page: adaptive steps, playback-state highlights, section controls and a permanent timecode keypad with automatic separators.

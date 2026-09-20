@@ -6,7 +6,7 @@ Disguise layer, keyframe and resource control for Bitfocus Companion and Stream 
 
 ## Install
 
-**Downloads (beta.135):** [Companion module](../../releases/download/v0.1.0-beta.135/disguise-layer-control-0.1.0-beta.135.tgz) · [Stream Deck XL page](../../releases/download/v0.1.0-beta.135/D3-Stream-Deck-XL.companionconfig) · [Companion page](../../releases/download/v0.1.0-beta.135/D3-Stream-Deck-Plus.companionconfig)
+**Downloads (beta.136):** [Companion module](../../releases/download/v0.1.0-beta.136/disguise-layer-control-0.1.0-beta.136.tgz) · [Stream Deck XL page](../../releases/download/v0.1.0-beta.136/D3-Stream-Deck-XL.companionconfig) · [Companion page](../../releases/download/v0.1.0-beta.136/D3-Stream-Deck-Plus.companionconfig)
 
 Tested with Designer 32.4.17 and Companion 5.0.5.
 
@@ -14,6 +14,8 @@ Tested with Designer 32.4.17 and Companion 5.0.5.
 2. In Companion, import `disguise-layer-control-<version>.tgz` under **Modules**. Add **Disguise Layer Editor** and enter the Designer host and port (default 80).
 3. Import `D3-Stream-Deck-Plus.companionconfig`, choose a destination page and link the connection. Import replaces that page; export it first if needed.
 4. Assign Stream Deck + to that page. **HTTP + SYNC** indicates automatic feedback.
+
+With the viewer open, press the first dial in normal mode to switch **LAYER / ZOOM**. Zoom follows the active editing playhead. Selecting another layer scrolls it into view; closing or hiding the viewer expires zoom mode after three seconds.
 
 ## Stream Deck XL
 

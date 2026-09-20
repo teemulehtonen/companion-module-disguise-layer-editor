@@ -1210,6 +1210,7 @@ function browserMain(applyEditPatch, discreteSegments) {
     r.lane.append(svg)
 
   }
+  let revealedLayer = ''
   function draw() {
     if (mouseGesture || layerReorder || editPending || interactionBusy) return
     if (!state || resizingWaveform) return
@@ -1509,6 +1510,18 @@ function browserMain(applyEditPatch, discreteSegments) {
       if (target.hasAttribute('aria-label')) target.setAttribute('aria-label', target.getAttribute('aria-label').toUpperCase())
     }
     viewport.scrollTop = top
+    const focus = state.trackUid + ':' + state.focusUid
+    if (state.focusUid && focus !== revealedLayer) {
+      const selected = [...sheet.querySelectorAll('.layer[data-uid]')].find(node => node.dataset.uid === state.focusUid)
+      if (selected) {
+        revealedLayer = focus
+        const headers = [...sheet.querySelectorAll('.timeline-header, .track-waveform')].reduce((height, node) => height + node.offsetHeight, 0)
+        const upper = selected.offsetTop - headers - 8
+        const lower = selected.offsetTop + selected.offsetHeight + 8 - viewport.clientHeight
+        if (top > upper) viewport.scrollTop = Math.max(0, upper)
+        else if (top < lower) viewport.scrollTop = Math.max(0, lower)
+      }
+    }
     updatePlayhead()
   }
   function updatePlayhead() {
@@ -1656,6 +1669,8 @@ function browserMain(applyEditPatch, discreteSegments) {
   new ResizeObserver(() => draw()).observe(viewport)
   // Keep small live reads independent of expensive geometry/thumbnail snapshots.
   let latestLive = null
+  let viewerZoomCursor = null
+  document.addEventListener('visibilitychange', () => { viewerZoomCursor = null })
   async function pollLive() {
     try {
       if (!document.hidden && state) {
@@ -1677,6 +1692,12 @@ function browserMain(applyEditPatch, discreteSegments) {
           const { contentRevision, tempoKey, ...live } = incoming
           const currentEditor = state.editor
           Object.assign(state, live)
+          const command = incoming.viewerZoom
+          if (command && Number.isFinite(command.steps)) {
+            const delta = viewerZoomCursor?.session === command.session ? command.steps - viewerZoomCursor.steps : 0
+            viewerZoomCursor = command
+            if (delta) zoom(Math.pow(1.2, -Math.max(-100, Math.min(100, delta))))
+          }
           if (editPending || interactionBusy || mouseGesture) state.editor = currentEditor
           updateEditorControls()
           if (selectionChanged && !resizingWaveform) draw()
