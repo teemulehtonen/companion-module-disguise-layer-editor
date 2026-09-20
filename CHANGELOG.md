@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.0-beta.2
+
+- Shift-drag selects keys on one parameter row with a turquoise marquee. Move/delete groups through the shared editor. Mouse uses the grabbed member as anchor; Stream Deck uses the first key. Group value/type changes are disabled. Native group writes validate bounds, identity and collisions before modification.
+
 ## 0.2.0-beta.1
 
 - Start the 0.2 beta series from 0.1.0-beta.159. No runtime behavior changes.

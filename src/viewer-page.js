@@ -296,7 +296,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
   async function selectTarget(layer, parameter, point, keyTime) {
     const e = state?.editor
     if (e?.moveKey) {
-      if (e.layerUid === layer.uid && e.parameter === parameter && point === 'key' && Math.abs(e.moveKey.time-keyTime) < 1e-6) return true
+      if (e.layerUid === layer.uid && e.parameter === parameter && point === 'key' && (e.moveKey.group || [e.moveKey]).some(k=>Math.abs(k.time-keyTime)<1e-6)) return true
     }
     if (!await releaseViewerMode()) return false
     const response = await fetch('/api/select', {method:'POST',
@@ -362,7 +362,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
   function updateEditorControls() {
     const selected=state?.editor
     for(const mark of sheet.querySelectorAll('[data-key-time]')) {
-      const active=Boolean(selected?.moveKey && mark.dataset.keyLayer===selected.layerUid && mark.dataset.keyParameter===selected.parameter && Math.abs(Number(mark.dataset.keyTime)-selected.moveKey.time)<1e-6)
+      const active=Boolean(selected?.moveKey && mark.dataset.keyLayer===selected.layerUid && mark.dataset.keyParameter===selected.parameter && (selected.moveKey.group || [selected.moveKey]).some(k=>Math.abs(Number(mark.dataset.keyTime)-k.time)<1e-6))
       mark.classList.toggle('selected-keyframe',active)
     }
 
@@ -537,9 +537,14 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       g.previewFrame=0
       if (mouseGesture!==g || !g.moved) return
       const target=snappedTime(g.originTime+(g.lastX-g.originX)*span/g.width,g.points,g.lastEvent?.altKey,g.width,!g.keyMode && action==='field' ? g.layerEnd-g.layerStart : 0)
-      const time=Math.max(g.layerStart,Math.min(g.layerEnd,target.time))
+      const time=g.group ? Math.max(g.originTime+g.layerStart-g.group[0].time,Math.min(g.originTime+g.layerEnd-g.group.at(-1).time,target.time)) : Math.max(g.layerStart,Math.min(g.layerEnd,target.time))
       const destination=g.keyMode ? time : Math.max(0,Math.min(action==='field' ? state.length-(g.layerEnd-g.layerStart) : state.length,target.time))
       showDragTimes(!g.keyMode && action==='field' ? [{time:destination,prefix:'IN '},{time:Math.min(state.length,destination+g.layerEnd-g.layerStart),prefix:'OUT ',row:1}] : [{time:destination}],g.lastY,node.parentElement)
+      if(g.group) {
+        const delta=time-g.originTime
+        for(const part of g.groupParts)part.node.style.left=x(part.time+delta)+'%'
+        return
+      }
       if (g.keyMode) {
         for(const mark of g.keyParts) mark.style.left=x(time)+'%'
         const lo=Number(node.dataset.curveMin),hi=Number(node.dataset.curveMax)
@@ -590,17 +595,20 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       const currentKeyTime = parameter === undefined ? undefined : Number(node.dataset.keyTime)
       const field=[...(layer.fields || []),...(layer.resources || [])].find(f=>f.name===parameter)
       const keys=(field?.keys || []).filter(k=>k.time>=layer.start && k.time<=layer.end).sort((a,b)=>a.time-b.time)
+      const group=state.editor?.layerUid===layer.uid && state.editor.parameter===parameter && state.editor.moveKey?.group?.some(k=>Math.abs(k.time-currentKeyTime)<1e-6) ? state.editor.moveKey.group.map(k=>({...k})) : null
+      const anchor=group && Math.abs(currentKeyTime-group.at(-1).time)<Math.abs(currentKeyTime-group[0].time)?'last':'first'
       const selected=keys.find(k=>Math.abs(k.time-currentKeyTime)<1e-5)
       node.setPointerCapture(event.pointerId)
       const layerLanes=[...sheet.querySelectorAll('[data-owner-layer],.layer[data-uid]')]
         .filter(row=>(row.dataset.ownerLayer || row.dataset.uid)===layer.uid).map(row=>row.querySelector('.lane')).filter(Boolean)
       const keyParts=parameter===undefined ? [] : [...sheet.querySelectorAll('[data-key-time]')].filter(mark=>mark.dataset.keyLayer===layer.uid && mark.dataset.keyParameter===parameter && Math.abs(Number(mark.dataset.keyTime)-currentKeyTime)<1e-6)
       const layerParts=layerLanes.flatMap(lane=>[...lane.children].map(child=>({node:child,kind:child.dataset.layerEdge || (child.classList.contains('clip')?'clip':'content')})))
-      mouseGesture = {keyParts,layerStart:layer.start,layerEnd:layer.end,layerLanes,layerParts,node,x:event.clientX,y:event.clientY,lastX:event.clientX,lastY:event.clientY,originX:event.clientX,
+      const groupParts=group?[...sheet.querySelectorAll('[data-key-time]')].filter(mark=>mark.dataset.keyLayer===layer.uid && mark.dataset.keyParameter===parameter && group.some(k=>Math.abs(k.time-Number(mark.dataset.keyTime))<1e-6)).map(node=>({node,time:Number(node.dataset.keyTime)})):[]
+      mouseGesture = {group,anchor,groupParts,keyParts,layerStart:layer.start,layerEnd:layer.end,layerLanes,layerParts,node,x:event.clientX,y:event.clientY,lastX:event.clientX,lastY:event.clientY,originX:event.clientX,
         originY:event.clientY,
         originValue:selected?.value,samples:field?.samples?.map(s=>({...s})),
         neighbours:[keys.filter(k=>k.time<currentKeyTime).at(-1)?.time ?? layer.start,keys.find(k=>k.time>currentKeyTime)?.time ?? layer.end],
-        originTime:parameter !== undefined ? currentKeyTime : action === 'value' ? layer.end : layer.start,
+        originTime:group ? currentKeyTime : parameter !== undefined ? currentKeyTime : action === 'value' ? layer.end : layer.start,
         width:node.parentElement.getBoundingClientRect().width,points:snapPoints(layer.uid,parameter,currentKeyTime),
         alignmentPoints:snapPoints(layer.uid,undefined,undefined,undefined,{edges:true,keys:true}),
         keyMode:parameter !== undefined,action,ready:false,preparing:false,moved:false,token:state.editor.token}
@@ -612,6 +620,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       g.lastX = event.clientX; g.lastY = event.clientY
       if(Math.max(Math.abs(g.lastX-g.originX),Math.abs(g.lastY-g.originY))>=5) g.moved=true
       if(!g.previewFrame) g.previewFrame=requestAnimationFrame(()=>preview(g))
+      if(g.group && !g.groupFiltered){const points=g.points;g.points=points.filter(t=>!g.group.some(k=>Math.abs(k.time-t)<1e-6));g.points.gridTargets=points.gridTargets;g.points.objectTargets=points.objectTargets;g.points.keyTargets=points.keyTargets.filter(t=>!g.group.some(k=>Math.abs(k.time-t)<1e-6));g.groupFiltered=true}
       if (g.preparing || editPending) return
       const dx = g.lastX-g.x, dy = g.y-g.lastY
       if (Math.max(Math.abs(dx),Math.abs(dy)) < (g.ready ? 2 : 5)) return
@@ -638,7 +647,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       }
       const field = [...(layer.fields || []),...(layer.resources || [])].find(f=>f.name === parameter)
       const resourceKey = g.keyMode && field && ('current' in field || field.resource || field.discrete || field.choices?.length || field.choiceError)
-      const vertical = g.keyMode && !resourceKey && Math.abs(dy) > Math.abs(dx)
+      const vertical = !g.group && g.keyMode && !resourceKey && Math.abs(dy) > Math.abs(dx)
       if (resourceKey && Math.abs(dx)<2) {
         g.y=g.lastY
         if(g.released) end({type:'pointerup'})
@@ -647,7 +656,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       // One shared encoder action in flight. Never build a backlog of old drags.
       g.x = g.lastX; g.y = g.lastY
       const target = snappedTime(g.originTime+(g.lastX-g.originX)*span/g.width,g.points,event.altKey,g.width,!g.keyMode && action === 'field' ? g.layerEnd-g.layerStart : 0)
-      const numeric = g.keyMode && Number.isFinite(g.originValue) && node.dataset.curveMin !== undefined && !field?.choices?.length
+      const numeric = !g.group && g.keyMode && Number.isFinite(g.originValue) && node.dataset.curveMin !== undefined && !field?.choices?.length
       let ok
       g.preparing = true
       try {
@@ -657,12 +666,15 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
           ? await sendEdit('drag_time',{mode:'key',targetTime:target.time,targetValue,snap:target.snap,snapGrid:target.snapGrid})
           : vertical
         ? await sendEdit('value',{direction:dy > 0 ? 1 : -1})
-        : await sendEdit('drag_time',{mode:g.keyMode ? 'key' : action === 'layer' ? 'in' : action === 'value' ? 'out' : 'move',targetTime:target.time,snap:target.snap,snapGrid:target.snapGrid,...(target.snapOffset ? {snapOffset:target.snapOffset} : {})})
+        : await sendEdit('drag_time',{...(g.group?{anchorTime:Number(node.dataset.keyTime)}:{}),mode:g.keyMode ? 'key' : action === 'layer' ? 'in' : action === 'value' ? 'out' : 'move',targetTime:target.time,snap:target.snap,snapGrid:target.snapGrid,...(target.snapOffset ? {snapOffset:target.snapOffset} : {})})
       } finally { g.preparing = false }
       if (!ok) mouseGesture = null
       else if (mouseGesture === g) {
         g.token = state.editor.token
-        if (g.keyMode && state.editor.moveKey) {
+        if(g.group && state.editor.moveKey?.group) {
+          const shift=state.editor.moveKey.group[0].time-g.group[0].time
+          for(const part of g.groupParts){part.node.dataset.keyTime=String(part.time+shift);part.node.style.left=x(part.time+shift)+'%'}
+        } else if (g.keyMode && state.editor.moveKey) {
           const oldTime=Number(node.dataset.keyTime), newTime=state.editor.moveKey.time
           for(const mark of sheet.querySelectorAll('[data-key-time]')) {
             if(mark.dataset.keyLayer===layer.uid && mark.dataset.keyParameter===parameter && Math.abs(Number(mark.dataset.keyTime)-oldTime)<1e-6) {
@@ -694,7 +706,8 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       const g = mouseGesture
       if (event.type === 'pointerup' || g.released) {
         g.released = true
-        if (g.preparing || editPending) return
+        if(g.group && !g.groupFiltered){const points=g.points;g.points=points.filter(t=>!g.group.some(k=>Math.abs(k.time-t)<1e-6));g.points.gridTargets=points.gridTargets;g.points.objectTargets=points.objectTargets;g.points.keyTargets=points.keyTargets.filter(t=>!g.group.some(k=>Math.abs(k.time-t)<1e-6));g.groupFiltered=true}
+      if (g.preparing || editPending) return
         if (g.ready && g.lastEvent && Math.max(Math.abs(g.lastX-g.x),Math.abs(g.lastY-g.y)) >= 2) {
           void move(g.lastEvent)
           return
@@ -871,7 +884,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     const field=layer?.fields?.find(f=>f.name===e?.parameter)
     if(event.target.closest('input,textarea,select,[contenteditable="true"],.key-edit-menu,.resource-picker') ||
       event.ctrlKey || event.shiftKey || event.altKey || event.metaKey || !event.deltaY ||
-      !state?.editEnabled || !state.connected || !e?.moveKey || e.mediaMode || e.layerEdit ||
+      !state?.editEnabled || !state.connected || !e?.moveKey || e.moveKey.group || e.mediaMode || e.layerEdit ||
       !field || field.resource || field.discrete || field.choices?.length || field.choiceError || mouseGesture) return
     const identity=wheelIdentity()
     if((editPending || interactionBusy) && !wheelEdit) return
@@ -924,7 +937,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       clickTimer = setTimeout(() => void interact(async () => {
         try {
           if (point === 'key') {
-            if (await chooseKey(layer,parameter,currentTime()) && resource && state.editEnabled && !state.editor.mediaMode) await sendEdit('media')
+            if (await chooseKey(layer,parameter,currentTime()) && !state.editor.moveKey?.group && resource && state.editEnabled && !state.editor.mediaMode) await sendEdit('media')
           }
           else await selectTarget(layer,parameter,point,currentTime())
         } catch { $('selectionMessage').textContent = 'SELECTION UNAVAILABLE' }
@@ -936,7 +949,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     const resource = layer.resources?.some(f=>f.name === parameter) || layer.fields?.some(f=>f.name === parameter && f.resource)
     node.ondblclick = event => {
       event.preventDefault(); event.stopPropagation(); clearTimeout(clickTimer)
-      if (!state.editEnabled || !resource) return
+      if (!state.editEnabled || !resource || state.editor.moveKey?.group) return
       void interact(async () => {
         if (await chooseKey(layer,parameter,currentTime()) && !state.editor.mediaMode) await sendEdit('media')
       })
@@ -952,6 +965,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
   function valueMenu(layer,field,event,keyTime) {
     if (!state.editEnabled || field.unsupported || field.resource || 'current' in field) return
     event.preventDefault();event.stopPropagation();clearTimeout(clickTimer)
+    if(state.editor?.moveKey?.group)return
     const px=event.clientX,py=event.clientY
     void interact(async()=>{
       if (field.sequenced) {
@@ -1018,6 +1032,34 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       document.body.append(panel)
       panel.querySelector('input')?.focus()
     })
+  }
+  function marqueeKeys(lane,layer,field) {
+    lane.addEventListener('pointerdown',event=>{
+      if(event.button!==0 || !event.shiftKey || event.ctrlKey || event.altKey || !state.editEnabled || editPending || interactionBusy || mouseGesture)return
+      event.preventDefault();event.stopPropagation();clearTimeout(clickTimer)
+      const rect=lane.getBoundingClientRect(), origin=event.clientX
+      const overlay=el('div','key-marquee')
+      Object.assign(overlay.style,{position:'absolute',top:'0',bottom:'0',background:'#0699b244',border:'1px solid #63d4e7',pointerEvents:'none',zIndex:8})
+      lane.append(overlay);lane.setPointerCapture(event.pointerId)
+      const g={marquee:true,node:lane};mouseGesture=g
+      let endX=origin
+      const move=e=>{endX=e.clientX;overlay.style.left=Math.max(0,Math.min(origin,endX)-rect.left)+'px';overlay.style.width=Math.abs(endX-origin)+'px'}
+      const finish=e=>{
+        lane.removeEventListener('pointermove',move);lane.removeEventListener('pointerup',finish);lane.removeEventListener('pointercancel',finish)
+        overlay.remove();if(mouseGesture===g)mouseGesture=null
+        suppressClickUntil=performance.now()+400
+        if(e.type!=='pointerup')return
+        const a=start+(Math.min(origin,endX)-rect.left)/rect.width*span,b=start+(Math.max(origin,endX)-rect.left)/rect.width*span
+        const keys=(field.keys || []).filter(k=>k.time>=Math.max(layer.start,a) && k.time<=Math.min(layer.end,b)).sort((a,b)=>a.time-b.time)
+        if(!keys.length)return
+        void interact(async()=>{
+          if(!await releaseViewerMode() || !await selectTarget(layer,field.name,'key',keys[0].time))return
+          if(keys.length===1)await sendEdit('key_move',{keyTime:keys[0].time})
+          else await sendEdit('key_group_select',{times:keys.map(k=>k.time)})
+        })
+      }
+      lane.addEventListener('pointermove',move);lane.addEventListener('pointerup',finish);lane.addEventListener('pointercancel',finish);move(event)
+    },true)
   }
   function addKeyAtPointer(lane,layer,field) {
     lane.ondblclick = event => {
@@ -1685,6 +1727,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
             'parameter' + (field.name === state.parameter ? ' selected' : ''),
           )
           addKeyAtPointer(p.lane,layer,field)
+          marqueeKeys(p.lane,layer,field)
           p.side.replaceChildren(selectionButton(layer, field.label || field.name, field.name))
           if(state.editEnabled && !field.unsupported) {
             const tools=el('span','wave-controls')
@@ -2056,6 +2099,6 @@ const stylesheet = `
 .key-point.selected-keyframe,.curve-key.selected-keyframe{scale:1.4;z-index:4}.timeline-target,.clip{touch-action:none}.key-edit-menu[hidden]{display:none}.snap-option{display:flex;align-items:center;gap:7px;padding:6px 8px;font-size:10px;white-space:nowrap;cursor:pointer}.snap-guide{position:absolute;top:0;bottom:0;width:2px;background:#ffc580;box-shadow:0 0 5px #ffc58088;z-index:8;pointer-events:none}.key-edit-menu input{background:#101a20;color:#eef4f6;border:1px solid #44616f;border-radius:3px;padding:5px}.key-edit-menu strong{font-size:11px}
 :root{color-scheme:dark;font:12px 'Segoe UI',Arial,sans-serif;background:#101517;color:#eef4f6}*{box-sizing:border-box}body{margin:0;height:100vh;display:flex;flex-direction:column;overflow:hidden}header,.toolbar{display:flex;align-items:center;gap:14px;padding:16px 22px;border-bottom:1px solid #29363d}header{height:82px;min-height:82px;padding:5px 16px;position:relative}#status{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.08em}#status:before{content:'';width:8px;height:8px;border-radius:50%;background:#849aa5}#status.live:before{background:#43e68c;animation:live-pulse 1.4s ease-in-out infinite}#status.error:before{background:#ffc580}@keyframes live-pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 #43e68c44}50%{opacity:.45;box-shadow:0 0 0 4px #43e68c00}}@media(prefers-reduced-motion:reduce){#status.live:before{animation:none}}h1{font-size:15px;letter-spacing:.08em;margin:0}.brand-logo{position:relative;width:72px;height:41px;overflow:hidden;flex-shrink:0;align-self:center}.brand-logo img{position:absolute;top:-19px;left:-4px;width:80px;height:80px}header small{display:block;color:#849aa5;margin-top:5px;letter-spacing:.15em}.spacer{flex:1}#clockBlock{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;max-width:40%;line-height:1.2}#editClock{font:14px Consolas,monospace;color:#4aaaff;line-height:16px}#clock{color:#43e68c;font:24px Consolas,monospace;white-space:nowrap}#beat{font:12px Consolas,monospace;color:#8bcbd6;margin-left:10px}#clockDetails{font-size:12px;color:#9eb6c2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:15px}#sectionRemaining{font:14px Consolas,monospace;color:#8bcbd6;min-height:17px}#sectionRemaining.ending{color:#ff6268}.live{color:#43e68c}.error{color:#ffc580}.toolbar{padding:4px 16px;gap:7px;flex-wrap:wrap;min-height:32px}.toolbar button{padding:3px 7px;font-size:10px;line-height:16px;border-radius:4px}.toolbar #track{font-size:11px}button{background:#1b272d;border:1px solid #34444d;border-radius:5px;color:#d4e2e8;padding:7px 10px;cursor:pointer}button[aria-pressed=true]{border-color:#0699b2;color:#63d4e7}button:focus-visible{outline:2px solid #43e68c}#viewport{flex:1;overflow:auto;margin:7px 12px;border:1px solid #29363d;border-radius:6px;min-height:0}#sheet{position:relative;min-width:760px;overflow:clip;min-height:100%}.row{display:grid;grid-template-columns:240px 1fr;position:relative;min-height:54px;border-bottom:1px solid #26343b}.label{background:#151e23;padding:10px 12px;display:flex;gap:9px;align-items:center;z-index:3;border-right:1px solid #29363d;min-width:0;overflow:hidden}.layer{height:52px;min-height:52px}.layer>.label{position:relative;padding-top:14px;padding-bottom:4px}.layer>.lane>.clip{top:11px;height:30px;padding-top:6px;padding-bottom:6px}.layer>.lane>.key-point{top:22px}.layer>.lane>.thumb{top:14px}.label .name{overflow:hidden;text-overflow:ellipsis}.label small{margin-left:auto;color:#729db4;font-size:10px;max-width:85px;overflow:hidden;text-overflow:ellipsis}.lane{position:relative;min-width:0;overflow:hidden}.timeline-header{position:sticky;z-index:6;background:#101517;height:30px;min-height:30px}.timeline-header>.label{padding-top:5px;padding-bottom:5px}.header-edithead,.edithead{position:absolute;top:0;bottom:0;width:2px;background:#4aaaff;box-shadow:0 0 5px #4aaaff66;pointer-events:none;z-index:5;transform:none!important}.header-playhead{position:absolute;top:0;bottom:0;width:1px;background:#43e68c;pointer-events:none;z-index:4;transform:none!important}.section-band{position:absolute;top:0;bottom:0;border-left:1px solid #4b8792;pointer-events:none;background:#16414b}.section-0{background:#293b4d;border-color:#6b8caa}.ruler{min-height:30px}.ruler>.label{font-size:10px}.annotations{min-height:30px;font-size:10px}.focused{background:#10343d}.focused .label{background:#10343d}.parameter .label{padding-left:30px;color:#91afbd}.parameter.selected{color:#43e68c}.parameter.selected .label{color:#43e68c}.parameter .lane{color:#729db4}.selected .lane{color:#43e68c}.lane svg{width:100%;height:54px}.clip{position:absolute;top:8px;height:36px;background:#1d3e49;border:1px solid #2b626f;border-radius:4px;padding:9px 42px;overflow:hidden;white-space:nowrap;color:#a9d8e3}.clip:disabled{cursor:default}.clip:not(:disabled):hover{border-color:#63d4e7;background:#26515e}.clip{min-width:0;padding:0!important;text-align:left}.playback-mode{font-size:10px;color:#8bcbd6;margin-left:5px}.playback-icon{display:inline-flex;vertical-align:middle;margin-left:5px;color:#8bcbd6}.lane .playback-icon svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.clip-label{display:block;padding:6px 42px;white-space:nowrap}.marker{position:absolute;top:7px;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;z-index:2;font-size:10px}.key{color:#72d5e8;top:20px;font-size:10px}.lane>.key-point{width:8px;height:8px;margin-left:-4px;top:23px;background:currentColor;border:1px solid #101517;transform:translateX(var(--pan,0px)) rotate(45deg)}.timeline-target{cursor:pointer}.timeline-target:focus-visible{outline:2px solid #43e68c}.layer-edge{top:11px;width:7px;height:30px;margin-left:-3px;border:1px solid #63d4e7;border-radius:2px;background:#0699b255;z-index:3}.timeline-target:hover{filter:brightness(1.6);color:#63d4e7;box-shadow:0 0 7px #63d4e7;outline:1px solid #63d4e7}.tick{color:#849aa5;font:10px Consolas,monospace}.ruler .tick{font-size:12px;color:#bdd0da}.cue-marker{top:3px;overflow:visible;max-width:220px;padding:3px 7px 3px 13px;height:22px;line-height:16px;border:0;border-radius:0;clip-path:polygon(0 50%,9px 0,100% 0,100% 100%,9px 100%);background:#29414e;font-size:10px;white-space:nowrap}.cue-marker:before{content:"";position:absolute;left:0;top:0;width:9px;height:22px;background:currentColor;clip-path:polygon(0 50%,100% 0,100% 100%)}.cue-marker.notes{max-width:260px}.cue-marker.midi{color:#b7a0dc}.cue-marker.tc{color:#74c6d8}.cue{color:#e1bf77}.notes{color:#acbfc8}.resource{display:flex;align-items:center;gap:5px;top:3px}.thumb{display:inline-flex;width:34px;height:24px;align-items:center;justify-content:center;background:#263b44;border-radius:3px;overflow:hidden;flex-shrink:0;color:#729db4}.thumb.large{width:60px;height:38px}.thumb img{width:100%;height:100%;object-fit:cover}.gridline{position:absolute;top:30px;bottom:0;width:1px;background:#88a9bb0b;pointer-events:none;z-index:1}.gridline.major{background:#88a9bb20}.playhead{position:absolute;top:0;bottom:0;width:1px;background:#43e68c;box-shadow:0 0 5px #43e68c66;z-index:4;pointer-events:none}.lane>*{transform:translateX(var(--pan,0px))}.alignment-guide.subtle{opacity:.3;pointer-events:none}.alignment-guide.matched{border-left:2px solid #ffe0a0;box-shadow:0 0 5px #e7ba6370}.alignment-guide.subtle.matched{opacity:.65}.alignment-guide{pointer-events:none;position:absolute;top:0;bottom:0;border-left:1px dashed #e7ba63;z-index:3;transform:translateX(var(--pan,0px))}.gridline,.relation{transform:translateX(var(--pan,0px))}.select-label{border:0;padding:0;background:transparent;color:inherit;text-align:left;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.select-label:disabled{cursor:default}.select-label:not(:disabled):hover{color:#63d4e7}#selectionMessage{color:#e1bf77;margin-left:12px}.wave-controls{position:absolute;right:4px;top:4px;display:flex;gap:2px;z-index:5}.wave-controls button{width:16px;height:12px;padding:0;background:#151e23;border:1px solid #34444d;border-radius:4px;color:#849aa5;display:grid;place-items:center}.wave-controls svg{width:12px;height:10px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.wave-controls button:hover,.wave-controls button[aria-pressed=true]{color:#63d4e7;border-color:#0699b2}.wave-controls .parameter-mode{font-size:10px;line-height:10px}.wave-controls button:disabled{opacity:.45}.wave-beat-line{position:absolute;top:0;bottom:0;width:1px;background:#accdd526;z-index:2;pointer-events:none}.wave-beat-line.timeline-target{pointer-events:auto;cursor:pointer}.wave-beat-line.timeline-target:before{content:"";position:absolute;left:-4px;top:0;bottom:0;width:9px}.wave-beat-line.major{background:#accdd55c}.beat-tick{background:#101517bb;padding:1px 3px;z-index:3}.track-waveform{position:sticky;z-index:6;background:#101517}.waveform .lane svg{height:100%}.waveform .label{font-size:10px}.wave-status{display:block;padding:14px;color:#849aa5}.relation{position:absolute;width:3px;margin-left:-1px;background:#bd9be0;border-radius:3px;z-index:2;pointer-events:none;box-shadow:0 0 0 1px #10151799}.relation:after{content:"";position:absolute;width:13px;height:10px;left:-5px;background:#d4b8ef;clip-path:polygon(0 0,100% 0,50% 100%)}.relation.down:after{bottom:-1px}.relation.up:after{top:-1px;transform:rotate(180deg)}.relation:before{content:"";position:absolute;left:-2px;width:7px;height:7px;background:#d4b8ef;border-radius:50%}.relation.down:before{top:-2px}.relation.up:before{bottom:-2px}footer{min-height:27px;padding:4px 22px;color:#849aa5;font-size:10px}#warnings{color:#d5b97b;margin-left:12px}
 `
-const page = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Disguise Layer Editor · Timeline</title><link rel="stylesheet" href="/viewer.css"><script src="/viewer.js" defer></script></head><body><header><span class="brand-logo"><img src="${brandLogo}" alt="VEHKA AV"></span><div><h1>DISGUISE LAYER EDITOR</h1><small>TIMELINE VIEWER</small></div><div class="spacer"></div><div id="clockBlock"><span id="clock">—</span><span id="beat"></span><div id="editClock" hidden></div><div id="clockDetails"></div><div id="sectionRemaining" aria-live="off"></div></div><span id="status" role="status">CONNECTING</span></header><div class="toolbar"><strong id="track">TRACK</strong><div class="spacer"></div><button id="fitTrack" title="FIT TRACK">FIT TRACK</button><button id="fitLayer" title="CENTRE SELECTED LAYER">FIT LAYER</button><button id="follow" title="FOLLOW PLAYHEAD" aria-pressed="true">FOLLOW</button><button id="zoomOut" aria-label="ZOOM OUT" title="ZOOM OUT">−</button><button id="zoomIn" aria-label="ZOOM IN" title="ZOOM IN">+</button></div><main id="viewport" aria-label="Designer timeline"><div id="sheet"></div></main><footer>CTRL + WHEEL: ZOOM · SHIFT + WHEEL: PAN · S: SNAP ON/OFF · F: FOLLOW · T: FIT TRACK · L: FIT LAYER · SHIFT+L: LINK TIME · WHEEL: SELECTED KEY VALUE<span id="selectionMessage" role="status"></span><span id="warnings"></span></footer></body></html>`
+const page = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Disguise Layer Editor · Timeline</title><link rel="stylesheet" href="/viewer.css"><script src="/viewer.js" defer></script></head><body><header><span class="brand-logo"><img src="${brandLogo}" alt="VEHKA AV"></span><div><h1>DISGUISE LAYER EDITOR</h1><small>TIMELINE VIEWER</small></div><div class="spacer"></div><div id="clockBlock"><span id="clock">—</span><span id="beat"></span><div id="editClock" hidden></div><div id="clockDetails"></div><div id="sectionRemaining" aria-live="off"></div></div><span id="status" role="status">CONNECTING</span></header><div class="toolbar"><strong id="track">TRACK</strong><div class="spacer"></div><button id="fitTrack" title="FIT TRACK">FIT TRACK</button><button id="fitLayer" title="CENTRE SELECTED LAYER">FIT LAYER</button><button id="follow" title="FOLLOW PLAYHEAD" aria-pressed="true">FOLLOW</button><button id="zoomOut" aria-label="ZOOM OUT" title="ZOOM OUT">−</button><button id="zoomIn" aria-label="ZOOM IN" title="ZOOM IN">+</button></div><main id="viewport" aria-label="Designer timeline"><div id="sheet"></div></main><footer>CTRL + WHEEL: ZOOM · SHIFT + WHEEL: PAN · S: SNAP ON/OFF · F: FOLLOW · T: FIT TRACK · L: FIT LAYER · SHIFT+L: LINK TIME · WHEEL: SELECTED KEY VALUE · SHIFT+DRAG: SELECT KEYS<span id="selectionMessage" role="status"></span><span id="warnings"></span></footer></body></html>`
 
 module.exports = { page, stylesheet, browserScript: '(' + browserMain.toString() + ')(' + applyEditPatch.toString() + ',' + discreteSegments.toString() + ',' + selectionScroll.toString() + ',' + timecode.toString() + ',' + duplicateMarkerKeys.toString() + ')' }

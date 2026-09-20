@@ -108,6 +108,7 @@ function validGrid(grid) {
     Object.keys(grid).every(key=>['unit','step','index'].includes(key)))
 }
 function validEditRequest(value) {
+  if(value?.action==='key_group_select')return /^[a-f0-9]{64}$/.test(value.token || '') && Array.isArray(value.times) && value.times.length>=2 && value.times.length<=4096 && value.times.every(t=>Number.isFinite(t)&&t>=0&&t<=1e8) && new Set(value.times).size===value.times.length && Object.keys(value).every(k=>['action','token','times'].includes(k))
   if (value?.action === 'transport') return /^[a-f0-9]{64}$/.test(value.token || '') && ['play','playsection','playloopsection','stop','toggle','gotonextsection','gotoprevsection'].includes(value.operation) && Object.keys(value).every(k=>['action','token','operation'].includes(k))
   if (value?.action === 'link_time') return typeof value.enabled === 'boolean' && /^[a-f0-9]{64}$/.test(value.token || '') && Object.keys(value).every(k => ['action','token','enabled'].includes(k))
   if(value && Object.hasOwn(value,'keepPlayhead')) {
@@ -143,12 +144,12 @@ function validEditRequest(value) {
     Math.abs(value.targetValue) <= 1e12 && Object.keys(value).every(key=>['action','token','targetValue'].includes(key)))
   if (value?.action === 'drag_time') return Boolean(
     /^[a-f0-9]{64}$/.test(value.token || '') &&
-    ['in','move','out','key'].includes(value.mode) && Number.isFinite(value.targetTime) &&
+    ['in','move','out','key'].includes(value.mode) && (value.anchorTime===undefined || Number.isFinite(value.anchorTime) && value.anchorTime>=0 && value.anchorTime<=1e8) && Number.isFinite(value.targetTime) &&
     Math.abs(value.targetTime) <= 1e8 && typeof value.snap === 'boolean' &&
     (value.snapOffset === undefined || (value.mode === 'move' && Number.isFinite(value.snapOffset) && value.snapOffset >= 0 && value.snapOffset <= 1e8)) &&
     (value.targetValue === undefined || (value.mode === 'key' && Number.isFinite(value.targetValue) && Math.abs(value.targetValue)<=1e12)) &&
     validGrid(value.snapGrid) && (value.snapGrid === undefined || value.snap) &&
-    Object.keys(value).every(key=>['action','token','mode','targetTime','targetValue','snap','snapOffset','snapGrid'].includes(key)))
+    Object.keys(value).every(key=>['action','token','mode','targetTime','targetValue','snap','snapOffset','snapGrid','anchorTime'].includes(key)))
   if (value?.action === 'parameter_sequence') return Boolean(/^[a-f0-9]{64}$/.test(value.token || '') && ['enable','clear','reset'].includes(value.mode) && typeof value.expectedSequenced==='boolean' && typeof value.confirmed==='boolean' && (value.mode==='enable' || value.confirmed) && typeof value.parameter==='string' && value.parameter.length>0 && value.parameter.length<256 && Object.keys(value).every(k=>['action','token','mode','parameter','expectedSequenced','confirmed'].includes(k)))
   if (value?.action === 'annotation_time') return Boolean(/^[a-f0-9]{64}$/.test(value.token || '') && Number.isFinite(value.time) && value.time>=0 && value.time<=1e8 && Object.keys(value).every(k=>['action','token','time'].includes(k)))
   if (value?.action === 'annotation') return Boolean(
@@ -199,6 +200,12 @@ async function editFromViewerCommand(editor, request) {
   if (!validEditRequest(request)) return { ok: false, reason: 'INVALID EDIT REQUEST' }
   if (request.token !== describeEditor(editor).token)
     return { ok: false, reason: 'SELECTION OR VALUE CHANGED — TRY AGAIN' }
+  if(request.action==='key_group_select') {
+    if(editor.moveKey || editor.mediaMode || editor.layerEdit)return {ok:false,reason:'RELEASE CURRENT EDIT FIRST'}
+    await editor.selectKeyGroup(request.times)
+    return {ok:true,editor:describeEditor(editor)}
+  }
+  if(editor.moveKey?.group && ['value','value_set','drag_value','key_type','key_set','key_insert','value_press','resource_choose'].includes(request.action))return {ok:false,reason:'GROUP: MOVE OR DELETE ONLY'}
   // The caller owns the real Companion queue. This adapter executes exactly one
   // normal action, including its menu, locking, precision and beat/frame policy.
   if (request.action === 'transport') {
@@ -252,10 +259,10 @@ async function editFromViewerCommand(editor, request) {
   if (request.action === 'drag_time') {
     if (editor.mediaMode || editor.clearKeysBrowser) return {ok:false,reason:'CLOSE THE RESOURCE OR DELETE MENU FIRST'}
     const previewCurve=request.mode==='key' && curvePreviewDue(editor)
-    const pointer = {targetTime:request.targetTime,targetValue:request.targetValue,snap:request.snap,snapOffset:request.snapOffset || 0,snapGrid:request.snapGrid,previewCurve}
+    const pointer = {...(request.anchorTime!==undefined?{anchorTime:request.anchorTime}:{}),targetTime:request.targetTime,targetValue:request.targetValue,snap:request.snap,snapOffset:request.snapOffset || 0,snapGrid:request.snapGrid,previewCurve}
     if (request.mode === 'key') {
       if (!editor.moveKey) return {ok:false,reason:'SELECT A KEYFRAME FIRST'}
-      if (request.targetValue !== undefined && (editor.field?.resource || editor.field?.choices?.length))
+      if (request.targetValue !== undefined && (editor.moveKey?.group || editor.field?.resource || editor.field?.choices?.length))
         return {ok:false,reason:'THIS KEYFRAME ONLY SUPPORTS TIME EDITING'}
       await editor.adjustLiveTime(1,0,pointer)
     } else {

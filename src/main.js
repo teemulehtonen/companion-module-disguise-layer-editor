@@ -770,6 +770,7 @@ class DisguiseLayerControl extends InstanceBase {
       padVars.dial_value_0 = 'VIEWER'
       padVars.dial_info_0 = '− / +'
     }
+    if(e?.moveKey?.group){padVars.dial_value_2=e.moveKey.group.length+' KEYFRAMES';padVars.dial_info_2='MOVE / DELETE';padVars.dial_title_2='GROUP'}
     // Capitalise display text only. Resource paths, parameter IDs, image data
     // and public raw-value variables must retain their original case.
     for (const name of Object.keys(padVars)) {

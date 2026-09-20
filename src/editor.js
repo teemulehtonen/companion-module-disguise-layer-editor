@@ -340,6 +340,7 @@ class Editor {
       )
       if (keep && this.layer && this.layer.uid === layerUid && this.field?.name === fieldName) {
         const keys = this.field?.keys || []
+        if(this.moveKey?.group?.some(selected=>!keys.some(k=>Math.abs(k.time-selected.time)<1e-6 && k.value===selected.value && k.resourceUid===selected.resourceUid && k.interpolation===selected.interpolation)))this.moveKey=null
         if (
           this.selectedKeyTime !== null &&
           !keys.some((k) => Math.abs(k.time - this.selectedKeyTime) < 1e-5)
@@ -655,7 +656,25 @@ class Editor {
     }
     return { ok: true, ...(point === 'insert' && this.linkTime ? {time:insertTime} : {}) }
   }
+  async selectKeyGroup(times) {
+    this.requireField()
+    const keys=times.map(time=>this.field.keys.find(k=>Math.abs(k.time-time)<1e-6))
+    if(keys.some(k=>!k) || new Set(times).size!==times.length)throw new Error('Keyframes changed; select again')
+    const result=await this.remote(()=>this.client.execute('key_group',{...this.liveArgs(),operation:'select',expectedKeys:keys}))
+    this.acceptLive(result)
+    this.moveKey={...result.selectedKeys[0],group:result.selectedKeys}
+    this.selectedKeyTime=this.moveKey.time
+  }
+  async editKeyGroup(operation, options={}) {
+    const keys=this.moveKey?.group
+    if(!keys)return
+    const result=await this.remote(()=>this.client.execute('key_group',{...this.liveArgs(),operation,expectedKeys:keys,...options}))
+    this.acceptLive(result)
+    this.moveKey=result.selectedKeys?.length ? {...result.selectedKeys[0],group:result.selectedKeys} : null
+    this.selectedKeyTime=this.moveKey?.time ?? null
+  }
   async adjustLiveValue(direction, step = 0, pointer = {}) {
+    if(this.moveKey?.group)return
     if (this.moveKey && !Number.isFinite(pointer.targetValue)) this.guidesUntil = Date.now()+650
     if (!this.field) return
     if (this.field.resource) return
@@ -719,6 +738,7 @@ class Editor {
     const beats = !stepOverride && this.usesBeatSteps
     const frames = !beats && !stepOverride && this.timeStep === 'frame'
     const delta = number(direction) * (stepOverride || this.timeStepAmount)
+    if(this.moveKey?.group)return this.editKeyGroup('move',{delta,frames,beats,...pointer})
     if (this.layerEdit) {
       await this.remote(async () => {
         const result = await this.client.execute('layer_edit', {
@@ -822,6 +842,7 @@ class Editor {
     })
   }
   async cycleKeyType(type) {
+    if(this.moveKey?.group)return
     if (this.field?.resource) return // Resource sequences are discrete HOLD keys.
     if (type !== undefined && ![0, 1, 2].includes(type)) throw new Error('Invalid keyframe type')
     if (!this.canSelectKey) return
@@ -835,6 +856,7 @@ class Editor {
     if (this.moveKey && this.selectedKey) this.moveKey = { ...this.selectedKey }
   }
   async writeLive(command, targetTime) {
+    if(this.moveKey?.group) {if(command==='key_delete')await this.editKeyGroup('delete');return}
     this.requireField()
     // Some Designer settings (for example Web dimensions) are constants by
     // design. Pressing the value dial must not send an impossible key write.
@@ -864,6 +886,7 @@ class Editor {
     if (!this.layerEdit) this.followTime(this.time)
   }
   async pressValue() {
+    if(this.moveKey?.group)return
     if (this.layerEdit === 'edit') return this.cycleLayerStep()
     if (this.mediaMode) {
       if (!this.currentMedia) return
@@ -1124,6 +1147,7 @@ class Editor {
     if (this.mediaMode || JSON.stringify(press.target) !== JSON.stringify(this.deletionTarget()))
       throw new Error('Selection changed; deletion cancelled')
     if (now - press.time >= 1000) {
+      if(this.moveKey?.group)return this.writeLive('key_delete')
       return this.openClearKeys()
     }
     if (press.resetDefault) return this.resetDefault()

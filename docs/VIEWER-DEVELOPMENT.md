@@ -1,5 +1,9 @@
 # Viewer development guide
 
+## Single-parameter key groups (0.2.0-beta.2)
+
+Shift-marquee selects up to 4096 keys on one row. `moveKey.group` carries exact native key snapshots, and the top-level key is always the first key for Deck timing. Mouse `anchorTime` must identify a current member. All keys move by the same seconds delta, with anchor stepping converted through Designer beat/frame rules. Native `key_group` preflights every key and collision, preserves values/interpolation/resources and restores sequence contents if a mutation fails. Deleting every key leaves the evaluated value as a constant. Numeric/resource groups share this path; value and type controls are locked.
+
 ## Direct mouse editing (beta.103 candidate)
 
 Beta.108 synchronization: viewer-edit-model.js merges confirmed layer patches without losing resource thumbnails. Update data-key-time on every representation of a moved key and read it at gesture/click time. Never capture a mutable key's timestamp permanently in a handler. main.js returns editRevision after its shared queue completes; stale browser live/geometry reads are discarded against the last confirmed revision. Suppress heavy snapshot requests while interacting, but keep the small live channel. Local requestAnimationFrame previews are disposable; only guarded native responses update canonical keys. drag_time optionally includes targetValue for one native time/value edit, rejecting resource/enum values before mutation. A single write is in flight and only the newest unsent pointer survives. Do not retry ambiguous writes.

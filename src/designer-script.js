@@ -89,6 +89,7 @@ def checked_snap(seconds):
                 t = float(track.beatToTime(seq.t(i)))
                 if p['command'] == 'key_move' and str(item.uid) == p.get('layerUid') and f.name == p.get('field') and abs(t - p.get('sourceTime', -1)) < 0.00001:
                     continue
+                if p['command']=='key_group' and str(item.uid)==p.get('layerUid') and f.name==p.get('field') and any(abs(t-k['time'])<0.000001 for k in p.get('expectedKeys',[])): continue
                 if item.tStart <= seq.t(i) <= item.tEnd:
                     times.append(t)
         if any(abs(t - seconds) < 0.000001 for t in times):
@@ -799,6 +800,65 @@ beat = track.timeToBeat(seconds)
 command = p['command']
 if command not in ('read_field', 'jump_key', 'select_key') and layer.locked:
     raise ValueError('Layer is locked in Designer')
+if command == 'key_group':
+    operation = p.get('operation')
+    expected = p.get('expectedKeys', [])
+    current = field_snapshot(layer, field, seconds, False)['keys']
+    if field.disableSequencing or operation not in ('select', 'move', 'delete') or not 2 <= len(expected) <= 4096:
+        raise ValueError('Invalid keyframe group')
+    expected = sorted(expected, key=lambda k: k['time'])
+    indices = []
+    for wanted in expected:
+        matches = [i for i, k in enumerate(current) if abs(k['time'] - wanted['time']) < 0.000001 and k == wanted]
+        if len(matches) != 1 or matches[0] in indices:
+            raise ValueError('Selected keyframes changed in Designer; select again')
+        indices.append(matches[0])
+    start, end = float(track.beatToTime(layer.tStart)), float(track.beatToTime(layer.tEnd))
+    if any(k['time'] < start - 0.000001 or k['time'] > end + 0.000001 for k in expected):
+        raise ValueError('Selected keyframes are outside the layer')
+    source = expected[-1]['time'] if p.get('anchor') == 'last' else expected[0]['time']
+    if p.get('anchorTime') is not None:
+        source=float(p['anchorTime'])
+        if not any(abs(k['time']-source)<0.000001 for k in expected): raise ValueError('Group anchor changed')
+    target = source
+    if operation == 'move':
+        target = float(track.beatToTime(track.timeToBeat(source) + float(p['delta']))) if p.get('beats') else (round(source * fps()) + float(p['delta'])) / fps() if p.get('frames') else source + float(p.get('delta', 0))
+        if p.get('targetTime') is not None: target = pointer_time(source)
+        shift = max(start - expected[0]['time'], min(end - expected[-1]['time'], target-source))
+        target = source + shift
+        destinations = [track.timeToBeat(k['time']+shift) for k in expected]
+        if any(abs(a-b)<=Key.tEpsilon for a,b in zip(destinations,destinations[1:])):
+            return {'field':field_snapshot(layer,field,source),'time':source,'selectedKeys':expected}
+        if any(abs(seq.t(i)-dest) <= Key.tEpsilon for i in range(seq.nKeys()) if i not in indices for dest in destinations):
+            return {'field':field_snapshot(layer,field,source),'time':source,'selectedKeys':expected}
+    if operation != 'select':
+        saved = [(seq.t(i), seq.key(i).r if is_resource else seq.key(i).v, None if is_resource else seq.key(i).interpolation) for i in range(seq.nKeys())]
+        constant = seq.evalResource(beat) if is_resource else field_snapshot(layer,field,seconds)['value']
+        def insert_saved(t, value, interpolation):
+            if is_resource: seq.setResource(t,value)
+            else:
+                seq.setFloat(t,value)
+                index = next(i for i in range(seq.nKeys()) if abs(seq.t(i)-t)<=Key.tEpsilon)
+                seq.key(index).interpolation=interpolation
+        markDirty(seq)
+        try:
+            if operation == 'delete' and len(indices) == seq.nKeys():
+                reset_sequence_to_constant(field,constant,layer.tStart)
+            else:
+                for i in sorted(indices,reverse=True): seq.remove(i,1)
+                if operation == 'move':
+                    for i,dest in zip(indices,destinations): insert_saved(dest,saved[i][1],saved[i][2])
+            field.notifyEdit()
+        except:
+            if seq.nKeys(): seq.remove(0,seq.nKeys())
+            for item in saved: insert_saved(*item)
+            field.disableSequencing=False
+            field.notifyEdit()
+            raise
+    if operation != 'delete' and not p.get('keepPlayhead'): manager.addCommand(TransportCommand.makeJumpToTime(state,manager,target))
+    result=field_snapshot(layer,field,target)
+    selected=[] if operation=='delete' else [k for k in result['keys'] if any(abs(k['time']-(old['time']+(target-source)))<0.000001 for old in expected)]
+    return {'field':result,'time':target,'selectedKeys':selected}
 if is_resource and command not in ('read_field', 'jump_key', 'select_key', 'key_move', 'key_delete'):
     raise ValueError('Use the resource picker to change this parameter')
 if p.get('expectedKey') and command in ('key_delete', 'adjust_value'):
