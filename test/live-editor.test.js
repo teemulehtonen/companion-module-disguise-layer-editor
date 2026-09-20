@@ -235,11 +235,13 @@ test('frame time uses source FPS and moving keys preserves value and interpolati
     [0.04, 5, 10],
   )
   e.cycleTimeStep()
+  assert.equal(e.timeStep, 'half')
+  e.cycleTimeStep()
   assert.equal(e.timeStep, 'second')
   assert.equal(e.moveKey.time, 0.04)
   await e.adjustLiveTime(1)
   assert.equal(e.selectedKey.time, 1.04)
-  for (const step of ['two', 'five', 'ten', 'minute', 'frame']) {
+  for (const step of ['two', 'five', 'ten', 'thirty', 'minute', 'twoMinutes', 'fiveMinutes', 'frame']) {
     e.cycleTimeStep()
     assert.equal(e.timeStep, step)
     assert.equal(e.moveKey.time, 1.04)

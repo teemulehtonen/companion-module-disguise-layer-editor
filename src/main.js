@@ -659,8 +659,8 @@ class DisguiseLayerControl extends InstanceBase {
         ? 'LAYER / DESIGNER'
         : 'LAYER ' + (e ? e.activeLayers.indexOf(e.layer) + 1 : 0) + '/' + (e?.activeLayers.length || 0),
       mediaMode ? 'FOLDER' : 'PARAMETER',
-      mediaMode ? 'FILE / PREVIEW' : 'VALUE / ' + (e?.precision || 'coarse').toUpperCase(),
-      (layerMode || (e?.moveKey ? 'MOVE KEYFRAME' : 'TIME')) + ' / ' + (e?.timeStepLabel || ''),
+      mediaMode ? 'FILE / PREVIEW' : (e?.precision || 'coarse').toUpperCase(),
+      e?.timeStepLabel || '',
     ]
     const values = [
       e?.layer?.name || 'No active layer',

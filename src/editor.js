@@ -3,8 +3,9 @@ const { orderLayerParameters } = require('./parameter-order')
 
 // Shared order for the time encoder and layer timing controls. Frame uses the
 // current transport FPS; the remaining steps are expressed in seconds.
-const TIME_STEPS = ['frame', 'second', 'two', 'five', 'ten', 'minute']
-const TIME_STEP_SECONDS = { frame: 1, second: 1, two: 2, five: 5, ten: 10, minute: 60 }
+const TIME_STEPS = ['frame', 'half', 'second', 'two', 'five', 'ten', 'thirty', 'minute', 'twoMinutes', 'fiveMinutes']
+const TIME_STEP_SECONDS = { frame: 1, half: 0.5, second: 1, two: 2, five: 5, ten: 10, thirty: 30, minute: 60, twoMinutes: 120, fiveMinutes: 300 }
+const TIME_STEP_LABELS = { frame: '1 FRAME', half: '0.5 SEC', second: '1 SEC', two: '2 SEC', five: '5 SEC', ten: '10 SEC', thirty: '30 SEC', minute: '1 MIN', twoMinutes: '2 MIN', fiveMinutes: '5 MIN' }
 const CLEAR_MENU = { resetLayer: 4, clearParameter: 5, resetParameter: 6, back: 7 }
 
 function number(value, label = 'Value') {
@@ -383,7 +384,7 @@ class Editor {
     const selected = this.beatMode ? this.timeStepAmount : this.timeStep
     return values.map(value => ({value,selected:value===selected,label:this.beatMode
       ? (value<1 ? '1/'+Math.round(1/value) : String(value))+' BEAT'+(value>1?'S':'')
-      : {frame:'1 FRAME',second:'1 SEC',two:'2 SEC',five:'5 SEC',ten:'10 SEC',minute:'1 MIN'}[value]}))
+      : TIME_STEP_LABELS[value]}))
   }
   setTimeStep(index) {
     this.local()
@@ -398,7 +399,7 @@ class Editor {
   }
   get timeStepLabel() {
     if (this.usesBeatSteps) return this.timeStepAmount < 1 ? '1/' + Math.round(1 / this.timeStepAmount) + ' BEAT' : this.timeStepAmount + (this.timeStepAmount === 1 ? ' BEAT' : ' BEATS')
-    return { frame: '1 FRAME', second: '1 SEC', two: '2 SEC', five: '5 SEC', ten: '10 SEC', minute: '1 MIN' }[
+    return TIME_STEP_LABELS[
       this.timeStep
     ]
   }

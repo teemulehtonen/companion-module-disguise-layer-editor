@@ -212,17 +212,19 @@ for (let i = 0; i < 8; i++) {
     c.style.layers.push(type)
   }
   if (column === 1) {
-    // Centre the heading across the display; the indicator is an overlay.
-    title.width = literal(100)
+    // Keep the PARAMETER heading and adjacent indicator centred on the LCD.
+    const showKeyDot = `${variable('parameter_animated')} && ${variable('ui_mode')} == 'PARAMS' && ${variable('layer_edit')} == 'SCRUB'`
+    title.x = expression(`${showKeyDot} ? 5 : 0`)
+    title.width = expression(`${showKeyDot} ? 80 : 100`)
     const dot = structuredClone(title)
     dot.id = 'animated'
     dot.name = 'Parameter has keyframes'
     dot.text = literal('●')
-    dot.x = literal(88)
-    dot.width = literal(12)
+    dot.x = literal(68)
+    dot.width = literal(10)
     dot.fontsize = literal(theme.type.indicator)
     dot.color = literal(theme.keyframe)
-    dot.enabled = expression(`${variable('parameter_animated')} && ${variable('ui_mode')} != 'MEDIA'`)
+    dot.enabled = expression(showKeyDot)
     c.style.layers.push(dot)
   }
   controls[2][column] = c

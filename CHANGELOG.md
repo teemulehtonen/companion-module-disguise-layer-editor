@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.0-beta.131
+
+- Enlarge Companion display headings and primary values. Remove VALUE /, TIME / and MOVE KEYFRAME / prefixes to leave room for precision and timing steps.
+
+## 0.1.0-beta.130
+
+- Expand time-based steps to ten: frame, 0.5/1/2/5/10/30 seconds and 1/2/5 minutes. Presets and dial cycling share the same order; beat choices are unchanged.
+
 ## 0.1.0-beta.129
 
 - Add ten adaptive timing-step preset slots with live labels, selected-state feedback and inactive unused slots. Time/beat choices follow track and key/layer editing mode.

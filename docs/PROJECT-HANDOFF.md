@@ -1,3 +1,11 @@
+# Beta.131 — clearer LCD labels
+
+Companion headings use 90% of the text element height; primary values use 78%. Value title shows only precision, and time title only step plus FPS, including selected-key mode. The larger keyframe dot sits next to PARAMETER in normal mode. Existing installed pages need the corresponding style update or a clean page import; module updates alone only change variable text. Ten time steps from beta.130 are included.
+
+# Beta.130 — ten time steps
+
+Time presets and dial cycling use ten ordered entries: frame, 0.5/1/2/5/10/30 seconds and 1/2/5 minutes. TIME_STEP_LABELS centralizes labels. Persisted preset slot IDs remain unchanged; labels/actions adapt to the new order. Beat-mode catalogs are unchanged.
+
 # Beta.129 — adaptive presets
 
 Editor.timeStepChoices is the shared ordered step catalog; setTimeStep selects a slot without seeking or releasing the key/layer mode. definitions.js exposes ten adaptive presets and transport/link controls, while main.js publishes timing_step_0–9 and selection/availability/transport feedback on every publish. Unused slots are no-ops. Transport controls bypass delete-menu dial routing so STOP remains available. Presets use connection-scoped variables and can be placed on other decks without changing the generated page.

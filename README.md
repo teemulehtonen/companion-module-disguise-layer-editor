@@ -6,7 +6,7 @@ Disguise layer, keyframe and resource control for Bitfocus Companion and Stream 
 
 ## Install
 
-**Downloads (beta.129):** [Companion module](../../releases/download/v0.1.0-beta.129/disguise-layer-control-0.1.0-beta.129.tgz) · [Companion page](../../releases/download/v0.1.0-beta.129/D3-Stream-Deck-Plus.companionconfig)
+**Downloads (beta.131):** [Companion module](../../releases/download/v0.1.0-beta.131/disguise-layer-control-0.1.0-beta.131.tgz) · [Companion page](../../releases/download/v0.1.0-beta.131/D3-Stream-Deck-Plus.companionconfig)
 
 Tested with Designer 32.4.17 and Companion 5.0.5.
 
@@ -28,7 +28,7 @@ Transport presets provide PLAY, PLAY TO END, STOP, PLAY / STOP (last play mode),
 | LAYER | Select an active layer | — |
 | PARAMETER | Select a parameter | Coarse / fine / ultra |
 | VALUE | Edit the selected key or constant | Add a key at the playhead |
-| TIME | Seek, or move the locked key | Frame / 1 / 2 / 5 / 10 seconds / minute |
+| TIME | Seek, or move the locked key | Frame / 0.5 / 1 / 2 / 5 / 10 / 30 seconds / 1 / 2 / 5 minutes |
 
 - **SELECT KEYFRAME** locks the nearest in-range key; press again to unlock. TIME step changes keep it locked. **PREV/NEXT KEYFRAME** follow the selected parameter and stop at IN / OUT minus one frame.
 - **DELETE KEYFRAME** removes one key. With a constant, **DEFAULT** restores its native default. Hold either for one second to open the delete menu; red indicates ready. Bulk operations require confirmation. **DEFAULT ALL PARAMETERS** resets all supported parameters on the selected layer, including animation outside IN/OUT.
