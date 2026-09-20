@@ -897,7 +897,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll) {
     closeKeyMenu()
     const panel = el('form','key-edit-menu'), input = el('input')
     keyMenu = panel
-    Object.assign(panel.style,{left:Math.max(0,Math.min(event.clientX,window.innerWidth-270))+'px',top:Math.max(0,Math.min(event.clientY,window.innerHeight-160))+'px',width:'250px',padding:'9px'})
+    Object.assign(panel.style,{left:Math.max(0,Math.min(event.clientX,window.innerWidth-270))+'px',top:Math.max(0,Math.min(event.clientY,window.innerHeight-235))+'px',width:'250px',padding:'9px'})
     panel.append(el('strong','',(item ? 'EDIT ' : 'ADD ')+kind.toUpperCase()))
     input.type='text'; input.maxLength=kind==='notes' ? 2000 : 64
     input.value=item ? String(item.text ?? item.value ?? '') : ''
@@ -906,16 +906,32 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll) {
     input.required=true
     Object.assign(input.style,{width:'100%',margin:'8px 0',fontSize:'12px'})
     panel.append(input)
+    const at = el('input'), timeLabel = el('label','','TRACK TIME (SECONDS)')
+    at.type='number';at.min='0';at.max=String(state.length);at.step='any';at.required=true
+    at.value=String(time);at.setAttribute('aria-label','TRACK TIME (SECONDS)')
+    Object.assign(at.style,{width:'100%',margin:'6px 0 9px',fontSize:'12px'})
+    timeLabel.append(at);panel.append(timeLabel)
     const save=el('button','','SAVE'),cancel=el('button','','CANCEL')
     save.type='submit'; cancel.type='button'; cancel.onclick=closeKeyMenu
     panel.append(save,cancel)
+    if (item) {
+      const remove=el('button','','DELETE');remove.type='button'
+      remove.onclick=()=>void interact(async()=>{
+        if (!await releaseViewerMode()) return
+        const text=String(item.text ?? item.value ?? '')
+        if (await sendEdit('annotation',{kind,mode:'delete',targetTime:item.time,sourceTime:item.time,sourceText:text,text})) closeKeyMenu()
+      })
+      panel.append(remove)
+    }
     panel.onsubmit=event=>{
       event.preventDefault()
       void interact(async()=>{
         const text=input.value.trim()
         if (!text) return
+        const targetTime=Number(at.value)
+        if (!Number.isFinite(targetTime) || targetTime<0 || targetTime>state.length) return
         if (!await releaseViewerMode()) return
-        const ok=await sendEdit('annotation',{kind,mode:item ? 'update' : 'add',targetTime:time,text,
+        const ok=await sendEdit('annotation',{kind,mode:item ? (targetTime===item.time ? 'update' : 'move') : 'add',targetTime,text,
           ...(item ? {sourceTime:item.time,sourceText:String(item.text ?? item.value ?? '')} : {})})
         if (ok) closeKeyMenu()
       })
@@ -934,6 +950,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll) {
       return
     }
     node.ondblclick=event=>{event.preventDefault();event.stopPropagation();annotationForm(kind,item.time,event,item)}
+    node.oncontextmenu=event=>{event.preventDefault();event.stopPropagation();annotationForm(kind,item.time,event,item)}
     node.addEventListener('pointerdown',event=>{
       if(event.button!==0 || !state.editEnabled || interactionBusy || editPending || event.ctrlKey || event.shiftKey) return
       event.stopPropagation(); node.setPointerCapture(event.pointerId)

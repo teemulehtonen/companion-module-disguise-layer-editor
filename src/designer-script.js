@@ -391,7 +391,7 @@ if p['command'] == 'section_edit':
     return {'changed': True}
 if p['command'] == 'annotation_edit':
     kind, mode = p['kind'], p['mode']
-    if kind not in ('cue', 'tc', 'midi', 'notes') or mode not in ('add', 'move', 'update'):
+    if kind not in ('cue', 'tc', 'midi', 'notes') or mode not in ('add', 'move', 'update', 'delete'):
         raise ValueError('Invalid marker edit')
     if track.locked:
         raise ValueError('Track is locked')
@@ -425,6 +425,13 @@ if p['command'] == 'annotation_edit':
         target = float(source)
     if mode != 'add' and (source is None or marker_at(float(source)) != p.get('sourceText')):
         raise ValueError('Marker changed in Designer; select it again')
+    if mode == 'delete':
+        markDirty(track)
+        if kind == 'notes':
+            track.removeNoteAtBeat(track.timeToBeat(float(source)))
+        else:
+            track.removeTagAtBeat(track.timeToBeat(float(source)), tag_type)
+        return {'time': float(source), 'kind': kind, 'deleted': True}
     if marker_at(target) is not None and (mode == 'add' or abs(target - float(source)) > 0.00001):
         raise ValueError('A marker of this type already exists at the target')
     # Validate everything before changing a cue. Other tag types, sections and

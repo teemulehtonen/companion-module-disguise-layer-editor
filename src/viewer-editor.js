@@ -149,7 +149,7 @@ function validEditRequest(value) {
     validGrid(value.snapGrid) && (value.snapGrid === undefined || value.snap) &&
     Object.keys(value).every(key=>['action','token','mode','targetTime','targetValue','snap','snapOffset','snapGrid'].includes(key)))
   if (value?.action === 'annotation') return Boolean(
-    /^[a-f0-9]{64}$/.test(value.token || '') && ['add','move','update'].includes(value.mode) &&
+    /^[a-f0-9]{64}$/.test(value.token || '') && ['add','move','update','delete'].includes(value.mode) &&
     ['cue','tc','midi','notes'].includes(value.kind) && Number.isFinite(value.targetTime) &&
     value.targetTime >= 0 && value.targetTime <= 1e8 && typeof value.text === 'string' && value.text.length > 0 && value.text.length <= 2000 &&
     (value.snap === undefined || typeof value.snap === 'boolean') &&

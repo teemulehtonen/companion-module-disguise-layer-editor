@@ -1,4 +1,6 @@
-# Current release — beta.139
+# Current release — beta.140
+
+Marker popup includes current track-relative seconds and DELETE. Changed time uses the existing guarded move command; unchanged time updates content. Native deletion verifies source text/time and removes only that tag type or note, preserving the cue/section and other tags. All four types passed add/move/delete on an isolated native track (seven assertions).
 
 Explicit viewer OUT clicks seek to layer.end exactly, superseding the old OUT-minus-one-frame policy for that gesture. Active layer bounds include OUT so focus remains on the layer after feedback/refresh; covered in linked and independent clock tests. Previous/next key navigation retains its own last-visible-frame policy.
 

@@ -72,6 +72,9 @@ test('new mouse commands reject nonfinite times, arbitrary fields and unguarded 
  assert.equal(validEditRequest(marker),true)
  assert.equal(validEditRequest({...marker,mode:'move'}),false)
  assert.equal(validEditRequest({...marker,mode:'move',sourceTime:1,sourceText:'12'}),true)
+ assert.equal(validEditRequest({...marker,mode:'delete'}),false)
+ for(const kind of ['cue','tc','midi','notes'])
+   assert.equal(validEditRequest({...marker,kind,mode:'delete',sourceTime:2,sourceText:'12'}),true)
  for(const change of [{path:'x'},{kind:'python'},{targetTime:Infinity},{targetTime:-1},{text:''}])
    assert.equal(validEditRequest({...marker,...change}),false)
  const drag={action:'drag_time',token,mode:'key',targetTime:2,snap:false}

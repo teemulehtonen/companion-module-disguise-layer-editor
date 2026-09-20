@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-beta.140
+
+- Right-click or double-click cue, TC, MIDI and notes markers to edit their content and track-relative time in seconds, or delete the selected marker. Native source checks and locks remain enforced; unrelated co-located markers are preserved.
+
 ## 0.1.0-beta.139
 
 - Clicking a layer OUT point now seeks to its exact end time. Keyframe navigation retains its last-visible-frame boundary policy.
