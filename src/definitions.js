@@ -1,5 +1,6 @@
 'use strict'
 const theme = require('./theme')
+const { curvePreviewDue } = require('./viewer-curve-preview')
 
 const numeric = (id, label, value, min = -100000, max = 100000) => ({
   type: 'number',
@@ -27,8 +28,12 @@ function actions(instance) {
   const action = (name, options, fn, queueOptions) => ({
     name,
     options,
-    callback: (event) =>
-      instance.perform((editor) => {
+    callback: (event) => {
+      const dial=['Select active layer','Select parameter / media folder','Adjust live value / preview media','Scrub live / move selected key'].includes(name)
+      const e=instance.editor
+      const batch=dial && !e?.mediaMode && !e?.clearKeysBrowser && (e?.layerEdit==='edit' || (e?.moveKey && !e.moveKey.group)) && instance.performDetents
+      const run=batch ? (fn,opts)=>instance.performDetents(name+JSON.stringify(event.options),fn,opts) : (fn,opts)=>instance.perform(fn,opts)
+      return run((editor,detents=1) => {
         if (editor.viewOnly) {
           const browsing = ['Time keypad','Select adaptive timing step','Read layers and values from Designer',
             'Select active layer','Select parameter / media folder','Scrub live / move selected key',
@@ -51,8 +56,9 @@ function actions(instance) {
         }
         // Leaving the confirmation through any dial/tool cancels it, never hides it.
         if (!name.startsWith('Context button')) editor.clearKeysPrompt = null
-        return fn(editor, event.options)
-      }, queueOptions),
+        return fn(editor, {...event.options,detents})
+      }, queueOptions)
+    },
   })
   return {
     time_keypad: action('Time keypad', [{type:'dropdown',id:'key',label:'Key',default:'go',choices:[...Array.from({length:10},(_,i)=>({id:String(i),label:String(i)})),{id:'back',label:'Backspace'},{id:'clear',label:'Clear'},{id:'go',label:'Jump'}]}], (e,o)=>e.enterTime(o.key), {synchronise:false}),
@@ -64,7 +70,7 @@ function actions(instance) {
     play_stop: action('Play to end of section / stop', [], (e) => e.togglePlayback()),
     layer: action('Select active layer', [direction], (e, o) =>
       e.layerEdit === 'edit'
-        ? e.adjustLayerTiming('in', Number(o.direction))
+        ? e.adjustLayerTiming('in', Number(o.direction),{detents:o.detents})
         : e.mediaMode
           ? e.selectMediaField(Number(o.direction))
           : !e.moveKey && !e.layerEdit && instance.viewer?.rotateZoom(Number(o.direction))
@@ -73,7 +79,7 @@ function actions(instance) {
     ),
     field: action('Select parameter / media folder', [direction], (e, o) =>
       e.layerEdit === 'edit'
-        ? e.adjustLayerTiming('move', Number(o.direction))
+        ? e.adjustLayerTiming('move', Number(o.direction),{detents:o.detents})
         : e.mediaMode
           ? e.selectMediaFolder(Number(o.direction))
           : e.selectLive('field', Number(o.direction)),
@@ -83,10 +89,10 @@ function actions(instance) {
       [direction, numeric('step', 'Step override (0 = 0.1 / 0.01 / 0.001)', 0, 0)],
       (e, o) =>
         e.layerEdit === 'edit'
-          ? e.adjustLayerTiming('out', Number(o.direction))
+          ? e.adjustLayerTiming('out', Number(o.direction),{detents:o.detents})
           : e.mediaMode
             ? e.browseMedia(Number(o.direction))
-            : e.adjustLiveValue(Number(o.direction), Number(o.step)),
+            : e.adjustLiveValue(Number(o.direction)*(o.detents || 1), Number(o.step),{previewCurve:Boolean(e.moveKey)&&curvePreviewDue(e)}),
     ),
     time: action(
       'Scrub live / move selected key',
@@ -94,7 +100,7 @@ function actions(instance) {
       (e, o) =>
         e.mediaMode || e.layerEdit === 'edit'
           ? undefined
-          : e.adjustLiveTime(Number(o.direction), Number(o.step)),
+          : e.adjustLiveTime(Number(o.direction), Number(o.step),{detents:o.detents,previewCurve:Boolean(e.moveKey)&&curvePreviewDue(e)}),
       { scrub: true },
     ),
     fine: action('Cycle COARSE / FINE / ULTRA', [], (e) =>

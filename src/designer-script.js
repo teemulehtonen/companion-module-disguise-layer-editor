@@ -333,12 +333,12 @@ def field_snapshot(layer, field, seconds, curve=True):
                 result['samples'].append({'time':at,'value':v})
     return result
 
-def snapshot():
+def snapshot(only_layer=None):
     seconds = edit_seconds()
     beat = track.timeToBeat(seconds)
     layers = []
     skipped = []
-    for layer in all_layers():
+    for layer in ([only_layer] if only_layer is not None else all_layers()):
         fields = []
         media_fields = []
         for field in layer.fields:
@@ -680,7 +680,7 @@ if p['command'] in ('key_clear_list', 'keys_clear', 'parameter_default', 'layer_
     for field, value in edits:
         reset_sequence_to_constant(field, value, layer.tStart)
     return {'cleared': list(p['fields'])}
-if p['command'] in ('layer_edit', 'group_move'):
+if p['command'] == 'layer_edit':
     start = float(track.beatToTime(layer.tStart))
     end = float(track.beatToTime(layer.tEnd))
     if getattr(layer, 'anchored', False) or layer.locked:
@@ -696,16 +696,16 @@ if p['command'] in ('layer_edit', 'group_move'):
     if mode == 'fit':
         resource_sequence = layer.module.defaultResourceSequence()
         if not resource_sequence:
-            return {'layer': next(l for l in snapshot()['layers'] if l['uid'] == p['layerUid']), 'time': edit_seconds()}
+            return {'layer': next(l for l in snapshot(layer)['layers'] if l['uid'] == p['layerUid']), 'time': edit_seconds()}
         content_field = layer.findSequence(resource_sequence)
         if content_field is None or not isinstance(content_field.sequence, ResourceSequence) or content_field.sequence.nKeys() == 0:
-            return {'layerUid': str(layer.uid)} if p.get('operation') == 'fit' else {'layer': next(l for l in snapshot()['layers'] if l['uid'] == p['layerUid']), 'time': edit_seconds()}
+            return {'layerUid': str(layer.uid)} if p.get('operation') == 'fit' else {'layer': next(l for l in snapshot(layer)['layers'] if l['uid'] == p['layerUid']), 'time': edit_seconds()}
         content_resource = content_field.sequence.key(0).r if content_field.disableSequencing else content_field.sequence.evalResource(track.timeToBeat(edit_seconds()))
         if content_resource is None:
-            return {'layer': next(l for l in snapshot()['layers'] if l['uid'] == p['layerUid']), 'time': edit_seconds()}
+            return {'layer': next(l for l in snapshot(layer)['layers'] if l['uid'] == p['layerUid']), 'time': edit_seconds()}
         content_duration = float(layer.module.resourceDuration(resource_sequence))
         if content_duration <= 0 or math.isnan(content_duration) or math.isinf(content_duration):
-            return {'layer': next(l for l in snapshot()['layers'] if l['uid'] == p['layerUid']), 'time': edit_seconds()}
+            return {'layer': next(l for l in snapshot(layer)['layers'] if l['uid'] == p['layerUid']), 'time': edit_seconds()}
         target = float(track.beatToTime(layer.tStart + content_duration))
     else:
         origin = end if mode == 'out' else start
@@ -743,7 +743,7 @@ if p['command'] in ('layer_edit', 'group_move'):
     playhead = max(new_start, min(new_end, cursor + (delta if mode == 'move' else 0)))
     if abs(playhead - float(track.beatToTime(manager.player.tCurrent))) > 0.000001:
         if not p.get('keepPlayhead'): manager.addCommand(TransportCommand.makeJumpToTime(state, manager, playhead))
-    result = snapshot()
+    result = snapshot(layer)
     updated = next(l for l in result['layers'] if l['uid'] == p['layerUid'])
     return {'layer': updated, 'time': playhead}
 if (p.get('live') or p.get('editTime') is not None) and p['command'] in ('adjust_value', 'key_set', 'key_delete', 'key_clear', 'constant_set', 'key_type'):
@@ -960,6 +960,18 @@ if command in ('select_key', 'key_type', 'key_move'):
         if end < start:
             raise ValueError('Layer has no valid range inside the track')
         target = max(start, min(end, target))
+        # Batched encoder turns retain each intermediate collision/clamp rule.
+        # A key must not skip over a destination blocked on an earlier detent.
+        count = max(1,min(64,int(p.get('detents') or 1)))
+        if count>1 and p.get('targetTime') is None:
+            current = source
+            for unused in range(count):
+                candidate = float(track.beatToTime(track.timeToBeat(current)+float(p['delta']))) if p.get('beats') else ((round(current*fps())+float(p['delta']))/fps() if p.get('frames') else current+float(p['delta']))
+                candidate = max(start,min(end,candidate))
+                candidate_beat = max(layer.tStart,min(layer.tEnd,track.timeToBeat(candidate)))
+                if any(i!=index and abs(seq.t(i)-candidate_beat)<=Key.tEpsilon for i in range(seq.nKeys())): break
+                current=candidate
+            target=current
         target_beat = max(layer.tStart, min(layer.tEnd, track.timeToBeat(target)))
         if any(i != index and abs(seq.t(i) - target_beat) <= Key.tEpsilon for i in range(seq.nKeys())):
             return {'field': field_snapshot(layer, field, source), 'time': source}

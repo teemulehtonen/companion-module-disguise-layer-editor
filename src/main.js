@@ -327,6 +327,7 @@ class DisguiseLayerControl extends InstanceBase {
             moveKey: Boolean(this.editor?.moveKey) && Date.now() < (this.editor?.guidesUntil || 0),
             keyTime: this.editor?.moveKey?.time ?? this.editor?.selectedKeyTime,
             liveValue: this.editor?.value,
+            editPatch: Date.now()-(this.viewerLivePatchAt || 0)<500 ? this.viewerLivePatch : undefined,
             time: this.editor?.transportTime,
             timecode: absoluteTimecode(
               this.editor?.transportTime,
@@ -482,7 +483,24 @@ class DisguiseLayerControl extends InstanceBase {
     )
     if (e === this.editor && batch === this.thumbnailBatch) this.publish()
   }
+  performDetents(key, fn, options = {}) {
+    const pending=this.pendingDetents
+    if(pending && pending.key===key && pending.editor===this.editor && pending.generation===this.queueGeneration && pending.count<64) {
+      pending.count++
+      return pending.promise
+    }
+    const batch={key,count:1,editor:this.editor,generation:this.queueGeneration}
+    batch.promise=this.perform(async editor=>{
+      if(this.pendingDetents===batch)this.pendingDetents=null
+      await fn(editor,batch.count)
+    },options)
+    this.pendingDetents=batch
+    return batch.promise
+  }
   perform(fn, options = {}) {
+    // Any nonmatching action is a barrier: never combine turns across a click,
+    // a reversal, a precision change or another controller's edit.
+    this.pendingDetents=null
     // Preserve every encoder detent in order. A failed action invalidates queued
     // actions from that generation, preventing writes to a changed context.
     const editor = this.editor,
@@ -525,6 +543,10 @@ class DisguiseLayerControl extends InstanceBase {
       await fn(editor)
       if (!scrub || editor.moveKey || editor.layerEdit) this.viewerEditRevision = (this.viewerEditRevision || 0) + 1
       if (editor !== this.editor) return
+      if(editor.layer && (editor.moveKey || editor.layerEdit)) {
+        this.viewerLivePatchAt=Date.now()
+        this.viewerLivePatch={revision:this.viewerEditRevision,trackUid:editor.snapshot.trackUid,layer:structuredClone({uid:editor.layer.uid,start:editor.layer.start,end:editor.layer.end,fields:editor.layerEdit ? editor.layer.fields : editor.field ? [editor.field] : []})}
+      }
       this.lastError = ''
       if (editor.snapshot && this.connection?.connected)
         this.connection.watch(

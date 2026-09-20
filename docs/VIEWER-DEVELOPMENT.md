@@ -1,3 +1,11 @@
+## Encoder responsiveness
+
+Companion encoder edits coalesce adjacent identical pending detents (maximum 64) behind an in-flight command. Clicks, reversals, different options and generation changes are barriers; keyframe multi-selection remains unbatched. Native key moves simulate intermediate detents to preserve collision and boundary behavior. Layer edit returns only the edited layer instead of re-reading every layer.
+
+Confirmed edited-field/layer patches are available on the fast viewer channel for 500 ms and carry revision checks. Numeric key curve previews are sampled at most once per 100 ms. No speculative writes or automatic retries were added.
+
+Validation: 200 local tests, native grouped-child move/IN/OUT checks, and native batched-key collision check. The controlled queue test combines 20 pending turns into one call; no measured physical Stream Deck latency claim is made.
+
 ## Group context menu
 
 Parameter selection includes exact layer OUT (with floating-point tolerance) in both linked and independent edit clocks. Times beyond OUT remain invalid.

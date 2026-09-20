@@ -960,7 +960,7 @@ class Editor {
         ...this.liveArgs(),
         mode,
         cursor,
-        delta: direction * (this.beatMode ? this.layerBeatStep : TIME_STEP_SECONDS[this.timeStep]),
+        delta: direction * (pointer.detents || 1) * (this.beatMode ? this.layerBeatStep : TIME_STEP_SECONDS[this.timeStep]),
         beats: this.beatMode,
         frames: !this.beatMode && this.timeStep === 'frame',
         expectedStart: this.layer.start,

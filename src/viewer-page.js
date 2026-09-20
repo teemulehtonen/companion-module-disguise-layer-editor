@@ -66,6 +66,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
   let clickTimer
   let editRevision = 0
   let confirmedRevision = 0
+  let livePatchRevision = -1
   const snapOptions = {enabled:true,edges:true,keys:true,markers:true,sections:true,grid:true}
   let snapGuide
   function showSnap(time) {
@@ -2237,8 +2238,11 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
             if (delta) zoom(Math.pow(1.2, -Math.max(-100, Math.min(100, delta))))
           }
           if (!state.viewOnly && (editPending || interactionBusy || mouseGesture)) state.editor = currentEditor
+          const patch=incoming.editPatch
+          const patchChanged=patch && patch.revision!==livePatchRevision && patch.revision>=confirmedRevision && !editPending && !interactionBusy && !mouseGesture && applyEditPatch(state,patch)
+          if(patchChanged){livePatchRevision=patch.revision;confirmedRevision=Math.max(confirmedRevision,patch.revision);rendered=''}
           updateEditorControls()
-          if (selectionChanged && !resizingWaveform && !mouseGesture && !editPending) draw()
+          if ((patchChanged || selectionChanged) && !resizingWaveform && !mouseGesture && !editPending) draw()
           else updatePlayhead()
           followClock()
           $('status').textContent = state.connected ? (state.viewOnly ? 'VIEW' : 'LIVE') : 'CONNECTION LOST'
