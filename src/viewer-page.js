@@ -1189,6 +1189,25 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       if (!state.seekEnabled) return
       lane.style.cursor = 'crosshair'
       lane.title = 'SEEK TO TIME'
+      let hoverFrame=0,hoverPoint=null
+      lane.addEventListener('pointermove',event=>{
+        if(mouseGesture || event.buttons)return
+        hoverPoint={x:event.clientX,y:event.clientY}
+        if(!hoverFrame)hoverFrame=requestAnimationFrame(()=>{
+          hoverFrame=0
+          if(!hoverPoint || !lane.isConnected || mouseGesture)return
+          const rect=lane.getBoundingClientRect()
+          const time=Math.max(0,Math.min(state.length,start+Math.max(0,Math.min(1,(hoverPoint.x-rect.left)/rect.width))*span))
+          showDragTimes([{time}],hoverPoint.y,lane)
+        })
+      })
+      lane.addEventListener('pointerleave',()=>{
+        hoverPoint=null
+        if(hoverFrame)cancelAnimationFrame(hoverFrame)
+        hoverFrame=0
+        if(!mouseGesture)clearDragTimes()
+      })
+
       lane.onclick = async (event) => {
         if (event.ctrlKey || event.shiftKey || event.altKey) return
         const rect = lane.getBoundingClientRect()
