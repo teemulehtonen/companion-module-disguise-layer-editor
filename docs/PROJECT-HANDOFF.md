@@ -1,4 +1,6 @@
-# Current release — beta.138
+# Current release — beta.139
+
+Explicit viewer OUT clicks seek to layer.end exactly, superseding the old OUT-minus-one-frame policy for that gesture. Active layer bounds include OUT so focus remains on the layer after feedback/refresh; covered in linked and independent clock tests. Previous/next key navigation retains its own last-visible-frame policy.
 
 Refresh's preserve-selection branch requires an actual layer. Undefined previous/current layer and parameter IDs otherwise compare equal and crash on mediaFields before viewer seek. Regression covers empty tracks with both linked and independent clocks. Reproduced against Designer and verified fixed at the current native time.
 

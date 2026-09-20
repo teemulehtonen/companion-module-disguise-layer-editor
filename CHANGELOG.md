@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-beta.139
+
+- Clicking a layer OUT point now seeks to its exact end time. Keyframe navigation retains its last-visible-frame boundary policy.
+
 ## 0.1.0-beta.138
 
 - Fix timeline seek when no layer is selected: preserving two absent selections must not enter the existing-layer resource refresh branch. Covers linked and independent editing clocks.

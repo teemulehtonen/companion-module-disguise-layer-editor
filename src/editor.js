@@ -596,7 +596,7 @@ class Editor {
       const fps = this.snapshot.fps || 25
       let target
       if (point === 'in') target = layer.start
-      else if (point === 'out') target = Math.max(layer.start, (Math.ceil(layer.end * fps - 1e-7) - 1) / fps)
+      else if (point === 'out') target = layer.end
       else if (point === 'key') {
         const field = numeric >= 0 ? layer.fields[numeric] : layer.mediaFields?.[resource]
         const key = field?.sequenced && field.keys?.find(k => Math.abs(k.time-keyTime) < 1e-5)

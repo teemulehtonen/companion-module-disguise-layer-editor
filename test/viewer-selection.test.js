@@ -108,6 +108,22 @@ test('viewer seek works after refresh without a selected layer in either clock m
   }
 })
 
+test('exact OUT preserves layer focus after feedback and refresh in both clock modes', async () => {
+  for (const linked of [true, false]) {
+    const editor = new Editor(new DemoClient())
+    await editor.refresh()
+    editor.setLinkTime(linked)
+    const layer = editor.layer
+    const result = await editor.selectFromViewer({trackUid:editor.snapshot.trackUid,layerUid:layer.uid,point:'out'})
+    assert.equal(result.ok,true)
+    assert.equal(editor.time,layer.end)
+    editor.followTime(layer.end,true)
+    await editor.refresh({preserve:true})
+    assert.equal(editor.layer.uid,layer.uid)
+    assert.equal(editor.time,layer.end)
+  }
+})
+
 test('seek route checks token, origin and exact payload', async (t) => {
   let calls = 0
   const server = new ViewerServer({}, () => ({}), {
@@ -142,7 +158,7 @@ test('timeline points seek and select the intended layer/parameter without modif
   const original = JSON.stringify(client.data.layers)
   const target = { trackUid, layerUid: layer.uid }
   assert.equal((await editor.selectFromViewer({ ...target, point: 'out' })).ok, true)
-  assert.equal(editor.time, layer.end - 1 / editor.snapshot.fps)
+  assert.equal(editor.time, layer.end)
   assert.equal(
     (
       await editor.selectFromViewer({
