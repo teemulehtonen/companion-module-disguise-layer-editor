@@ -1051,7 +1051,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       const field=[...(layer.fields||[]),...(layer.resources||[])].find(f=>f.name===parameter)
       const key=field?.keys?.find(k=>Math.abs(k.time-time)<1e-6)
       const value=key?.resource?.name ?? key?.resourceName ?? field?.choices?.find(c=>c.value===key?.value)?.label ?? key?.value
-      return [{time,prefix:point==='key'?'KF ':point.toUpperCase()+' ',suffix:value===undefined?'':'  '+String(value)}]
+      return [{time,prefix:point==='key'?'KF ':point.toUpperCase()+' ',suffix:value===undefined?'':'  '+(typeof value==='number' && Number.isFinite(value) ? String(Number(value.toFixed(3))) : String(value))}]
     },node.parentElement)
     node.classList.add('timeline-target')
     node.setAttribute('role','button')
@@ -1208,7 +1208,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       const field=[...(layer.fields||[]),...(layer.resources||[])].find(f=>f.name===parameter)
       const key=field?.keys?.find(k=>Math.abs(k.time-time)<1e-6)
       const value=key?.resource?.name ?? key?.resourceName ?? field?.choices?.find(c=>c.value===key?.value)?.label ?? key?.value
-      return [{time,prefix:point==='key'?'KF ':point.toUpperCase()+' ',suffix:value===undefined?'':'  '+String(value)}]
+      return [{time,prefix:point==='key'?'KF ':point.toUpperCase()+' ',suffix:value===undefined?'':'  '+(typeof value==='number' && Number.isFinite(value) ? String(Number(value.toFixed(3))) : String(value))}]
     },node.parentElement)
     node.classList.add('timeline-target')
     node.setAttribute('role','button');node.tabIndex=0
@@ -1487,7 +1487,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
         point.style.background = 'currentColor'
         point.style.border = '1px solid #101517'
         point.style.transform = 'translateX(var(--pan, 0px)) rotate(45deg)'
-        point.title = (field.label || field.name) + ' · ' + key.value
+        point.title = (field.label || field.name) + ' · ' + Number(key.value.toFixed(3))
         pointClick(point, layer, 'key', field.name, key.time)
       }
   }

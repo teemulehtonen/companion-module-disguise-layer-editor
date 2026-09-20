@@ -1,4 +1,8 @@
-# Current release - 0.2.0-beta.12
+# Current release - 0.2.0-beta.13
+
+Numeric keyframe hover time/value labels show at most three decimals, trimming trailing zeroes. Display formatting only: stored values and edit precision remain unchanged; choice/resource labels remain text.
+
+# Previous release - 0.2.0-beta.12
 
 Interface sizes are SMALL 100%, MEDIUM 110%, LARGE 120%. Geometry tests cover all three factors; saved size names automatically use the new factors.
 
