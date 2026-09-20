@@ -937,7 +937,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     button.dataset.selectLayer = layer.uid
     if (parameter === undefined) button.dataset.selectLayerStart = 'true'
     button.disabled =
-      !state.selectionEnabled || layer.group || (parameter !== undefined && (editClock() < layer.start || editClock() >= layer.end))
+      !state.selectionEnabled || layer.group || (parameter !== undefined && (editClock() < layer.start-1e-7 || editClock() > layer.end+1e-7))
     button.title = button.disabled
       ? 'SELECTION UNAVAILABLE'
       : 'SELECT IN COMPANION'
@@ -2082,7 +2082,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
         !state.selectionEnabled ||
         !target ||
         (target.group && button.dataset.reorderGroup!=='true') ||
-        (!target.group && button.dataset.selectLayerStart !== 'true' && (editClock()<target.start || editClock()>=target.end))
+        (!target.group && button.dataset.selectLayerStart !== 'true' && (editClock()<target.start-1e-7 || editClock()>target.end+1e-7))
     }
     const layer = state.layers.find((layer) => layer.uid === state.focusUid)
     for (const node of sheet.querySelectorAll('[data-parameter-value]')) {

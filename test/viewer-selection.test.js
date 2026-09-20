@@ -202,3 +202,13 @@ test('inactive selection uses a pending seek instead of delayed native feedback'
   assert.equal(result.ok, false)
   assert.notEqual(editor.time, 10)
 })
+test('parameter selection includes exact OUT in both clocks but rejects times beyond it',async()=>{
+ for(const linked of [true,false]) {
+  const client=new DemoClient(),editor=new Editor(client);await editor.refresh();editor.setLinkTime(linked)
+  const layer=editor.layer,target={trackUid:editor.snapshot.trackUid,layerUid:layer.uid,parameter:layer.fields[0].name}
+  assert.equal((await editor.selectFromViewer({...target,point:'out'})).ok,true)
+  assert.equal((await editor.selectFromViewer(target)).ok,true)
+  editor.pendingJump=null;editor.time=layer.end+1;client.data.time=layer.end+1
+  assert.equal((await editor.selectFromViewer(target)).ok,false)
+ }
+})

@@ -586,7 +586,7 @@ class Editor {
     const layer = this.snapshot.layers.find((item) => item.uid === layerUid)
     if (!layer) return { ok: false, reason: 'Layer is no longer available' }
     const selectionTime = pendingTime ?? this.time
-    if (!point && (selectionTime < layer.start || selectionTime >= layer.end)) return {ok:false,reason:'LAYER IS OUTSIDE THE EDIT TIME'}
+    if (!point && (selectionTime < layer.start-1e-7 || selectionTime > layer.end+1e-7)) return {ok:false,reason:'LAYER IS OUTSIDE THE EDIT TIME'}
     const numeric = parameter === undefined ? -1 : layer.fields.findIndex((field) => field.name === parameter)
     const resource =
       parameter === undefined ? -1 : (layer.mediaFields || []).findIndex((field) => field.name === parameter)

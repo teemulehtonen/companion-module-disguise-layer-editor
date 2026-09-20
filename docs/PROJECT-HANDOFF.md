@@ -1,4 +1,6 @@
-# Current release - 0.2.0-beta.18
+# Current release - 0.2.0-beta.19
+
+Parameter selection includes exact layer OUT (with floating-point tolerance) in both linked and independent edit clocks. Times beyond OUT remain invalid.
 
 A single group context menu offers UNGROUP, DELETE and CANCEL. DELETE removes the group and its contents through native Track.removeLayer after existing hierarchy, timing and descendant lock checks. UNGROUP retains the children. VIEW blocks both writes. Validation: local suite and 11 isolated native grouping/deletion checks.
 
