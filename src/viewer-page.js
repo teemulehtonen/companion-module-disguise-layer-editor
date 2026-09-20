@@ -78,8 +78,19 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
   function snapPoints(excludeLayer, parameter, keyTime, annotation, options=snapOptions) {
     const points = []
     const keyTargets = new Set()
+    // A parent's bounds follow its children. Snapping a moving child to its own
+    // parent would target the gesture's previous position, not a fixed landmark.
+    const excluded = new Set()
+    if (parameter === undefined) {
+      const byUid = new Map((state.layers || []).map(layer => [layer.uid,layer]))
+      let uid = excludeLayer
+      while (uid && !excluded.has(uid)) {
+        excluded.add(uid)
+        uid = byUid.get(uid)?.parent
+      }
+    }
     for (const layer of state.layers || []) {
-      if (layer.uid === excludeLayer && parameter === undefined) continue
+      if (excluded.has(layer.uid)) continue
       if (options.edges) points.push(layer.start,layer.end)
       if (options.keys) for (const field of [...(layer.fields || []),...(layer.resources || [])]) {
         if (!field.sequenced) continue

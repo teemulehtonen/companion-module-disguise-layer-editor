@@ -78,11 +78,24 @@ def checked_snap(seconds):
         return target
     # Re-resolve every landmark in Designer immediately before a write. Cached
     # browser geometry is only a preview and cannot authorize a stale snap.
-    for item in all_layers():
+    def contains_edited_layer(container):
+        return any(str(child.uid) == p.get('layerUid') or (isinstance(child, GroupLayer) and contains_edited_layer(child)) for child in container.layers)
+    def snap_layers(container):
+        for item in container.layers:
+            children = list(snap_layers(item)) if isinstance(item, GroupLayer) else []
+            # Group bounds are legitimate landmarks, except for an edited
+            # child's ancestors: those bounds can move with that same child.
+            own = str(item.uid) == p.get('layerUid')
+            ancestor = isinstance(item, GroupLayer) and contains_edited_layer(item)
+            if not (p['command'] == 'layer_edit' and (own or ancestor)):
+                yield item
+            for child in children:
+                yield child
+    for item in snap_layers(track):
         if p['command'] == 'layer_edit' and str(item.uid) == p.get('layerUid'):
             continue
         times = [float(track.beatToTime(item.tStart)), float(track.beatToTime(item.tEnd))]
-        for f in item.fields:
+        for f in ([] if isinstance(item, GroupLayer) else item.fields):
             seq = f.sequence
             if not isinstance(seq, (FloatSequence, ResourceSequence)) or f.disableSequencing:
                 continue

@@ -1,4 +1,10 @@
-# Current release - 0.2.0-beta.14
+# Current release - 0.2.0-beta.15
+
+Moving a child layer no longer offers its own ancestor groups as snap targets: their bounds can follow the same child. Unrelated group edges are validated natively alongside ordinary layer edges. This prevents a reproducible snap rejection during group-child drags without bypassing stale-target checks.
+
+Validation: 195 local tests; isolated native child move/IN/OUT checks and snapping to a group-only boundary. No exhaustive physical Stream Deck or show-time test was run.
+
+# Previous release - 0.2.0-beta.14
 
 Grouping now triggers Designer timeline hierarchy refresh through a native no-op sibling reorder after group/ungroup. Data-only grouping previously left the open native timeline stale. First Shift layer selection includes the ordinary active sibling; the group popup shows selected count.
 
