@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.0-beta.151
+
+- Split SNAP toggle from its target-only dropdown. Add S/F/T/L/Shift+L keyboard shortcuts (ignored in text inputs and with modifiers) and footer hint.
+
 ## 0.1.0-beta.148
 
 - Remove passive alignment guides. Show snap guides only for object/section targets, not time or beat grid targets. Objects sharing a grid time retain their guide.
