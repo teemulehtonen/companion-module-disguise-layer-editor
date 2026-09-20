@@ -1,4 +1,8 @@
-# Current release - 0.2.0-beta.17
+# Current release - 0.2.0-beta.18
+
+A single group context menu offers UNGROUP, DELETE and CANCEL. DELETE removes the group and its contents through native Track.removeLayer after existing hierarchy, timing and descendant lock checks. UNGROUP retains the children. VIEW blocks both writes. Validation: local suite and 11 isolated native grouping/deletion checks.
+
+# Previous release - 0.2.0-beta.17
 
 Group rows and bars use their distinct color without an icon or thumbnail. Timing behavior is unchanged.
 

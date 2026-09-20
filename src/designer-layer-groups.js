@@ -35,7 +35,7 @@ if p['command'] == 'group_move':
     return {'members':[{'uid':str(item.uid),'start':float(track.beatToTime(item.tStart)),'end':float(track.beatToTime(item.tEnd))} for item in members]}
 if p['command'] == 'layer_group':
     operation = p.get('operation')
-    if operation not in ('group', 'ungroup'): raise ValueError('Invalid group operation')
+    if operation not in ('group', 'ungroup', 'delete'): raise ValueError('Invalid group operation')
     selected = p.get('layers', [])
     ids = [item['uid'] for item in selected]
     if len(ids) != len(set(ids)) or not ids: raise ValueError('Invalid layer selection')
@@ -90,6 +90,9 @@ if p['command'] == 'layer_group':
     if children != p.get('expectedChildren'): raise ValueError('Group contents changed; reopen the menu')
     markDirty(track)
     for ancestor in ancestors: markDirty(ancestor)
+    if operation == 'delete':
+        track.removeLayer(group)
+        return {'deletedGroupUid':str(group.uid), 'memberUids':children}
     track.ungroupLayer(group)
     if children:
         refresh_hierarchy(next(item for item in container.layers if str(item.uid) == children[0]))

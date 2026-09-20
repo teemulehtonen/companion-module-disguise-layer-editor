@@ -118,9 +118,9 @@ function validEditRequest(value) {
   }
   if (value?.action === 'layer_group') return Boolean(
     /^[a-f0-9]{64}$/.test(value.token || '') && /^\d+$/.test(value.trackUid || '') &&
-    ['group','ungroup'].includes(value.operation) && Array.isArray(value.layers) &&
+    ['group','ungroup','delete'].includes(value.operation) && Array.isArray(value.layers) &&
     value.layers.length >= (value.operation === 'group' ? 2 : 1) && value.layers.length <= 256 &&
-    (value.operation !== 'ungroup' || value.layers.length === 1) &&
+    (value.operation === 'group' || value.layers.length === 1) &&
     value.layers.every(l => l && typeof l.uid === 'string' && /^\d+$/.test(l.uid) && typeof l.name === 'string' &&
       Number.isFinite(l.start) && Number.isFinite(l.end) && l.end >= l.start && Object.keys(l).every(k=>['uid','name','start','end'].includes(k))) &&
     new Set(value.layers.map(l=>l.uid)).size === value.layers.length &&

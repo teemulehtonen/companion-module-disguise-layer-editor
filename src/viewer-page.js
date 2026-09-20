@@ -906,7 +906,20 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     })
     cancel.onclick=closeKeyMenu
     if(!ungroup)panel.append(el('div','',chosen.length+' LAYERS'),input)
-    panel.append(apply,cancel);document.body.append(panel)
+    panel.append(apply)
+    if(ungroup) {
+      const remove=el('button','','DELETE')
+      remove.title='DELETE GROUP AND CONTENTS'
+      remove.onclick=()=>void interact(async()=>{
+        if(!state.editEnabled)return
+        closeKeyMenu()
+        if(await releaseViewerMode() && await sendEdit('layer_group',{...request,operation:'delete'})) {
+          selectedLayers.clear();rendered='';lastFullRead=0
+        }
+      })
+      panel.append(remove)
+    }
+    panel.append(cancel);document.body.append(panel)
     input.onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();apply.click()}}
     return true
   }
