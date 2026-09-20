@@ -1,4 +1,8 @@
-# Current release — 0.2.0-beta.8
+# Current release — 0.2.0-beta.9
+
+Incoming timecode label shortened to IN:. Both track metadata and input timecode use 11px text and share UI scaling.
+
+# Previous release — 0.2.0-beta.8
 
 Browser-local SMALL/MEDIUM/LARGE sizing (100/105/110%) covers controls, popups and pointer geometry. Track heading includes native FPS, duration and TC/BEAT mode. Optional TC IN: reads raw transport input, hidden if no source is configured. See VIEWER-DEVELOPMENT.md for normalization and source API details. 194 local tests passed. Real incoming LTC/MTC signal remains untested; installed viewer displays configured LTC input at 00:00:00:00. Browser checks confirmed 105/110% sizing, saved size after reload, VIEW preservation and no console errors.
 
