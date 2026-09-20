@@ -164,6 +164,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
   }
   $('fitTrack').before(transportControls,addLayers)
   function toggleSnap() {
+    if (state?.viewOnly) return
     snapOptions.enabled=!snapOptions.enabled
     snapButton.textContent=snapOptions.enabled?'SNAP ON':'SNAP OFF'
     snapButton.setAttribute('aria-pressed',String(snapOptions.enabled))
@@ -389,6 +390,10 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       mark.classList.toggle('selected-keyframe',active)
     }
 
+    linkTimeButton.hidden = Boolean(state?.viewOnly)
+    linkTimeButton.style.display = state?.viewOnly ? 'none' : ''
+    snapGroup.hidden = Boolean(state?.viewOnly)
+    snapGroup.style.display = state?.viewOnly ? 'none' : 'inline-flex'
     linkTimeButton.setAttribute('aria-pressed',String(Boolean(state?.editor?.linkTime)))
     linkTimeButton.disabled=!state?.editEnabled || !state?.connected || editPending || interactionBusy || Boolean(mouseGesture || layerReorder)
     const enabled = state?.editEnabled && state.editor

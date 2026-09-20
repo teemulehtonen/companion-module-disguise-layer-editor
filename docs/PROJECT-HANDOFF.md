@@ -1,4 +1,8 @@
-# Current release — 0.2.0-beta.3
+# Current release — 0.2.0-beta.4
+
+VIEW hides LINK TIME and the entire SNAP control group. LIVE restores them without changing snap preferences. The S shortcut is inactive in VIEW.
+
+# Previous release — 0.2.0-beta.3
 
 ## LIVE / VIEW safety mode
 
