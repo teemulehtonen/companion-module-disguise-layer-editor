@@ -158,8 +158,9 @@ class ViewerServer {
       showAllParameters: this.options.showAll === true,
       seekEnabled: typeof this.options.seek === 'function',
       selectionEnabled: typeof this.options.select === 'function',
-      editEnabled: typeof this.options.edit === 'function',
-      editor: typeof this.options.edit === 'function' ? current.editor : null,
+      viewOnly: current.viewOnly === true,
+      editEnabled: typeof this.options.edit === 'function' && !current.viewOnly,
+      editor: current.editor || null,
       selectionToken: this.selectionToken,
       parameter: current.parameter,
       liveValue: current.liveValue,
@@ -285,7 +286,8 @@ class ViewerServer {
       }
       if (
         req.method === 'POST' &&
-        ((url.pathname === '/api/edit' && this.options.edit) ||
+        ((url.pathname === '/api/view-mode' && this.options.viewMode) ||
+          (url.pathname === '/api/edit' && this.options.edit) ||
           (url.pathname === '/api/select' && this.options.select) ||
           (url.pathname === '/api/seek' && this.options.seek))
       ) {
@@ -304,7 +306,16 @@ class ViewerServer {
           if (body.length > 1024) return send(413, 'text/plain', 'Selection too large')
         }
         const value = JSON.parse(body)
+        if (url.pathname === '/api/view-mode') {
+          if (!value || typeof value.viewOnly !== 'boolean' || Object.keys(value).length !== 1)
+            return send(400,'application/json',JSON.stringify({ok:false,reason:'INVALID MODE'}))
+          if (this.context().connected === false) return send(409,'application/json',JSON.stringify({ok:false,reason:'CONNECTION LOST'}))
+          const result = await this.options.viewMode(value.viewOnly)
+          this.updated = 0
+          return send(result.ok ? 200 : 409,'application/json',JSON.stringify(result))
+        }
         if (url.pathname === '/api/edit') {
+          if (this.context().viewOnly) return send(409,'application/json',JSON.stringify({ok:false,reason:'VIEW ONLY'}))
           if (!validEditRequest(value)) return send(400, 'application/json', JSON.stringify({ok:false,reason:'INVALID EDIT REQUEST'}))
           const result = await this.options.edit(value)
           this.updated = 0

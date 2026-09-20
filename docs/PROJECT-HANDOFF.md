@@ -1,4 +1,14 @@
-# Current release — 0.2.0-beta.2
+# Current release — 0.2.0-beta.3
+
+## LIVE / VIEW safety mode
+
+Click the connected LIVE/VIEW status to switch the entire module. VIEW forces LINK TIME off and keeps local time, layer/parameter browsing and zoom available. It blocks Designer edits, transport commands and real playhead changes from both browser and Companion. Returning to LIVE leaves LINK TIME off. Connection errors disable the mode switch.
+
+The mode is saved in module configuration. DesignerClient uses a fail-closed native read allowlist and rechecks transport writes after asynchronous state reads. Only audited seek operations with keepPlayhead=true are allowed. Main invalidates the action queue, waits for the active action and clears editing state; an HTTP command already dispatched before locking cannot be recalled. The server enforces VIEW independently of browser controls. This protects this module, not other controllers or Designer itself.
+
+Validation: 189 local tests and package lifecycle checks passed. Installed on Companion and checked LIVE/VIEW in the browser. A VIEW OUT click changed only local inspection time; Designer time and stopped transport remained unchanged. Returning to LIVE kept LINK TIME off; browser error log was empty. No exhaustive physical Stream Deck test was run.
+
+# Previous release — 0.2.0-beta.2
 
 Multi-key selection is scoped to one parameter and stored as moveKey.group, with the first key as the Deck anchor. Mouse drag passes anchorTime for the actual grabbed member. Native key_group validates all keys and destinations before mutating one sequence; collision is a no-op, failures restore saved sequence contents. Group value/type/resource changes are disabled. Shift-marquee is viewer-local until a guarded selection is confirmed.
 

@@ -236,7 +236,9 @@ class DisguiseLayerControl extends InstanceBase {
       this.client = config.demo
         ? new DemoClient()
         : new DesignerClient(config.host || '127.0.0.1', config.port ?? 80)
+      this.client.viewOnly = config.viewOnly === true
       this.editor = new Editor(this.client)
+      if (this.client.viewOnly) this.editor.setLinkTime(false)
       this.updateStatus(InstanceStatus.Connecting, config.demo ? 'Demo ready' : 'Connecting to Designer')
       if (!config.demo) {
         const connection = new Connection(
@@ -333,10 +335,27 @@ class DisguiseLayerControl extends InstanceBase {
               this.editor?.timecodeSamples,
               this.editor?.liveTimecodeSample,
             ),
-            connected: Boolean(this.connection?.connected),
-            editor: config.viewerEditEnabled === true ? describeEditor(this.editor) : null,
+            connected: Boolean(this.connection?.connected) && !this.lastError,
+            viewOnly: this.client.viewOnly === true,
+            editEnabled: config.viewerEditEnabled === true && !this.client.viewOnly,
+            editor: describeEditor(this.editor),
           }),
           {
+            viewMode: async enabled => {
+              if (!this.connection?.connected || this.lastError) return {ok:false,reason:'CONNECTION UNAVAILABLE'}
+              // Lock synchronously before waiting for an existing action. Commands
+              // already sent cannot be recalled; queued actions are discarded.
+              if (enabled) this.client.viewOnly = true
+              this.queueGeneration++
+              await this.actionTail
+              this.client.viewOnly = enabled
+              if (enabled) { this.editor.setLinkTime(false); this.editor.clearViewEditing() }
+              this.config.viewOnly = enabled
+              this.saveConfig(this.config)
+              this.viewerEditRevision = (this.viewerEditRevision || 0) + 1
+              this.publish()
+              return {ok:true,viewOnly:enabled,editor:describeEditor(this.editor)}
+            },
             showAll: config.viewerShowAllParameters === true,
             resources: config.viewerEditEnabled === true ? async offset => {
               if (this.editor?.mediaMode && Date.now() - (this.lastViewerResourceRead || 0) > 2500) {
@@ -352,6 +371,7 @@ class DisguiseLayerControl extends InstanceBase {
               return resourceList(this.editor, offset)
             } : undefined,
             edit: config.viewerEditEnabled === true ? async (target) => {
+              if (this.client.viewOnly) return {ok:false,reason:'VIEW ONLY'}
               let result = { ok: false, reason: 'EDITOR CHANGED — TRY AGAIN' }
               await this.perform(async editor => {
                 if (!this.connection?.connected) {
@@ -359,6 +379,7 @@ class DisguiseLayerControl extends InstanceBase {
                   return
                 }
                 try {
+                  if (this.client.viewOnly) { result = {ok:false,reason:'VIEW ONLY'}; return }
                   result = await editFromViewer(editor, target)
                   if (result.ok && editor.layer) result.patch = {trackUid:editor.snapshot.trackUid,layer:structuredClone(editor.layer)}
                 }
@@ -513,6 +534,9 @@ class DisguiseLayerControl extends InstanceBase {
       this.connectionStatus()
     } catch (error) {
       if (editor !== this.editor) return
+      if (error.code === 'VIEW_ONLY') {
+        editor.clearViewEditing(); this.lastError = ''; this.connectionStatus(); this.publish(); return
+      }
       this.lastError = error.message
       this.queueGeneration++
       this.log('warn', error.message)

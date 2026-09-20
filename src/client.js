@@ -3,7 +3,7 @@ const { makeScript } = require('./designer-script')
 const { orderLayerParameters } = require('./parameter-order')
 const { paths, requireSuccess, decodeExecution } = require('./designer-api')
 
-/** HTTP boundary: validate responses here; editing policy belongs to Editor.
+/** HTTP boundary: validate responses and enforce the shared VIEW write lock.
  * A shared abort signal cancels in-flight work when Companion replaces the
  * connection. Writes are never retried automatically (a retry could add a key).
  */
@@ -40,7 +40,21 @@ class DesignerClient {
       throw new Error(body.status?.message || 'Invalid Designer transport response')
     return body.result
   }
-  async execute(command, args) {
+  assertWritable() {
+    if (this.viewOnly) {
+      const error = new Error('VIEW ONLY')
+      error.code = 'VIEW_ONLY'
+      throw error
+    }
+  }
+  async execute(command, args = {}) {
+    // Fail closed: new native operations must explicitly be audited as reads.
+    const reads = ['refresh','resolve_timecode','live_state','playback_state','read_field',
+      'media_list','key_clear_list','viewer_snapshot','viewer_audio_source']
+    const localSeek = ['seek','nudge_time','jump_key'].includes(command) && args.keepPlayhead === true
+    if (!reads.includes(command) && !localSeek) this.assertWritable()
+    // makeScript merges args into its command payload; never allow an override.
+    if (Object.hasOwn(args, 'command')) throw new Error('Invalid command arguments')
     const response = await this.fetch(this.url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -71,7 +85,9 @@ class DesignerClient {
   }
   async transport(context, operation, lastMode = 'playsection') {
     if (!['play','playsection','playloopsection','stop','toggle','gotonextsection','gotoprevsection'].includes(operation)) throw new Error('Invalid transport operation')
+    this.assertWritable()
     const state = await this.execute('playback_state', context)
+    this.assertWritable()
     const command = operation === 'toggle' ? (state.playing ? 'stop' : lastMode) : operation
     const section = command === 'gotonextsection' || command === 'gotoprevsection'
     const response = await this.fetch(this.baseUrl + paths.transport(command), {
@@ -84,7 +100,9 @@ class DesignerClient {
     return {playing:section ? state.playing : command !== 'stop',command}
   }
   async togglePlayback(context) {
+    this.assertWritable()
     const state = await this.execute('playback_state', context)
+    this.assertWritable()
     const endpoint = state.playing ? 'stop' : 'playsection'
     const response = await this.fetch(this.baseUrl + paths.playback(state.playing), {
       method: 'POST',

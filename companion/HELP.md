@@ -44,3 +44,7 @@ Windows: `npm run release` creates archives in `releases/0.2.beta`. To replace a
 [Contributing](CONTRIBUTING.md) · [Architecture](docs/ARCHITECTURE.md) · [Test report](docs/TRACK-1-TESTS.md) · [GitHub setup](docs/GITHUB-SETUP.md)
 
 MIT licensed. The internal module ID remains `disguise-layer-control` for compatibility.
+
+## LIVE / VIEW
+
+Click the connected viewer status to switch the module to VIEW. VIEW disables all Designer writes and transport controls, forces LINK TIME off, and keeps local time, layer/parameter browsing and zoom. Returning to LIVE leaves LINK TIME off. Connection errors disable this switch. VIEW applies to this module only; already dispatched commands cannot be recalled.

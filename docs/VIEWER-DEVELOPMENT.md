@@ -1,3 +1,11 @@
+## LIVE / VIEW safety mode
+
+Click the connected LIVE/VIEW status to switch the entire module. VIEW forces LINK TIME off and keeps local time, layer/parameter browsing and zoom available. It blocks Designer edits, transport commands and real playhead changes from both browser and Companion. Returning to LIVE leaves LINK TIME off. Connection errors disable the mode switch.
+
+The mode is saved in module configuration. DesignerClient uses a fail-closed native read allowlist and rechecks transport writes after asynchronous state reads. Only audited seek operations with keepPlayhead=true are allowed. Main invalidates the action queue, waits for the active action and clears editing state; an HTTP command already dispatched before locking cannot be recalled. The server enforces VIEW independently of browser controls. This protects this module, not other controllers or Designer itself.
+
+Validation: targeted client, transport-race, Editor, Companion action and HTTP endpoint tests. No show-time guarantee or exhaustive physical Stream Deck test is implied.
+
 # Viewer development guide
 
 ## Single-parameter key groups (0.2.0-beta.2)

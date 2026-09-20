@@ -29,6 +29,15 @@ function actions(instance) {
     options,
     callback: (event) =>
       instance.perform((editor) => {
+        if (editor.viewOnly) {
+          const browsing = ['Time keypad','Select adaptive timing step','Read layers and values from Designer',
+            'Select active layer','Select parameter / media folder','Scrub live / move selected key',
+            'Cycle COARSE / FINE / ULTRA','Jump Designer playhead to staged time',
+            'Layer timing step / resource write mode','Jump to previous / next keyframe',
+            'Cycle time step / fit layer to content','Toggle resource browser']
+          const preview = name === 'Adjust live value / preview media' && editor.mediaMode
+          if (!browsing.includes(name) && !preview && !name.startsWith('Context button')) return
+        }
         if (editor.clearKeysBrowser && !name.startsWith('Context button') && name !== 'Transport control') {
           const id = {
             'Select parameter / media folder': 'field',

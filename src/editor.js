@@ -695,7 +695,19 @@ class Editor {
     )
     if (this.moveKey && this.selectedKey) this.moveKey = { ...this.selectedKey }
   }
+  get viewOnly() { return this.client.viewOnly === true }
+  clearViewEditing() {
+    this.moveKey = null
+    this.selectedKeyTime = null
+    this.layerEdit = ''
+    this.clearKeysBrowser = null
+    this.clearKeysPrompt = null
+    this.deletePress = null
+    this.pendingJump = null
+    this.guidesUntil = 0
+  }
   setLinkTime(enabled) {
+    if (this.viewOnly) enabled = false
     this.local()
     const changed = this.linkTime !== Boolean(enabled)
     this.linkTime = Boolean(enabled)
@@ -716,7 +728,7 @@ class Editor {
     }
   }
   get keepEditPlayhead() {
-    return this.viewerKeepPlayhead ?? !this.linkTime
+    return this.viewOnly || (this.viewerKeepPlayhead ?? !this.linkTime)
   }
   async withEditTime(fn) {
     const previous = this.viewerKeepPlayhead
@@ -811,6 +823,7 @@ class Editor {
     this.loadValue()
   }
   async toggleMoveKey(exactTime) {
+    if (this.viewOnly) return
     return this.withEditTime(() => this.toggleMoveKeyTarget(exactTime))
   }
   async toggleMoveKeyTarget(exactTime) {
@@ -907,6 +920,7 @@ class Editor {
     return this.layer?.mediaFields?.[this.mediaFieldIndex]
   }
   toggleLayerEditor() {
+    if (this.viewOnly) return
     this.local()
     this.requireReady()
     if (!this.layer) return
@@ -1085,6 +1099,7 @@ class Editor {
     }
   }
   async pressPad(slot) {
+    if (this.viewOnly && (this.mediaMode || ![0,1,7].includes(slot))) return
     if (!Number.isInteger(slot) || slot < 0 || slot > 7) throw new Error('Invalid button')
     if (this.clearKeysPrompt) {
       if (slot === 5) return this.confirmClearKeys()
@@ -1134,6 +1149,7 @@ class Editor {
     await this.refresh({ preserve: true })
   }
   async padDown(slot, now = Date.now()) {
+    if (this.viewOnly && ![0,1,7].includes(slot)) return
     if (slot === 5 && !this.layer) return
     if (slot !== 5 || this.mediaMode || this.clearKeysPrompt || this.clearKeysBrowser)
       return this.pressPad(slot)
@@ -1141,6 +1157,7 @@ class Editor {
     this.deletePress = { time: now, target: this.deletionTarget(), resetDefault: this.canResetDefault }
   }
   async padUp(slot, now = Date.now()) {
+    if (this.viewOnly && ![0,1,7].includes(slot)) return
     if (slot !== 5 || !this.deletePress) return
     const press = this.deletePress
     this.deletePress = null
