@@ -1728,6 +1728,14 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
   function bounds(value) {
     return Math.max(0, Math.min(Math.max(0, (state?.length || span) - span), value))
   }
+  function followClock() {
+    if(mouseGesture || !follow || !state) return
+    const time=editClock()
+    if(time < start+span*0.12 || time > start+span*0.85) {
+      targetStart=bounds(time-span*(time < start+span*0.12 ? 0.25 : 0.65))
+      if(!frame && Math.abs(targetStart-start)>span/2000) frame=requestAnimationFrame(animate)
+    }
+  }
   function animate() {
     frame = 0
     const delta = targetStart - start
@@ -1836,6 +1844,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
           updateEditorControls()
           if (selectionChanged && !resizingWaveform && !mouseGesture && !editPending) draw()
           else updatePlayhead()
+          followClock()
           $('status').textContent = state.connected ? 'LIVE' : 'CONNECTION LOST'
           $('status').className = state.connected ? 'live' : 'error'
         }
@@ -1909,10 +1918,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
           rendered = signature
           draw()
         } else updatePlayhead()
-        if (!mouseGesture && follow && (editClock() < start + span * 0.06 || editClock() > start + span * 0.94)) {
-          targetStart = bounds(editClock() - span * (editClock() < start ? 0.2 : 0.7))
-          if (!frame && Math.abs(targetStart - start) > span / 2000) frame = requestAnimationFrame(animate)
-        }
+        followClock()
       }
     } catch {
       $('status').textContent = 'CONNECTION LOST'
