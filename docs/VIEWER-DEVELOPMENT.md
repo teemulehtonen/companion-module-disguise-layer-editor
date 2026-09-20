@@ -94,3 +94,9 @@ Supersedes beta.123 transport-navigation exception. Editor.time is edit time, tr
 ## Transport controls (beta.128)
 
 Viewer transport actions use controlTransport and DesignerClient.transport. Validate operation allowlists, reread playback state before toggling and never retry ambiguous writes. Keep the nested section-jump request shape separate from the flat playback shape. Shared lastPlaybackMode is session state; stopping does not reset it. Do not route explicit transport commands through the editing seek path or keepPlayhead. See the [native transport API](https://developer.disguise.one/api/session/transport/).
+
+## Pending UI update: sizes and transport input
+
+SMALL/MEDIUM/LARGE apply browser-local 100/105/110 percent CSS zoom. viewer-ui-scale.js normalizes pointer and DOMRect coordinates to layout pixels, including popup placement. Track metadata shows native FPS, duration and TC/BEAT mode. TC IN: is a separate raw TransportManager.timecode readout, hidden when no source is assigned. Designer 32.4 exposes TimecodeTransport.current; newer timecode is a fallback. ViewerClock subscribes separately from the timeline clock and expires samples after two seconds; full snapshots provide a guarded fallback. Never substitute the timeline's TC-marker time for incoming TC. statusString remains the readout tooltip, including No clock.
+
+Verification: native read-only inspection confirmed no assigned source on the current transport and current as a Timecode on an isolated LTC object. Actual incoming LTC/MTC signal has not been tested. Unit coverage includes removal, stale input and independence from timeline TC.

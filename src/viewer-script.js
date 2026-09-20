@@ -10,6 +10,14 @@ if p['command'] == 'viewer_snapshot':
     result = {'trackUid': str(track.uid), 'trackName': str(track.path).replace('\\\\', '/').rsplit('/', 1)[-1],
               'length': float(track.lengthInSec), 'time': seconds, 'fps': fps(),
               'timecode': str(manager.beatToTimecode(track.timeToBeat(seconds))), 'layers': [], 'warnings': [], 'ticks': []}
+    result['externalTimecode'] = None
+    try:
+        source = manager.timecode
+        if source is not None:
+            incoming = getattr(source, 'current', getattr(source, 'timecode', ''))
+            result['externalTimecode'] = {'value': re.sub(r'[.;]', ':', str(incoming)), 'status': str(getattr(source, 'statusString', ''))}
+    except Exception:
+        pass  # Optional display must never break the timeline snapshot.
     result['sections'] = []
     # Compact native TC anchors let drag labels update locally without requests.
     tc_starts = sorted(set([0.0] + [float(track.beatToTime(track.cues.getT(i))) for i in range(track.cues.n())

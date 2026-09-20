@@ -1,6 +1,8 @@
 'use strict'
 
 const { paths } = require('./designer-api')
+// Transport input is raw incoming TC, not the timeline's TC-marker mapping.
+const externalProperty = "[str(getattr(object.timecode, 'current', getattr(object.timecode, 'timecode', ''))), str(getattr(object.timecode, 'statusString', ''))] if object.timecode is not None else None"
 const property =
   '[str(object.track.uid), object.track.beatToTime(object.player.tCurrent), str(object.beatToTimecode(object.player.tCurrent)), object.player.tCurrent, bool(object.track.quant), [object.track.bpmAt(object.player.tCurrent), object.track.beatToTime(1), object.track.beatToTime(16), object.track.lengthInBeats, object.track.lengthInSec]]'
 
@@ -23,6 +25,7 @@ class ViewerClock {
       if (!this.socket && Date.now() >= this.retryAt) this.connect(uid)
     } else this.stop()
     // A stalled socket must never override fresh HTTP feedback indefinitely.
+    context = { ...context, externalTimecode: Date.now() - this.externalReceived < 2000 ? this.externalTimecode : undefined }
     return this.sample?.trackUid === context.trackUid && Date.now() - this.received < 2000
       ? { ...context, time: this.sample.time, timecode: this.sample.timecode, ...(Number.isFinite(this.sample.beat) ? { beat: this.sample.beat, quantized: this.sample.quantized, tempoKey: this.sample.tempoKey } : {}) }
       : context
@@ -48,7 +51,7 @@ class ViewerClock {
             subscribe: {
               object: `getByUID(0x${BigInt(uid).toString(16)})`,
               configuration: { updateFrequencyMs: 100 },
-              properties: [property],
+              properties: [property, externalProperty],
             },
           }),
         )
@@ -58,9 +61,18 @@ class ViewerClock {
       try {
         const message = JSON.parse(String(event.data))
         if (message.error) return lost()
-        if (message.subscriptions)
+        if (message.subscriptions) {
           this.id = message.subscriptions.find((s) => s.propertyPath === property)?.id
+          this.externalId = message.subscriptions.find((s) => s.propertyPath === externalProperty)?.id
+        }
         for (const change of message.valuesChanged || []) {
+          if (this.externalId !== undefined && change.id === this.externalId) {
+            const value = change.value
+            this.externalTimecode = Array.isArray(value) && typeof value[0] === 'string'
+              ? { value: value[0].replace(/[.;](\d+)$/, ':$1'), status: String(value[1] || '') } : null
+            this.externalReceived = Date.now()
+            continue
+          }
           if (this.id === undefined || change.id !== this.id) continue
           const value = change.value
           if (
@@ -93,6 +105,9 @@ class ViewerClock {
     this.socket = null
     this.sample = null
     this.id = undefined
+    this.externalId = undefined
+    this.externalTimecode = undefined
+    this.externalReceived = 0
     clearTimeout(this.timer)
     socket?.close()
   }

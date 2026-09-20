@@ -167,6 +167,7 @@ class ViewerServer {
       selectionToken: this.selectionToken,
       parameter: current.parameter,
       liveValue: current.liveValue,
+      externalTimecode: current.externalTimecode !== undefined ? current.externalTimecode : this.cache.externalTimecode,
       alignmentGuides: current.trackUid === this.cache.trackUid ? alignmentGuides(this.cache, current) : [],
       updated: this.updated,
       connected: current.connected !== false,

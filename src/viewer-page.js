@@ -1,5 +1,6 @@
 'use strict'
 const brandLogo = require('./viewer-logo.json')
+const { createUiGeometry } = require('./viewer-ui-scale')
 const { applyEditPatch } = require('./viewer-edit-model')
 const { discreteSegments } = require('./viewer-discrete')
 const { selectionScroll } = require('./viewer-selection-scroll')
@@ -8,8 +9,10 @@ const { duplicateMarkerKeys } = require('./viewer-marker-duplicates')
 
 // Embedded at bundle time: the packaged module needs no external web runtime.
 // All project strings reach the DOM through textContent, never HTML parsing.
-function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode, duplicateMarkerKeys) {
+function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode, duplicateMarkerKeys, createUiGeometry) {
   const $ = (id) => document.getElementById(id)
+  let uiScale = 1
+  const {x:clientX,y:clientY,rect:uiRect,width:uiWidth,height:uiHeight}=createUiGeometry(()=>uiScale,window)
   const viewport = $('viewport'),
     sheet = $('sheet')
   let state,
@@ -39,16 +42,16 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
   function clearDragTimes() { for(const node of dragLabels) node.remove(); dragLabels.length=0 }
   function showDragTimes(times, clientY, lane) {
     clearDragTimes()
-    const rect=lane.getBoundingClientRect()
+    const rect=uiRect(lane)
     for(const entry of times) {
       const anchor=(state.dragTimecodes || []).filter(a=>a.time<=entry.time+1e-7).at(-1)
       const rate=state.fps || 25
       const drop=anchor && timecode(anchor.probeSeconds,rate,true)===anchor.probeLabel.replace(/[.;]/g,':') && timecode(anchor.probeSeconds,rate,false)!==anchor.probeLabel.replace(/[.;]/g,':')
       const label=timecode(anchor ? anchor.seconds+entry.time-anchor.time : entry.time,rate,Boolean(drop))
       const node=el('div','drag-time-label',(entry.prefix || '')+label+(entry.suffix || ''))
-      Object.assign(node.style,{position:'fixed',zIndex:90,pointerEvents:'none',background:'#10232fee',color:'#bdeaff',border:'1px solid #397b94',borderRadius:'4px',padding:'4px 7px',font:'13px Consolas,monospace',whiteSpace:'nowrap',top:Math.max(4,Math.min(window.innerHeight-30,clientY-34+(entry.row || 0)*28))+'px'})
+      Object.assign(node.style,{position:'fixed',zIndex:90,pointerEvents:'none',background:'#10232fee',color:'#bdeaff',border:'1px solid #397b94',borderRadius:'4px',padding:'4px 7px',font:'13px Consolas,monospace',whiteSpace:'nowrap',top:Math.max(4,Math.min(uiHeight()-30,clientY-34+(entry.row || 0)*28))+'px'})
       document.body.append(node)
-      node.style.left=Math.max(4,Math.min(window.innerWidth-node.offsetWidth-4,rect.left+x(entry.time)*rect.width/100))+'px'
+      node.style.left=Math.max(4,Math.min(uiWidth()-node.offsetWidth-4,rect.left+x(entry.time)*rect.width/100))+'px'
       dragLabels.push(node)
     }
   }
@@ -186,9 +189,9 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
   $('fitLayer').after(snapGroup)
   snapMenuButton.onclick = event=>{
     event.preventDefault(); closeKeyMenu()
-    const rect = snapButton.getBoundingClientRect()
+    const rect = uiRect(snapButton)
     keyMenu = el('div','key-edit-menu')
-    Object.assign(keyMenu.style,{left:Math.max(0,Math.min(rect.left,window.innerWidth-180))+'px',top:rect.bottom+4+'px'})
+    Object.assign(keyMenu.style,{left:Math.max(0,Math.min(rect.left,uiWidth()-180))+'px',top:rect.bottom+4+'px'})
     for (const [key,label] of [['edges','LAYER EDGES'],['keys','KEYFRAMES'],['markers','MARKERS'],['sections','SECTIONS'],['grid','TIME / BEAT GRID']]) {
       const row=el('label','snap-option'), input=el('input')
       input.type='checkbox'; input.checked=snapOptions[key]
@@ -510,7 +513,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     path.title = resourceBranch
     files.append(path)
     const grid = el('div','resource-file-grid')
-    Object.assign(grid.style,{maxHeight:'300px',overflowY:'auto',alignContent:'start',gridTemplateColumns:'1fr'})
+    Object.assign(grid.style,{maxHeight:'min(300px, calc(100vh / var(--ui-scale,1) - 8px))',overflowY:'auto',alignContent:'start',gridTemplateColumns:'1fr'})
     grid.onscroll = () => {
       if (grid.scrollHeight-grid.scrollTop-grid.clientHeight < 50 && resourceListing.items.length < resourceListing.total && !resourceListing.error)
         void loadResourceFiles()
@@ -636,12 +639,12 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       const keyParts=parameter===undefined ? [] : [...sheet.querySelectorAll('[data-key-time]')].filter(mark=>mark.dataset.keyLayer===layer.uid && mark.dataset.keyParameter===parameter && Math.abs(Number(mark.dataset.keyTime)-currentKeyTime)<1e-6)
       const layerParts=layerLanes.flatMap(lane=>[...lane.children].map(child=>({node:child,kind:child.dataset.layerEdge || (child.classList.contains('clip')?'clip':'content')})))
       const groupParts=group?[...sheet.querySelectorAll('[data-key-time]')].filter(mark=>mark.dataset.keyLayer===layer.uid && mark.dataset.keyParameter===parameter && group.some(k=>Math.abs(k.time-Number(mark.dataset.keyTime))<1e-6)).map(node=>({node,time:Number(node.dataset.keyTime)})):[]
-      mouseGesture = {group,anchor,groupParts,keyParts,layerStart:layer.start,layerEnd:layer.end,layerLanes,layerParts,node,x:event.clientX,y:event.clientY,lastX:event.clientX,lastY:event.clientY,originX:event.clientX,
-        originY:event.clientY,
+      mouseGesture = {group,anchor,groupParts,keyParts,layerStart:layer.start,layerEnd:layer.end,layerLanes,layerParts,node,x:clientX(event),y:clientY(event),lastX:clientX(event),lastY:clientY(event),originX:clientX(event),
+        originY:clientY(event),
         originValue:selected?.value,samples:field?.samples?.map(s=>({...s})),
         neighbours:[keys.filter(k=>k.time<currentKeyTime).at(-1)?.time ?? layer.start,keys.find(k=>k.time>currentKeyTime)?.time ?? layer.end],
         originTime:group ? currentKeyTime : parameter !== undefined ? currentKeyTime : action === 'value' ? layer.end : layer.start,
-        width:node.parentElement.getBoundingClientRect().width,points:snapPoints(layer.uid,parameter,currentKeyTime),
+        width:uiRect(node.parentElement).width,points:snapPoints(layer.uid,parameter,currentKeyTime),
         alignmentPoints:snapPoints(layer.uid,undefined,undefined,undefined,{edges:true,keys:true}),
         keyMode:parameter !== undefined,action,ready:false,preparing:false,moved:false,token:state.editor.token}
     })
@@ -649,7 +652,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       const g = mouseGesture
       if (!g || g.node !== node) return
       g.lastEvent = event
-      g.lastX = event.clientX; g.lastY = event.clientY
+      g.lastX = clientX(event); g.lastY = clientY(event)
       if(Math.max(Math.abs(g.lastX-g.originX),Math.abs(g.lastY-g.originY))>=5) g.moved=true
       if(!g.previewFrame) g.previewFrame=requestAnimationFrame(()=>preview(g))
       if(g.group && !g.groupFiltered){const points=g.points;g.points=points.filter(t=>!g.group.some(k=>Math.abs(k.time-t)<1e-6));g.points.gridTargets=points.gridTargets;g.points.objectTargets=points.objectTargets;g.points.keyTargets=points.keyTargets.filter(t=>!g.group.some(k=>Math.abs(k.time-t)<1e-6));g.groupFiltered=true}
@@ -810,18 +813,18 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       if (existing.some(l=>(l.parent || null)!==(layer.parent || null))) {
         $('selectionMessage').textContent='SELECT LAYERS IN THE SAME GROUP'; return
       }
-      const before = new Set(selectedLayers), x0=event.clientX, y0=event.clientY
+      const before = new Set(selectedLayers), x0=clientX(event), y0=clientY(event)
       let moved=false, box
       root.setPointerCapture(event.pointerId)
       const move = e => {
-        if (!moved && Math.hypot(e.clientX-x0,e.clientY-y0)<5) return
+        if (!moved && Math.hypot(clientX(e)-x0,clientY(e)-y0)<5) return
         moved=true
         if (!box) {box=el('div','layer-selection-box');document.body.append(box)}
-        const top=Math.min(y0,e.clientY), bottom=Math.max(y0,e.clientY)
-        Object.assign(box.style,{left:Math.min(x0,e.clientX)+'px',top:top+'px',width:Math.max(2,Math.abs(e.clientX-x0))+'px',height:Math.max(2,bottom-top)+'px'})
+        const top=Math.min(y0,clientY(e)), bottom=Math.max(y0,clientY(e))
+        Object.assign(box.style,{left:Math.min(x0,clientX(e))+'px',top:top+'px',width:Math.max(2,Math.abs(clientX(e)-x0))+'px',height:Math.max(2,bottom-top)+'px'})
         selectedLayers.clear();for (const uid of before) selectedLayers.add(uid)
         for (const row of sheet.querySelectorAll('.layer[data-uid]')) {
-          const item=state.layers.find(l=>l.uid===row.dataset.uid), rect=row.getBoundingClientRect()
+          const item=state.layers.find(l=>l.uid===row.dataset.uid), rect=uiRect(row)
           if (item && (item.parent||null)===(layer.parent||null) && rect.bottom>=top && rect.top<=bottom) selectedLayers.add(item.uid)
         }
         paintLayerSelection()
@@ -852,7 +855,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       expectedOrder:state.layers.filter(l=>(l.parent||null)===parent).map(l=>l.uid),
       ...(ungroup?{expectedChildren:state.layers.filter(l=>l.parent===chosen[0].uid).map(l=>l.uid)}:{})}
     const panel=el('div','key-edit-menu value-edit-menu');keyMenu=panel
-    Object.assign(panel.style,{left:Math.max(0,Math.min(event.clientX,window.innerWidth-190))+'px',top:Math.max(0,Math.min(event.clientY,window.innerHeight-140))+'px',width:'180px'})
+    Object.assign(panel.style,{left:Math.max(0,Math.min(clientX(event),uiWidth()-190))+'px',top:Math.max(0,Math.min(clientY(event),uiHeight()-140))+'px',width:'180px'})
     const input=el('input');input.value='GROUP';input.maxLength=128;input.setAttribute('aria-label','GROUP NAME');input.style.width='100%'
     const apply=el('button','',ungroup?'UNGROUP':'GROUP'), cancel=el('button','','CANCEL')
     apply.onclick=()=>void interact(async()=>{
@@ -873,7 +876,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     node.addEventListener('pointermove', event => {
       if(mouseGesture || layerReorder || editPending || event.buttons)return
       const target=lane || node.closest('.lane')
-      if(target)showDragTimes(entries(),event.clientY,target)
+      if(target)showDragTimes(entries(),clientY(event),target)
     })
     node.addEventListener('pointerleave',()=>{if(!mouseGesture)clearDragTimes()})
   }
@@ -911,7 +914,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     const trackUid=state.trackUid
     const expected={layerUid:layer.uid,expectedName:layer.name,expectedStart:layer.start,expectedEnd:layer.end}
     const panel=el('div','key-edit-menu value-edit-menu');keyMenu=panel
-    Object.assign(panel.style,{left:Math.max(0,Math.min(event.clientX,window.innerWidth-180))+'px',top:Math.max(0,Math.min(event.clientY,window.innerHeight-160))+'px',width:'170px'})
+    Object.assign(panel.style,{left:Math.max(0,Math.min(clientX(event),uiWidth()-180))+'px',top:Math.max(0,Math.min(clientY(event),uiHeight()-160))+'px',width:'170px'})
     const run=(operation,name)=>void interact(async()=>{
       closeKeyMenu()
       if(await releaseViewerMode()) await sendEdit('layer_manage',{operation,trackUid,...expected,...(name===undefined?{}:{name})})
@@ -939,17 +942,17 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     node.onpointerdown=event=>{
       if(event.button!==0 || event.shiftKey || !state.editEnabled || editPending || interactionBusy || mouseGesture) return
       node.setPointerCapture(event.pointerId)
-      layerReorder={node,y:event.clientY,moved:false,trackUid:state.trackUid,expectedOrder:state.layers.filter(l=>(l.parent||null)===(layer.parent||null)).map(l=>l.uid)}
+      layerReorder={node,y:clientY(event),moved:false,trackUid:state.trackUid,expectedOrder:state.layers.filter(l=>(l.parent||null)===(layer.parent||null)).map(l=>l.uid)}
     }
     node.onpointermove=event=>{
       const g=layerReorder;if(!g || g.node!==node)return
-      if(!g.moved && Math.abs(event.clientY-g.y)<6)return
+      if(!g.moved && Math.abs(clientY(event)-g.y)<6)return
       g.moved=true
       if(!g.line){g.line=el('div');Object.assign(g.line.style,{position:'fixed',left:'12px',right:'12px',height:'2px',background:'#63d4e7',boxShadow:'0 0 4px #63d4e7',zIndex:'60',pointerEvents:'none'});document.body.append(g.line)}
       const candidates=[...sheet.querySelectorAll('.layer[data-uid]')].filter(row=>row.dataset.uid!==layer.uid && g.expectedOrder.includes(row.dataset.uid))
-      const row=candidates.sort((a,b)=>Math.abs((a.getBoundingClientRect().top+a.getBoundingClientRect().bottom)/2-event.clientY)-Math.abs((b.getBoundingClientRect().top+b.getBoundingClientRect().bottom)/2-event.clientY))[0]
+      const row=candidates.sort((a,b)=>Math.abs((uiRect(a).top+uiRect(a).bottom)/2-clientY(event))-Math.abs((uiRect(b).top+uiRect(b).bottom)/2-clientY(event)))[0]
       if(!row)return
-      const r=row.getBoundingClientRect();g.targetUid=row.dataset.uid;g.after=event.clientY>(r.top+r.bottom)/2
+      const r=uiRect(row);g.targetUid=row.dataset.uid;g.after=clientY(event)>(r.top+r.bottom)/2
       g.line.style.top=(g.after?r.bottom:r.top)+'px'
     }
     const finish=event=>{
@@ -1090,7 +1093,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     if (!state.editEnabled || field.unsupported || field.resource || 'current' in field) return
     event.preventDefault();event.stopPropagation();clearTimeout(clickTimer)
     if(state.editor?.moveKey?.group)return
-    const px=event.clientX,py=event.clientY
+    const px=clientX(event),py=clientY(event)
     void interact(async()=>{
       if (field.sequenced) {
         const selected=state.editor.layerUid===layer.uid && state.editor.parameter===field.name ? state.editor.moveKey : null
@@ -1101,7 +1104,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       const token=state.editor.token
       const expectedValue=state.editor.moveKey?.value ?? field.value
       const panel=el('form','key-edit-menu value-edit-menu');keyMenu=panel
-      Object.assign(panel.style,{left:Math.max(0,Math.min(px,window.innerWidth-240))+'px',top:Math.max(0,Math.min(py,window.innerHeight-310))+'px',width:'230px',maxHeight:'300px',overflowY:'auto',padding:'10px',fontSize:'11px'})
+      Object.assign(panel.style,{left:Math.max(0,Math.min(px,uiWidth()-240))+'px',top:Math.max(0,Math.min(py,uiHeight()-310))+'px',width:'230px',maxHeight:'min(300px, calc(100vh / var(--ui-scale,1) - 8px))',overflowY:'auto',padding:'10px',fontSize:'11px'})
       panel.append(el('strong','',(field.label||field.name).toUpperCase()))
       const context=el('div','',state.editor.moveKey ? 'KEYFRAME · '+Number(state.editor.moveKey.time.toFixed(3))+' S' : 'CONSTANT')
       Object.assign(context.style,{color:'#849aa5',fontSize:'10px',margin:'4px 0 8px'})
@@ -1161,13 +1164,13 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     lane.addEventListener('pointerdown',event=>{
       if(event.button!==0 || !event.shiftKey || event.ctrlKey || event.altKey || !state.editEnabled || editPending || interactionBusy || mouseGesture)return
       event.preventDefault();event.stopPropagation();clearTimeout(clickTimer)
-      const rect=lane.getBoundingClientRect(), origin=event.clientX
+      const rect=uiRect(lane), origin=clientX(event)
       const overlay=el('div','key-marquee')
       Object.assign(overlay.style,{position:'absolute',top:'0',bottom:'0',background:'#0699b244',border:'1px solid #63d4e7',pointerEvents:'none',zIndex:8})
       lane.append(overlay);lane.setPointerCapture(event.pointerId)
       const g={marquee:true,node:lane};mouseGesture=g
       let endX=origin
-      const move=e=>{endX=e.clientX;overlay.style.left=Math.max(0,Math.min(origin,endX)-rect.left)+'px';overlay.style.width=Math.abs(endX-origin)+'px'}
+      const move=e=>{endX=clientX(e);overlay.style.left=Math.max(0,Math.min(origin,endX)-rect.left)+'px';overlay.style.width=Math.abs(endX-origin)+'px'}
       const finish=e=>{
         lane.removeEventListener('pointermove',move);lane.removeEventListener('pointerup',finish);lane.removeEventListener('pointercancel',finish)
         overlay.remove();if(mouseGesture===g)mouseGesture=null
@@ -1189,8 +1192,8 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     lane.ondblclick = event => {
       if (!state.editEnabled || field.unsupported || field.canAnimate === false || event.target.closest('.timeline-target')) return
       event.preventDefault(); event.stopPropagation(); clearTimeout(clickTimer)
-      const rect = lane.getBoundingClientRect()
-      const time = start + (event.clientX-rect.left)/rect.width*span
+      const rect = uiRect(lane)
+      const time = start + (clientX(event)-rect.left)/rect.width*span
       if (time < layer.start || time > layer.end) return
       void interact(async () => {
         if (!await releaseViewerMode()) return
@@ -1243,7 +1246,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       if(mode==='enable'){await apply();return}
       closeKeyMenu()
       const panel=el('div','key-edit-menu');keyMenu=panel
-      Object.assign(panel.style,{left:Math.max(4,Math.min(event.clientX,innerWidth-270))+'px',top:Math.max(4,Math.min(event.clientY,innerHeight-150))+'px',width:'250px',padding:'9px'})
+      Object.assign(panel.style,{left:Math.max(4,Math.min(clientX(event),uiWidth()-270))+'px',top:Math.max(4,Math.min(clientY(event),uiHeight()-150))+'px',width:'250px',padding:'9px'})
       panel.append(el('strong','',reset?'RESET PARAMETER?':'DISABLE SEQUENCING?'),el('p','',reset?'DELETE ALL KEYFRAMES AND RESTORE DEFAULT.':'DELETE ALL KEYFRAMES AND KEEP THE CURRENT VALUE.'))
       const yes=el('button','','CONFIRM'),no=el('button','','CANCEL')
       yes.onclick=()=>void interact(apply);no.onclick=closeKeyMenu
@@ -1258,7 +1261,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     if (!nativeLabel) return
     const panel = el('form','key-edit-menu'), input = el('input')
     keyMenu = panel
-    Object.assign(panel.style,{left:Math.max(0,Math.min(event.clientX,window.innerWidth-270))+'px',top:Math.max(0,Math.min(event.clientY,window.innerHeight-235))+'px',width:'250px',padding:'9px'})
+    Object.assign(panel.style,{left:Math.max(0,Math.min(clientX(event),uiWidth()-270))+'px',top:Math.max(0,Math.min(clientY(event),uiHeight()-235))+'px',width:'250px',padding:'9px'})
     panel.append(el('strong','',(item ? 'EDIT ' : 'ADD ')+kind.toUpperCase()))
     input.type='text'; input.maxLength=kind==='notes' ? 2000 : 64
     input.value=item ? String(item.text ?? item.value ?? '') : ''
@@ -1311,8 +1314,8 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     if (!node) {
       lane.ondblclick=event=>{
         if(event.target.closest('.timeline-target')) return
-        const rect=lane.getBoundingClientRect()
-        const raw=start+(event.clientX-rect.left)*span/rect.width
+        const rect=uiRect(lane)
+        const raw=start+(clientX(event)-rect.left)*span/rect.width
         if(raw<0 || raw>state.length) return
         annotationForm(kind,raw,event)
       }
@@ -1323,18 +1326,18 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     node.addEventListener('pointerdown',event=>{
       if(event.button!==0 || !state.editEnabled || interactionBusy || editPending || event.ctrlKey || event.shiftKey) return
       event.stopPropagation(); node.setPointerCapture(event.pointerId)
-      mouseGesture={node,annotation:true,originX:event.clientX,originTime:item.time,width:lane.getBoundingClientRect().width,
+      mouseGesture={node,annotation:true,originX:clientX(event),originTime:item.time,width:uiRect(lane).width,
         points:snapPoints(undefined,undefined,undefined,item),moved:false,target:{time:item.time,snap:false},token:state.editor.token}
     })
     node.addEventListener('pointermove',event=>{
       const g=mouseGesture
       if(!g?.annotation || g.node!==node) return
-      if(Math.abs(event.clientX-g.originX)<4 && !g.moved) return
+      if(Math.abs(clientX(event)-g.originX)<4 && !g.moved) return
       g.moved=true
-      const raw=Math.max(0,Math.min(state.length,g.originTime+(event.clientX-g.originX)*span/g.width))
+      const raw=Math.max(0,Math.min(state.length,g.originTime+(clientX(event)-g.originX)*span/g.width))
       g.target=snappedTime(raw,g.points,event.altKey,g.width)
       node.style.left=x(g.target.time)+'%'
-      showDragTimes([{time:g.target.time}],event.clientY,lane)
+      showDragTimes([{time:g.target.time}],clientY(event),lane)
     })
     const end=async event=>{
       const g=mouseGesture
@@ -1365,11 +1368,11 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       let hoverFrame=0,hoverPoint=null
       lane.addEventListener('pointermove',event=>{
         if(mouseGesture || event.buttons)return
-        hoverPoint={x:event.clientX,y:event.clientY}
+        hoverPoint={x:clientX(event),y:clientY(event)}
         if(!hoverFrame)hoverFrame=requestAnimationFrame(()=>{
           hoverFrame=0
           if(!hoverPoint || !lane.isConnected || mouseGesture)return
-          const rect=lane.getBoundingClientRect()
+          const rect=uiRect(lane)
           const time=Math.max(0,Math.min(state.length,start+Math.max(0,Math.min(1,(hoverPoint.x-rect.left)/rect.width))*span))
           showDragTimes([{time}],hoverPoint.y,lane)
         })
@@ -1383,8 +1386,8 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
 
       lane.onclick = async (event) => {
         if (event.ctrlKey || event.shiftKey || event.altKey) return
-        const rect = lane.getBoundingClientRect()
-        const time = start + Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)) * span
+        const rect = uiRect(lane)
+        const time = start + Math.max(0, Math.min(1, (clientX(event) - rect.left) / rect.width)) * span
         try {
           const response = await fetch('/api/seek', {
             method: 'POST',
@@ -1575,7 +1578,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       r.root.style.maxHeight = '420px'
       r.root.title = 'DRAG CORNER TO RESIZE'
       r.root.addEventListener('pointerdown', (event) => {
-        if (event.clientY > r.root.getBoundingClientRect().bottom - 16) resizingWaveform = true
+        if (clientY(event) > uiRect(r.root).bottom - 16) resizingWaveform = true
       })
     }
     // Source preview is explicitly separate until native playback mapping has
@@ -1628,7 +1631,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     for(const uid of selectedLayers)if(!state.layers.some(l=>l.uid===uid))selectedLayers.delete(uid)
     const top = viewport.scrollTop
     for (const node of sheet.querySelectorAll('[data-waveform-uid]'))
-      waveformHeights.set(node.dataset.waveformUid, node.getBoundingClientRect().height)
+      waveformHeights.set(node.dataset.waveformUid, uiRect(node).height)
     sheet.style.setProperty('--pan', '0px')
     sheet.replaceChildren()
     sheet.dataset.origin = start
@@ -1924,7 +1927,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
             valueLabel.title='EDIT VALUE';valueLabel.style.cursor='pointer';valueLabel.tabIndex=0;valueLabel.setAttribute('role','button')
             valueLabel.onclick=event=>valueMenu(layer,field,event)
             valueLabel.oncontextmenu=event=>valueMenu(layer,field,event)
-            valueLabel.onkeydown=event=>{if(event.key==='Enter'){const r=valueLabel.getBoundingClientRect();valueMenu(layer,field,{clientX:r.x,clientY:r.bottom,preventDefault:()=>event.preventDefault(),stopPropagation:()=>event.stopPropagation()})}}
+            valueLabel.onkeydown=event=>{if(event.key==='Enter'){const r=uiRect(valueLabel);valueMenu(layer,field,{clientX:r.x*uiScale,clientY:r.bottom*uiScale,preventDefault:()=>event.preventDefault(),stopPropagation:()=>event.stopPropagation()})}}
           }
           p.side.append(valueLabel)
           if ('current' in field) {
@@ -1988,6 +1991,10 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
   }
   function updatePlayhead() {
     if (!state) return
+    const external = state.externalTimecode
+    $('externalTc').hidden = !external
+    $('externalTc').textContent = external ? ' \u00b7 TC IN: ' + (external.value || '\u2014') : ''
+    $('externalTc').title = external ? String(external.status || '').toUpperCase() : ''
     $('clock').textContent = state.timecode || '—'
     $('editClock').hidden = state.editor?.linkTime !== false
     $('editClock').textContent = state.editor?.editTimecode || '—'
@@ -2236,7 +2243,9 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
           start = 0
           span = state.length || 60
         }
-        $('track').textContent = String(state.trackName || '').replace(/\.apx$/i, '').toUpperCase()
+        const trackName = String(state.trackName || '').replace(/\.apx$/i, '').toUpperCase()
+        const trackFps = Number(state.fps) || 25
+        $('track').textContent = trackName + ' @ ' + Number(trackFps.toFixed(3)) + ' · ' + timecode(Math.max(0,Number(state.length)||0),trackFps,false) + ' · ' + (state.quantized ? 'BEAT' : 'TC')
         updateEditorControls()
         $('status').textContent = state.connected ? (state.viewOnly ? 'VIEW' : 'LIVE') : 'CONNECTION LOST'
         $('status').className = state.connected ? 'live' : 'error'
@@ -2260,6 +2269,21 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       setTimeout(poll, 100)
     }
   }
+  const uiSizes = {small:1,medium:1.05,large:1.1}
+  function setUiSize(size, save = true) {
+    if (!Object.hasOwn(uiSizes,size) || mouseGesture || layerReorder || layerMarquee || editPending || interactionBusy || resizingWaveform) return
+    clearDragTimes(); closeKeyMenu()
+    uiScale = uiSizes[size]
+    document.documentElement.style.setProperty('--ui-scale',String(uiScale))
+    for (const button of document.querySelectorAll('[data-ui-size]')) button.setAttribute('aria-pressed',String(button.dataset.uiSize===size))
+    if (save) {try {localStorage.setItem('disguise-layer-editor.ui-size',size)} catch {}}
+    rendered=''; lastFullRead=0
+    draw()
+  }
+  for (const button of document.querySelectorAll('[data-ui-size]')) button.onclick=()=>setUiSize(button.dataset.uiSize)
+  let savedUiSize='small'
+  try {savedUiSize=localStorage.getItem('disguise-layer-editor.ui-size') || 'small'} catch {}
+  setUiSize(Object.hasOwn(uiSizes,savedUiSize)?savedUiSize:'small',false)
   void pollLive()
   void poll()
 }
@@ -2268,11 +2292,11 @@ const stylesheet = `
 .parameter .label .select-label{font-size:13px}.parameter .label small{font-size:12px;font-variant-numeric:tabular-nums;max-width:110px}.parameter .label small[role=button]:hover{color:#63d4e7}
 .resource-folder-row{display:flex;flex-wrap:nowrap;gap:4px;flex-shrink:0;overflow-x:auto;padding:3px 0;border-bottom:1px solid #29363d;scrollbar-width:thin}.resource-folder-row button{flex:0 0 auto;max-width:240px}.resource-folder-row button:hover{color:#63d4e7;background:#10343d}
 .resource-folder-parent{color:#729db4;font-size:10px;padding:5px 0}.resource-file>span:last-child{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.resource-picker[hidden]{display:none}.resource-picker{position:fixed;z-index:40;right:20px;top:160px;width:min(680px,calc(100vw - 40px));max-height:calc(100vh - 180px);overflow:auto;background:#151e23;border:1px solid #237484;border-radius:9px;box-shadow:0 12px 40px #000a;padding:10px}.resource-picker-bar{display:flex;align-items:center;gap:7px;padding:4px 0}.resource-picker-bar strong{flex:1}.resource-picker button{font-size:10px;padding:4px 7px}.resource-picker-body{display:grid;grid-template-columns:180px 1fr;gap:12px;margin-top:8px}.resource-folders{display:flex;flex-direction:column;gap:3px;max-height:340px;overflow:auto;border-right:1px solid #29363d;padding-right:8px}.resource-folders button{text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-color:transparent;background:transparent}.resource-folders button[aria-pressed=true]{background:#10343d;border-color:#237484}.resource-files{min-width:0}.resource-path{color:#8bcbd6;font-size:11px;overflow-wrap:anywhere;padding-bottom:8px}.resource-file-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;min-height:150px}.resource-file{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0}.resource-file>span:last-child{max-width:100%;overflow-wrap:anywhere;line-height:1.3}.resource-file .thumb{width:100%;height:52px}.resource-picker .resource-picker-bar:last-child{justify-content:flex-end}
+.resource-picker[hidden]{display:none}.resource-picker{position:fixed;z-index:40;right:20px;top:160px;width:min(680px,calc(100vw / var(--ui-scale,1) - 40px));max-height:calc(100vh / var(--ui-scale,1) - 180px);overflow:auto;background:#151e23;border:1px solid #237484;border-radius:9px;box-shadow:0 12px 40px #000a;padding:10px}.resource-picker-bar{display:flex;align-items:center;gap:7px;padding:4px 0}.resource-picker-bar strong{flex:1}.resource-picker button{font-size:10px;padding:4px 7px}.resource-picker-body{display:grid;grid-template-columns:180px 1fr;gap:12px;margin-top:8px}.resource-folders{display:flex;flex-direction:column;gap:3px;max-height:340px;overflow:auto;border-right:1px solid #29363d;padding-right:8px}.resource-folders button{text-align:left;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;border-color:transparent;background:transparent}.resource-folders button[aria-pressed=true]{background:#10343d;border-color:#237484}.resource-files{min-width:0}.resource-path{color:#8bcbd6;font-size:11px;overflow-wrap:anywhere;padding-bottom:8px}.resource-file-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;min-height:150px}.resource-file{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0}.resource-file>span:last-child{max-width:100%;overflow-wrap:anywhere;line-height:1.3}.resource-file .thumb{width:100%;height:52px}.resource-picker .resource-picker-bar:last-child{justify-content:flex-end}
 .key-edit-menu{position:fixed;z-index:50;display:grid;gap:3px;padding:5px;width:165px;background:#151e23;border:1px solid #0699b2;border-radius:5px;box-shadow:0 4px 16px #0009}.key-edit-menu button{padding:3px 7px;font-size:10px;text-align:left}.value-edit-menu button{font-size:11px;padding:5px 7px;min-height:27px;width:100%;box-sizing:border-box}
 .key-point.selected-keyframe,.curve-key.selected-keyframe{scale:1.4;z-index:4}.timeline-target,.clip{touch-action:none}.key-edit-menu[hidden]{display:none}.snap-option{display:flex;align-items:center;gap:7px;padding:6px 8px;font-size:10px;white-space:nowrap;cursor:pointer}.snap-guide{position:absolute;top:0;bottom:0;width:2px;background:#ffc580;box-shadow:0 0 5px #ffc58088;z-index:8;pointer-events:none}.key-edit-menu input{background:#101a20;color:#eef4f6;border:1px solid #44616f;border-radius:3px;padding:5px}.key-edit-menu strong{font-size:11px}
-:root{color-scheme:dark;font:12px 'Segoe UI',Arial,sans-serif;background:#101517;color:#eef4f6}*{box-sizing:border-box}body{margin:0;height:100vh;display:flex;flex-direction:column;overflow:hidden}header,.toolbar{display:flex;align-items:center;gap:14px;padding:16px 22px;border-bottom:1px solid #29363d}header{height:82px;min-height:82px;padding:5px 16px;position:relative}#status{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.08em}#status:before{content:'';width:8px;height:8px;border-radius:50%;background:#849aa5}#status.live:before{background:#43e68c;animation:live-pulse 1.4s ease-in-out infinite}#status.error:before{background:#ffc580}@keyframes live-pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 #43e68c44}50%{opacity:.45;box-shadow:0 0 0 4px #43e68c00}}@media(prefers-reduced-motion:reduce){#status.live:before{animation:none}}h1{font-size:15px;letter-spacing:.08em;margin:0}.brand-logo{position:relative;width:72px;height:41px;overflow:hidden;flex-shrink:0;align-self:center}.brand-logo img{position:absolute;top:-19px;left:-4px;width:80px;height:80px}header small{display:block;color:#849aa5;margin-top:5px;letter-spacing:.15em}.spacer{flex:1}#clockBlock{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;max-width:40%;line-height:1.2}#editClock{font:14px Consolas,monospace;color:#4aaaff;line-height:16px}#clock{color:#43e68c;font:24px Consolas,monospace;white-space:nowrap}#beat{font:12px Consolas,monospace;color:#8bcbd6;margin-left:10px}#clockDetails{font-size:12px;color:#9eb6c2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:15px}#sectionRemaining{font:14px Consolas,monospace;color:#8bcbd6;min-height:17px}#sectionRemaining.ending{color:#ff6268}.live{color:#43e68c}.error{color:#ffc580}.toolbar{padding:4px 16px;gap:7px;flex-wrap:wrap;min-height:32px}.toolbar button{padding:3px 7px;font-size:10px;line-height:16px;border-radius:4px}.toolbar #track{font-size:11px}button{background:#1b272d;border:1px solid #34444d;border-radius:5px;color:#d4e2e8;padding:7px 10px;cursor:pointer}button[aria-pressed=true]{border-color:#0699b2;color:#63d4e7}button:focus-visible{outline:2px solid #43e68c}#viewport{flex:1;overflow:auto;margin:7px 12px;border:1px solid #29363d;border-radius:6px;min-height:0}#sheet{position:relative;min-width:760px;overflow:clip;min-height:100%}.row{display:grid;grid-template-columns:240px 1fr;position:relative;min-height:54px;border-bottom:1px solid #26343b}.label{background:#151e23;padding:10px 12px;display:flex;gap:9px;align-items:center;z-index:3;border-right:1px solid #29363d;min-width:0;overflow:hidden}.layer{height:52px;min-height:52px}.layer>.label{position:relative;padding-top:14px;padding-bottom:4px}.layer>.lane>.clip{top:11px;height:30px;padding-top:6px;padding-bottom:6px}.layer>.lane>.key-point{top:22px}.layer>.lane>.thumb{top:14px}.label .name{overflow:hidden;text-overflow:ellipsis}.label small{margin-left:auto;color:#729db4;font-size:10px;max-width:85px;overflow:hidden;text-overflow:ellipsis}.lane{position:relative;min-width:0;overflow:hidden}.timeline-header{position:sticky;z-index:6;background:#101517;height:30px;min-height:30px}.timeline-header>.label{padding-top:5px;padding-bottom:5px}.header-edithead,.edithead{position:absolute;top:0;bottom:0;width:2px;background:#4aaaff;box-shadow:0 0 5px #4aaaff66;pointer-events:none;z-index:5;transform:none!important}.header-playhead{position:absolute;top:0;bottom:0;width:1px;background:#43e68c;pointer-events:none;z-index:4;transform:none!important}.section-band{position:absolute;top:0;bottom:0;border-left:1px solid #4b8792;pointer-events:none;background:#16414b}.section-0{background:#293b4d;border-color:#6b8caa}.ruler{min-height:30px}.ruler>.label{font-size:10px}.annotations{min-height:30px;font-size:10px}.focused{background:#10343d}.focused .label{background:#10343d}.parameter .label{padding-left:30px;color:#91afbd}.parameter.selected{color:#43e68c}.parameter.selected .label{color:#43e68c}.parameter .lane{color:#729db4}.selected .lane{color:#43e68c}.lane svg{width:100%;height:54px}.clip{position:absolute;top:8px;height:36px;background:#1d3e49;border:1px solid #2b626f;border-radius:4px;padding:9px 42px;overflow:hidden;white-space:nowrap;color:#a9d8e3}.clip:disabled{cursor:default}.clip:not(:disabled):hover{border-color:#63d4e7;background:#26515e}.clip{min-width:0;padding:0!important;text-align:left}.playback-mode{font-size:10px;color:#8bcbd6;margin-left:5px}.playback-icon{display:inline-flex;vertical-align:middle;margin-left:5px;color:#8bcbd6}.lane .playback-icon svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.clip-label{display:block;padding:6px 42px;white-space:nowrap}.marker{position:absolute;top:7px;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;z-index:2;font-size:10px}.key{color:#72d5e8;top:20px;font-size:10px}.lane>.key-point{width:8px;height:8px;margin-left:-4px;top:23px;background:currentColor;border:1px solid #101517;transform:translateX(var(--pan,0px)) rotate(45deg)}.timeline-target{cursor:pointer}.timeline-target:focus-visible{outline:2px solid #43e68c}.layer-edge{top:11px;width:7px;height:30px;margin-left:-3px;border:1px solid #63d4e7;border-radius:2px;background:#0699b255;z-index:3}.timeline-target:hover{filter:brightness(1.6);color:#63d4e7;box-shadow:0 0 7px #63d4e7;outline:1px solid #63d4e7}.tick{color:#849aa5;font:10px Consolas,monospace}.ruler .tick{font-size:12px;color:#bdd0da}.cue-marker{top:3px;overflow:visible;max-width:220px;padding:3px 7px 3px 13px;height:22px;line-height:16px;border:0;border-radius:0;clip-path:polygon(0 50%,9px 0,100% 0,100% 100%,9px 100%);background:#29414e;font-size:10px;white-space:nowrap}.cue-marker:before{content:"";position:absolute;left:0;top:0;width:9px;height:22px;background:currentColor;clip-path:polygon(0 50%,100% 0,100% 100%)}.cue-marker.notes{max-width:260px}.cue-marker.midi{color:#b7a0dc}.cue-marker.tc{color:#74c6d8}.cue{color:#e1bf77}.notes{color:#acbfc8}.resource{display:flex;align-items:center;gap:5px;top:3px}.thumb{display:inline-flex;width:34px;height:24px;align-items:center;justify-content:center;background:#263b44;border-radius:3px;overflow:hidden;flex-shrink:0;color:#729db4}.thumb.large{width:60px;height:38px}.thumb img{width:100%;height:100%;object-fit:cover}.gridline{position:absolute;top:30px;bottom:0;width:1px;background:#88a9bb0b;pointer-events:none;z-index:1}.gridline.major{background:#88a9bb20}.playhead{position:absolute;top:0;bottom:0;width:1px;background:#43e68c;box-shadow:0 0 5px #43e68c66;z-index:4;pointer-events:none}.lane>*{transform:translateX(var(--pan,0px))}.alignment-guide.subtle{opacity:.3;pointer-events:none}.alignment-guide.matched{border-left:2px solid #ffe0a0;box-shadow:0 0 5px #e7ba6370}.alignment-guide.subtle.matched{opacity:.65}.alignment-guide{pointer-events:none;position:absolute;top:0;bottom:0;border-left:1px dashed #e7ba63;z-index:3;transform:translateX(var(--pan,0px))}.gridline,.relation{transform:translateX(var(--pan,0px))}.select-label{border:0;padding:0;background:transparent;color:inherit;text-align:left;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.select-label:disabled{cursor:default}.select-label:not(:disabled):hover{color:#63d4e7}#selectionMessage{color:#e1bf77;margin-left:12px}.wave-controls{position:absolute;right:4px;top:4px;display:flex;gap:2px;z-index:5}.wave-controls button{width:16px;height:12px;padding:0;background:#151e23;border:1px solid #34444d;border-radius:4px;color:#849aa5;display:grid;place-items:center}.wave-controls svg{width:12px;height:10px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.wave-controls button:hover,.wave-controls button[aria-pressed=true]{color:#63d4e7;border-color:#0699b2}.wave-controls .parameter-mode{font-size:10px;line-height:10px}.wave-controls button:disabled{opacity:.45}.wave-beat-line{position:absolute;top:0;bottom:0;width:1px;background:#accdd526;z-index:2;pointer-events:none}.wave-beat-line.timeline-target{pointer-events:auto;cursor:pointer}.wave-beat-line.timeline-target:before{content:"";position:absolute;left:-4px;top:0;bottom:0;width:9px}.wave-beat-line.major{background:#accdd55c}.beat-tick{background:#101517bb;padding:1px 3px;z-index:3}.track-waveform{position:sticky;z-index:6;background:#101517}.waveform .lane svg{height:100%}.waveform .label{font-size:10px}.wave-status{display:block;padding:14px;color:#849aa5}.relation{position:absolute;width:3px;margin-left:-1px;background:#bd9be0;border-radius:3px;z-index:2;pointer-events:none;box-shadow:0 0 0 1px #10151799}.relation:after{content:"";position:absolute;width:13px;height:10px;left:-5px;background:#d4b8ef;clip-path:polygon(0 0,100% 0,50% 100%)}.relation.down:after{bottom:-1px}.relation.up:after{top:-1px;transform:rotate(180deg)}.relation:before{content:"";position:absolute;left:-2px;width:7px;height:7px;background:#d4b8ef;border-radius:50%}.relation.down:before{top:-2px}.relation.up:before{bottom:-2px}.layer-selection-box{position:fixed;z-index:80;pointer-events:none;border:1px solid #63d4e7;background:#0699b22b}.layer-multi-selected>.label,.layer-multi-selected>.lane{background-color:#123e49;box-shadow:inset 0 0 0 1px #0699b2}.layer-display-bar{height:22px;min-height:22px;background:#19262d;border-bottom:2px solid #35505e}.layer-display-bar>.label{background:#19262d;font-size:9px;padding:2px 12px;position:relative}.layer-display-bar .wave-controls{top:4px}.layer-display-bar>.lane{background:#19262d}footer{min-height:27px;padding:4px 22px;color:#849aa5;font-size:10px}#warnings{color:#d5b97b;margin-left:12px}
+:root{color-scheme:dark;font:12px 'Segoe UI',Arial,sans-serif;background:#101517;color:#eef4f6}*{box-sizing:border-box}body{margin:0;zoom:var(--ui-scale,1);height:calc(100vh / var(--ui-scale,1));display:flex;flex-direction:column;overflow:hidden}header,.toolbar{display:flex;align-items:center;gap:14px;padding:16px 22px;border-bottom:1px solid #29363d}header{height:82px;min-height:82px;padding:5px 16px;position:relative}#status{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.08em}#status:before{content:'';width:8px;height:8px;border-radius:50%;background:#849aa5}#status.live:before{background:#43e68c;animation:live-pulse 1.4s ease-in-out infinite}#status.error:before{background:#ffc580}@keyframes live-pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 #43e68c44}50%{opacity:.45;box-shadow:0 0 0 4px #43e68c00}}@media(prefers-reduced-motion:reduce){#status.live:before{animation:none}}h1{font-size:15px;letter-spacing:.08em;margin:0}.brand-logo{position:relative;width:72px;height:41px;overflow:hidden;flex-shrink:0;align-self:center}.brand-logo img{position:absolute;top:-19px;left:-4px;width:80px;height:80px}header small{display:block;color:#849aa5;margin-top:5px;letter-spacing:.15em}.spacer{flex:1}#clockBlock{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);text-align:center;max-width:40%;line-height:1.2}#editClock{font:14px Consolas,monospace;color:#4aaaff;line-height:16px}#clock{color:#43e68c;font:24px Consolas,monospace;white-space:nowrap}#beat{font:12px Consolas,monospace;color:#8bcbd6;margin-left:10px}#clockDetails{font-size:12px;color:#9eb6c2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:15px}#sectionRemaining{font:14px Consolas,monospace;color:#8bcbd6;min-height:17px}#sectionRemaining.ending{color:#ff6268}.live{color:#43e68c}.error{color:#ffc580}.ui-size-controls{display:flex;gap:2px;flex-shrink:0}.ui-size-controls button{font-size:9px;line-height:14px;padding:2px 4px;border-radius:3px}.toolbar{padding:4px 16px;gap:7px;flex-wrap:wrap;min-height:32px}.toolbar button{padding:3px 7px;font-size:10px;line-height:16px;border-radius:4px}.toolbar #track{font-size:11px}button{background:#1b272d;border:1px solid #34444d;border-radius:5px;color:#d4e2e8;padding:7px 10px;cursor:pointer}button[aria-pressed=true]{border-color:#0699b2;color:#63d4e7}button:focus-visible{outline:2px solid #43e68c}#viewport{flex:1;overflow:auto;margin:7px 12px;border:1px solid #29363d;border-radius:6px;min-height:0}#sheet{position:relative;min-width:760px;overflow:clip;min-height:100%}.row{display:grid;grid-template-columns:240px 1fr;position:relative;min-height:54px;border-bottom:1px solid #26343b}.label{background:#151e23;padding:10px 12px;display:flex;gap:9px;align-items:center;z-index:3;border-right:1px solid #29363d;min-width:0;overflow:hidden}.layer{height:52px;min-height:52px}.layer>.label{position:relative;padding-top:14px;padding-bottom:4px}.layer>.lane>.clip{top:11px;height:30px;padding-top:6px;padding-bottom:6px}.layer>.lane>.key-point{top:22px}.layer>.lane>.thumb{top:14px}.label .name{overflow:hidden;text-overflow:ellipsis}.label small{margin-left:auto;color:#729db4;font-size:10px;max-width:85px;overflow:hidden;text-overflow:ellipsis}.lane{position:relative;min-width:0;overflow:hidden}.timeline-header{position:sticky;z-index:6;background:#101517;height:30px;min-height:30px}.timeline-header>.label{padding-top:5px;padding-bottom:5px}.header-edithead,.edithead{position:absolute;top:0;bottom:0;width:2px;background:#4aaaff;box-shadow:0 0 5px #4aaaff66;pointer-events:none;z-index:5;transform:none!important}.header-playhead{position:absolute;top:0;bottom:0;width:1px;background:#43e68c;pointer-events:none;z-index:4;transform:none!important}.section-band{position:absolute;top:0;bottom:0;border-left:1px solid #4b8792;pointer-events:none;background:#16414b}.section-0{background:#293b4d;border-color:#6b8caa}.ruler{min-height:30px}.ruler>.label{font-size:10px}.annotations{min-height:30px;font-size:10px}.focused{background:#10343d}.focused .label{background:#10343d}.parameter .label{padding-left:30px;color:#91afbd}.parameter.selected{color:#43e68c}.parameter.selected .label{color:#43e68c}.parameter .lane{color:#729db4}.selected .lane{color:#43e68c}.lane svg{width:100%;height:54px}.clip{position:absolute;top:8px;height:36px;background:#1d3e49;border:1px solid #2b626f;border-radius:4px;padding:9px 42px;overflow:hidden;white-space:nowrap;color:#a9d8e3}.clip:disabled{cursor:default}.clip:not(:disabled):hover{border-color:#63d4e7;background:#26515e}.clip{min-width:0;padding:0!important;text-align:left}.playback-mode{font-size:10px;color:#8bcbd6;margin-left:5px}.playback-icon{display:inline-flex;vertical-align:middle;margin-left:5px;color:#8bcbd6}.lane .playback-icon svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.clip-label{display:block;padding:6px 42px;white-space:nowrap}.marker{position:absolute;top:7px;white-space:nowrap;max-width:220px;overflow:hidden;text-overflow:ellipsis;z-index:2;font-size:10px}.key{color:#72d5e8;top:20px;font-size:10px}.lane>.key-point{width:8px;height:8px;margin-left:-4px;top:23px;background:currentColor;border:1px solid #101517;transform:translateX(var(--pan,0px)) rotate(45deg)}.timeline-target{cursor:pointer}.timeline-target:focus-visible{outline:2px solid #43e68c}.layer-edge{top:11px;width:7px;height:30px;margin-left:-3px;border:1px solid #63d4e7;border-radius:2px;background:#0699b255;z-index:3}.timeline-target:hover{filter:brightness(1.6);color:#63d4e7;box-shadow:0 0 7px #63d4e7;outline:1px solid #63d4e7}.tick{color:#849aa5;font:10px Consolas,monospace}.ruler .tick{font-size:12px;color:#bdd0da}.cue-marker{top:3px;overflow:visible;max-width:220px;padding:3px 7px 3px 13px;height:22px;line-height:16px;border:0;border-radius:0;clip-path:polygon(0 50%,9px 0,100% 0,100% 100%,9px 100%);background:#29414e;font-size:10px;white-space:nowrap}.cue-marker:before{content:"";position:absolute;left:0;top:0;width:9px;height:22px;background:currentColor;clip-path:polygon(0 50%,100% 0,100% 100%)}.cue-marker.notes{max-width:260px}.cue-marker.midi{color:#b7a0dc}.cue-marker.tc{color:#74c6d8}.cue{color:#e1bf77}.notes{color:#acbfc8}.resource{display:flex;align-items:center;gap:5px;top:3px}.thumb{display:inline-flex;width:34px;height:24px;align-items:center;justify-content:center;background:#263b44;border-radius:3px;overflow:hidden;flex-shrink:0;color:#729db4}.thumb.large{width:60px;height:38px}.thumb img{width:100%;height:100%;object-fit:cover}.gridline{position:absolute;top:30px;bottom:0;width:1px;background:#88a9bb0b;pointer-events:none;z-index:1}.gridline.major{background:#88a9bb20}.playhead{position:absolute;top:0;bottom:0;width:1px;background:#43e68c;box-shadow:0 0 5px #43e68c66;z-index:4;pointer-events:none}.lane>*{transform:translateX(var(--pan,0px))}.alignment-guide.subtle{opacity:.3;pointer-events:none}.alignment-guide.matched{border-left:2px solid #ffe0a0;box-shadow:0 0 5px #e7ba6370}.alignment-guide.subtle.matched{opacity:.65}.alignment-guide{pointer-events:none;position:absolute;top:0;bottom:0;border-left:1px dashed #e7ba63;z-index:3;transform:translateX(var(--pan,0px))}.gridline,.relation{transform:translateX(var(--pan,0px))}.select-label{border:0;padding:0;background:transparent;color:inherit;text-align:left;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.select-label:disabled{cursor:default}.select-label:not(:disabled):hover{color:#63d4e7}#selectionMessage{color:#e1bf77;margin-left:12px}.wave-controls{position:absolute;right:4px;top:4px;display:flex;gap:2px;z-index:5}.wave-controls button{width:16px;height:12px;padding:0;background:#151e23;border:1px solid #34444d;border-radius:4px;color:#849aa5;display:grid;place-items:center}.wave-controls svg{width:12px;height:10px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.wave-controls button:hover,.wave-controls button[aria-pressed=true]{color:#63d4e7;border-color:#0699b2}.wave-controls .parameter-mode{font-size:10px;line-height:10px}.wave-controls button:disabled{opacity:.45}.wave-beat-line{position:absolute;top:0;bottom:0;width:1px;background:#accdd526;z-index:2;pointer-events:none}.wave-beat-line.timeline-target{pointer-events:auto;cursor:pointer}.wave-beat-line.timeline-target:before{content:"";position:absolute;left:-4px;top:0;bottom:0;width:9px}.wave-beat-line.major{background:#accdd55c}.beat-tick{background:#101517bb;padding:1px 3px;z-index:3}.track-waveform{position:sticky;z-index:6;background:#101517}.waveform .lane svg{height:100%}.waveform .label{font-size:10px}.wave-status{display:block;padding:14px;color:#849aa5}.relation{position:absolute;width:3px;margin-left:-1px;background:#bd9be0;border-radius:3px;z-index:2;pointer-events:none;box-shadow:0 0 0 1px #10151799}.relation:after{content:"";position:absolute;width:13px;height:10px;left:-5px;background:#d4b8ef;clip-path:polygon(0 0,100% 0,50% 100%)}.relation.down:after{bottom:-1px}.relation.up:after{top:-1px;transform:rotate(180deg)}.relation:before{content:"";position:absolute;left:-2px;width:7px;height:7px;background:#d4b8ef;border-radius:50%}.relation.down:before{top:-2px}.relation.up:before{bottom:-2px}.layer-selection-box{position:fixed;z-index:80;pointer-events:none;border:1px solid #63d4e7;background:#0699b22b}.layer-multi-selected>.label,.layer-multi-selected>.lane{background-color:#123e49;box-shadow:inset 0 0 0 1px #0699b2}.layer-display-bar{height:22px;min-height:22px;background:#19262d;border-bottom:2px solid #35505e}.layer-display-bar>.label{background:#19262d;font-size:9px;padding:2px 12px;position:relative}.layer-display-bar .wave-controls{top:4px}.layer-display-bar>.lane{background:#19262d}footer{min-height:27px;padding:4px 22px;color:#849aa5;font-size:10px}#warnings{color:#d5b97b;margin-left:12px}
 `
-const page = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Disguise Layer Editor · Timeline</title><link rel="stylesheet" href="/viewer.css"><script src="/viewer.js" defer></script></head><body><header><span class="brand-logo"><img src="${brandLogo}" alt="VEHKA AV"></span><div><h1>DISGUISE LAYER EDITOR</h1><small>TIMELINE VIEWER</small></div><div class="spacer"></div><div id="clockBlock"><span id="clock">—</span><span id="beat"></span><div id="editClock" hidden></div><div id="clockDetails"></div><div id="sectionRemaining" aria-live="off"></div></div><button id="status" type="button" title="LIVE / VIEW" disabled>CONNECTING</button></header><div class="toolbar"><strong id="track">TRACK</strong><div class="spacer"></div><button id="fitTrack" title="FIT TRACK">FIT TRACK</button><button id="fitLayer" title="CENTRE SELECTED LAYER">FIT LAYER</button><button id="follow" title="FOLLOW PLAYHEAD" aria-pressed="true">FOLLOW</button><button id="zoomOut" aria-label="ZOOM OUT" title="ZOOM OUT">−</button><button id="zoomIn" aria-label="ZOOM IN" title="ZOOM IN">+</button></div><main id="viewport" aria-label="Designer timeline"><div id="sheet"></div></main><footer>CTRL + WHEEL: ZOOM · SHIFT + WHEEL: PAN · S: SNAP ON/OFF · F: FOLLOW · T: FIT TRACK · L: FIT LAYER · SHIFT+L: LINK TIME · WHEEL: SELECTED KEY VALUE · SHIFT+DRAG: SELECT KEYS<span id="selectionMessage" role="status"></span><span id="warnings"></span></footer></body></html>`
+const page = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Disguise Layer Editor · Timeline</title><link rel="stylesheet" href="/viewer.css"><script src="/viewer.js" defer></script></head><body><header><span class="brand-logo"><img src="${brandLogo}" alt="VEHKA AV"></span><div><h1>DISGUISE LAYER EDITOR</h1><small>TIMELINE VIEWER</small></div><div class="spacer"></div><div id="clockBlock"><span id="clock">—</span><span id="beat"></span><div id="editClock" hidden></div><div id="clockDetails"></div><div id="sectionRemaining" aria-live="off"></div></div><div class="ui-size-controls" role="group" aria-label="INTERFACE SIZE"><button data-ui-size="small" title="SMALL · 100%" aria-pressed="true">SMALL</button><button data-ui-size="medium" title="MEDIUM · 105%" aria-pressed="false">MEDIUM</button><button data-ui-size="large" title="LARGE · 110%" aria-pressed="false">LARGE</button></div><button id="status" type="button" title="LIVE / VIEW" disabled>CONNECTING</button></header><div class="toolbar"><strong><span id="track">TRACK</span><span id="externalTc" hidden></span></strong><div class="spacer"></div><button id="fitTrack" title="FIT TRACK">FIT TRACK</button><button id="fitLayer" title="CENTRE SELECTED LAYER">FIT LAYER</button><button id="follow" title="FOLLOW PLAYHEAD" aria-pressed="true">FOLLOW</button><button id="zoomOut" aria-label="ZOOM OUT" title="ZOOM OUT">−</button><button id="zoomIn" aria-label="ZOOM IN" title="ZOOM IN">+</button></div><main id="viewport" aria-label="Designer timeline"><div id="sheet"></div></main><footer>CTRL + WHEEL: ZOOM · SHIFT + WHEEL: PAN · S: SNAP ON/OFF · F: FOLLOW · T: FIT TRACK · L: FIT LAYER · SHIFT+L: LINK TIME · WHEEL: SELECTED KEY VALUE · SHIFT+DRAG: SELECT KEYS<span id="selectionMessage" role="status"></span><span id="warnings"></span></footer></body></html>`
 
-module.exports = { page, stylesheet, browserScript: '(' + browserMain.toString() + ')(' + applyEditPatch.toString() + ',' + discreteSegments.toString() + ',' + selectionScroll.toString() + ',' + timecode.toString() + ',' + duplicateMarkerKeys.toString() + ')' }
+module.exports = { page, stylesheet, browserScript: '(' + browserMain.toString() + ')(' + applyEditPatch.toString() + ',' + discreteSegments.toString() + ',' + selectionScroll.toString() + ',' + timecode.toString() + ',' + duplicateMarkerKeys.toString() + ',' + createUiGeometry.toString() + ')' }
