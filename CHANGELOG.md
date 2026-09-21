@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.0-beta.55
+
+- Centre effect/precomp connection arrows on their visible source layer and separate overlapping paths by 8 pixels.
+- Preserve collapsed-group routing and native Designer connections; display-only change.
+- Validation: 286 offline tests and package checks passed; installed viewer script verified read-only.
+
 ## 0.2.0-beta.54
 
 - Read TC IN from the selected transport monitor, including session-forwarded timecode when the local receiver reads zero.

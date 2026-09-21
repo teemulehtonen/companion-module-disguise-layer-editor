@@ -2380,16 +2380,36 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
         uid = state.layers.find((layer) => layer.uid === uid)?.parent
       }
     }
+    const relationPositions = []
+    const laneWidth = Math.max(1, sheet.clientWidth - 240)
     for (const arrow of state.arrows || []) {
       const source = visibleRow(arrow.source)
       const dest = visibleRow(arrow.destination)
-      if (!source || !dest || arrow.time < start || arrow.time > start + span) continue
-      if (source === dest) continue
-      const line = el('div', 'relation ' + (source.offsetTop < dest.offsetTop ? 'down' : 'up'))
+      if (!source || !dest || source === dest) continue
+      const layer = state.layers.find(layer => layer.uid === source.dataset.uid)
+      if (!layer || !Number.isFinite(layer.start) || !Number.isFinite(layer.end)) continue
+      const centre = (layer.start + layer.end) / 2
+      if (centre < start || centre > start + span) continue
+      const sourceY = source.offsetTop + source.offsetHeight / 2
+      const destY = dest.offsetTop + dest.offsetHeight / 2
+      const top = Math.min(sourceY, destY), bottom = Math.max(sourceY, destY)
+      const base = laneWidth * x(centre) / 100
+      // Separate only connections whose vertical paths overlap, in display pixels.
+      let position = base
+      for (let slot = 0; slot <= relationPositions.length * 2 + 2; slot++) {
+        const offset = slot === 0 ? 0 : Math.ceil(slot / 2) * 8 * (slot % 2 ? -1 : 1)
+        const candidate = base + offset
+        if (candidate < 0 || candidate > laneWidth) continue
+        if (relationPositions.some(p => p.top <= bottom && p.bottom >= top && Math.abs(p.x - candidate) < 8)) continue
+        position = candidate
+        break
+      }
+      relationPositions.push({x:position,top,bottom})
+      const line = el('div', 'relation ' + (sourceY < destY ? 'down' : 'up'))
       line.title = 'DESIGNER CONNECTION'
-      line.style.left = 'calc(240px + (100% - 240px) * ' + x(arrow.time) / 100 + ')'
-      line.style.top = Math.min(source.offsetTop + source.offsetHeight / 2, dest.offsetTop + dest.offsetHeight / 2) + 'px'
-      line.style.height = Math.max(1, Math.abs(source.offsetTop + source.offsetHeight / 2 - dest.offsetTop - dest.offsetHeight / 2)) + 'px'
+      line.style.left = 'calc(240px + (100% - 240px) * ' + x(centre) / 100 + ' + ' + (position-base) + 'px)'
+      line.style.top = top + 'px'
+      line.style.height = Math.max(1, bottom-top) + 'px'
       sheet.append(line)
     }
     const playhead = el('i', 'playhead')

@@ -6,7 +6,7 @@ Disguise layer, keyframe and resource control for Bitfocus Companion and Stream 
 
 ## Install
 
-**Downloads (0.2.0-beta.54):** [Companion module](../../releases/download/v0.2.0-beta.54/disguise-layer-control-0.2.0-beta.54.tgz) · [Stream Deck XL page](../../releases/download/v0.2.0-beta.54/D3-Stream-Deck-XL.companionconfig) · [Companion page](../../releases/download/v0.2.0-beta.54/D3-Stream-Deck-Plus.companionconfig)
+**Downloads (0.2.0-beta.55):** [Companion module](../../releases/download/v0.2.0-beta.55/disguise-layer-control-0.2.0-beta.55.tgz) · [Stream Deck XL page](../../releases/download/v0.2.0-beta.55/D3-Stream-Deck-XL.companionconfig) · [Companion page](../../releases/download/v0.2.0-beta.55/D3-Stream-Deck-Plus.companionconfig)
 
 Tested with Designer 32.4.17 and Companion 5.0.5.
 
@@ -58,9 +58,9 @@ For network audio on Raspberry Pi, enter the SMB share and credentials in module
 
 ## Latest beta
 
-`0.2.0-beta.54` adds transport-monitor TC IN, transport-switch recovery, region-aware beat snapping and ten shared musical steps. Track audio and its beat markings respect timed intros; a compact waveform button hides the audio row. VIEW + FOLLOW scrolls with playback and hides the blue edit cursor. Original peak waveform rendering and caching are retained.
+`0.2.0-beta.55` centres effect/precomp connection arrows on their source layer and separates overlapping paths by 8 pixels. It also includes transport-monitor TC IN, transport-switch recovery, region-aware beat snapping and ten shared musical steps. Track audio and its beat markings respect timed intros; a compact waveform button hides the audio row. VIEW + FOLLOW scrolls with playback and hides the blue edit cursor. Original peak waveform rendering and caching are retained.
 
-Validation: 282 offline tests and package checks passed. Read-only checks verified the installed Raspberry Pi module and advancing TC IN. Live Designer transport switching and physical local timecode input were not exercised in this release.
+Validation: 286 offline tests and package checks passed. Read-only checks verified the installed Raspberry Pi module and advancing TC IN. Live Designer transport switching and physical local timecode input were not exercised in this release.
 
 ## Build
 

@@ -1,3 +1,15 @@
+# Centred connection arrows - 0.2.0-beta.55
+
+Effect/precomp connection arrows are drawn at the visible source layer's temporal
+midpoint, rather than native arrow.t. Overlapping vertical paths are separated by
+8 display pixels; collapsed children use the visible group midpoint. Connections
+within one collapsed row and offscreen midpoints are omitted. Native arrow data
+and Designer state remain unchanged.
+Validation: 286 offline tests and package checks passed. Beta.55 installed on the
+Raspberry Pi; read-only verification confirmed the new viewer script and healthy
+connection in the operator's VIEW mode. Browser appearance awaits operator review.
+Release target: v0.2.0-beta.55, including source and clean Companion installation assets.
+
 # Transport TC monitor - 0.2.0-beta.54
 
 TC IN now reads the selected transport monitorString and tcStatusString in both
