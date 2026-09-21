@@ -265,6 +265,7 @@ class DisguiseLayerControl extends InstanceBase {
           this.client,
           (state) => {
             if (this.connection !== connection) return
+            if (state.contextChanged && this.editor) this.editor.stale = true
             if (!state.connected && this.editor?.snapshot) this.editor.stale = true
             if (state.trackUid && this.editor?.snapshot && state.trackUid !== this.editor.snapshot.trackUid)
               this.editor.stale = true
@@ -293,6 +294,8 @@ class DisguiseLayerControl extends InstanceBase {
             }
             if (e && typeof state.timeline?.playing === 'boolean') e.playing = state.timeline.playing
             if (e?.snapshot && state.clock) {
+              if (e.linkTime && !e.busy && state.trackUid === e.snapshot.trackUid && typeof state.clock.beatMode === 'boolean')
+                e.snapshot.beatMode = state.clock.beatMode
               e.snapshot.fps = state.clock.fps
               e.snapshot.customFps = state.clock.custom
               e.snapshot.tcMode = String(state.clock.mode)
@@ -359,11 +362,16 @@ class DisguiseLayerControl extends InstanceBase {
               this.editor?.liveTimecodeSample,
             ),
             connected: Boolean(this.connection?.connected) && !this.lastError,
+            synchronizing: !this.editor?.snapshot || Boolean(this.editor?.stale || this.connection?.contextChanged),
             viewOnly: this.client.viewOnly === true,
-            editEnabled: config.viewerEditEnabled === true && !this.client.viewOnly,
+            editEnabled: config.viewerEditEnabled === true && !this.client.viewOnly && !this.editor?.stale && !this.connection?.contextChanged,
             editor: describeEditor(this.editor),
           }),
           {
+            contextChanged: (expected, next) => {
+              if (this.editor?.snapshot?.transportUid !== expected.transportUid || this.editor?.snapshot?.trackUid !== expected.trackUid) return
+              this.connection?.noteContextChange(next)
+            },
             viewMode: async enabled => {
               if (!this.connection?.connected || this.lastError) return {ok:false,reason:'CONNECTION UNAVAILABLE'}
               // Lock synchronously before waiting for an existing action. Commands
@@ -466,6 +474,7 @@ class DisguiseLayerControl extends InstanceBase {
   requestSync() {
     if (
       !this.connection?.connected ||
+      this.connection?.contextAvailable === false ||
       this.syncPending ||
       (this.editor?.snapshot && !this.editor.stale) ||
       Date.now() < this.nextSyncAttempt
@@ -559,6 +568,7 @@ class DisguiseLayerControl extends InstanceBase {
           // selection change is not a failed connection or a button error.
           this.queueGeneration++
           this.lastError = ''
+          connection?.watch(editor.snapshot.transportUid, editor.field ? {layerUid:editor.layer.uid,name:editor.field.name} : null)
           this.connectionStatus()
           this.publish()
           return
@@ -581,6 +591,15 @@ class DisguiseLayerControl extends InstanceBase {
       this.connectionStatus()
     } catch (error) {
       if (editor !== this.editor) return
+      if (error.code === 'CONTEXT_CHANGED') {
+        editor.stale = true
+        this.lastError = ''
+        this.queueGeneration++
+        connection?.noteContextChange(error.context)
+        this.connectionStatus()
+        this.publish()
+        return
+      }
       if (error.code === 'VIEW_ONLY') {
         editor.clearViewEditing(); this.lastError = ''; this.connectionStatus(); this.publish(); return
       }

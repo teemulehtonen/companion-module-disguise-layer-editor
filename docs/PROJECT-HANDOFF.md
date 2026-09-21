@@ -1,3 +1,218 @@
+# Transport TC monitor - 0.2.0-beta.54
+
+TC IN now reads the selected transport monitorString and tcStatusString in both
+LiveUpdate and HTTP snapshots. Local receiver current can stay zero on a Designer
+following session TC. No source produces a dash; actual zero remains valid.
+Existing transport identity guards and socket teardown prevent late old values.
+Read-only native probes confirmed a moving monitor while local current was zero.
+Offline coverage evaluates both native reads with remote/local/no-source fixtures,
+and verifies transport switching, late messages, zero and placeholder rendering.
+Validation: 282 offline tests and package checks passed with zero skips.
+Beta.54 installed on Raspberry Pi Companion. Read-only live/state probes returned
+advancing TC IN (02:00:04:07 -> 02:00:04:15) for the same transport, connected,
+not synchronising, no warnings and empty last_error. Real transport switching and
+physical local TC input were not exercised; these cases have offline coverage.
+No Designer settings, transports or project data are changed by this update.
+
+# Transport-switch recovery - 0.2.0-beta.53
+
+The transport-switch recovery fix is now installed. Read-only live_state,
+viewer_snapshot and refresh return a structured context-change signal before
+heavy work if GUI transport/track identity differs or no track is selected.
+Mutation guards remain strict, stale actions are not replayed, and expected
+context rejection triggers queued resynchronisation without setting last_error.
+
+Connection handles context changes before discarding feedback superseded by old
+LiveUpdate traffic, drops old subscriptions, and suppresses obsolete reconnects
+until refresh acknowledges the new target. No-track startup continues light
+polling, while heavy refresh waits for an available track. Obsolete failures
+cannot invalidate a newly selected target.
+
+Viewer snapshots carry and verify both transport and track IDs. Cache identity
+includes transport; late snapshots cannot replace the new context even with the
+same track UID. The viewer clock closes during synchronisation. Browser shows
+SYNCHRONISING and disables stale interaction; clock merges also compare transport.
+Context mismatches wait 500 ms; other snapshot failures back off native reads
+for 1500 ms instead of issuing Python reads on each browser retry.
+
+Validation: 279 offline tests and package smoke/page generation passed, no skips.
+New coverage includes the real host action queue with rapid/same-track switches,
+temporary/no-track startup, late responses/errors, old LiveUpdate traffic,
+clock teardown, snapshot coalescing/backoff and retained native mutation guards.
+A READ-ONLY native live_state probe with a deliberately mismatched expected UID
+returned the context signal successfully without selecting or changing anything.
+Installed beta.53 verified: connected EDIT mode, not synchronising, snapshot/live
+transport and track identities agree, sync UI served, no warnings/last_error,
+configuration unchanged during verification. No actual Designer transport switch
+or project mutation was performed; native GUI freezing is not proven eliminated
+by a show-time reproduction. Previous investigation notes below are historical.
+
+# Shared musical steps and grid contrast - 0.2.0-beta.52
+
+All beat timing modes (time encoder, layer timing, key timing) now share ten slots:
+1/96, 1/16, 1/12, 1/8, 1/6, 1/4, 1/3, 1/2, 1 and 4 beats.
+Key default is 1/96. Existing normal and layer defaults are retained. Native grid
+choices support straight/triplet divisions on the 96-part lattice and reject 1/128.
+The zoom grid remains a visible multiple of the selected step and native region
+origins are revalidated before snaps. Grid alpha changed from 0b/20 to 20/45.
+Beat-mode polling feedback is preserved and updates linked, idle editor timing
+mode for the same track. Unlinked editing does not adopt playback-position mode.
+
+Validation: 268 offline tests and package checks passed, no skipped tests. Tests
+cover every slot across the three modes, labels, cycling, grid fractions, zoom,
+snap validation and linked time/BPM transitions without metadata refresh.
+Beta.51 was installed first; beta.52 adds mode-feedback propagation. The operator
+changed VIEW/EDIT settings during work; initial preflight checks stopped before
+mutations and fresh settings were preserved for each completed install.
+Beta.52 installed. A configuration hash check differed again during final verification; do not claim settings remained unchanged after the install. Only module-version/runtime verification is applicable. No native writes, physical encoder
+moves or live key dragging were tested. Refresh open browser viewers for CSS.
+The separate transport-switch disconnection issue remains investigated but UNFIXED.
+
+# Region-aware snap grid - 0.2.0-beta.50
+
+Vertical grid lines and grid snap targets now share native per-region beat/time
+coordinates. Read-only grid_regions walks globalBeatToLocalBeat origins backwards
+and verifies the audio_sections count; unavailable or ambiguous maps disable the
+grid with a warning. Region mode uses track.quant or native audio beat markers,
+not a guessed BPM threshold. This supports globally quantized silent tracks,
+including 60 BPM. AudioSection has no exposed fields in this installed API, as
+confirmed via ClassInfo; sectionInfo exposes cue boundaries but no BPM mode.
+The shared grid_context helper revalidates unit, local origin and native timing
+before accepting grid snaps. Existing write guards remain.
+
+The selected editor timing step supplies the minimum interval; zoom coarsens to
+visible multiples. Key-mode fractions extend to 1/128 beat. Time grids also retain
+frame alignment at fractional FPS. Viewer cache signatures include numeric steps,
+browser live updates invalidate changed settings, and gesture tokens include them.
+
+Validation: 265 offline tests and package smoke/page generation passed, no skips.
+Fixtures cover mixed regions, 0/13.3/16/32-second intros, 60/92/100/123 BPM,
+multiple musical regions, subdivisions, zoom, setting/cache/token changes, stale
+tempo/origin/mode rejection, silent quantized tracks and fractional FPS.
+Installed beta.50 verified through read-only Companion state: unchanged settings,
+connected VIEW mode, second-grid intro, first beat zero at actual 16-second origin,
+no warnings or last_error. Separate native READ-ONLY helper execution confirmed
+1/4 and 1/8-beat grids at zoomed ranges. No native key moves, transport changes,
+Designer mutations, or live browser drag tests were performed.
+
+# VIEW/FOLLOW cursor - 0.2.0-beta.49
+
+With VIEW and FOLLOW enabled, hide the blue edit cursor and edit clock and use
+playback time for following. FOLLOW off restores the independent edit cursor.
+This changes browser presentation only; native edit time/link/playback are untouched.
+All 261 offline tests and package checks passed with no skips. Installed beta.49:
+served cursor/clock guards verified, unchanged config, connected VIEW, no last error.
+No live browser interaction or native mutation testing performed.
+
+## Transport-switch investigation (not fixed or deployed)
+
+Read-only checks found the current connection healthy. Code inspection shows:
+- designer-script.js chooses guisystem.currentTransportManager for every command.
+- Connection subscriptions remain bound to the snapshot transport UID.
+- live_state sends that old UID; a GUI switch triggers the context guard.
+- Connection.poll catches this as pollError without notifying onState.
+- main.js tests whether the OLD transport still has its OLD track, not whether
+  GUI transport selection changed; the old transport can remain perfectly valid.
+- viewer_snapshot omits transport identity and reads the new GUI selection.
+  The browser rejects full snapshots incompatible with the old live track,
+  invalidates its full-read timer, and can repeatedly request snapshots.
+- Browser CONNECTION LOST also covers snapshot exceptions/timeouts and therefore
+  does not prove the transport HTTP connection itself failed.
+
+Local simulations of production Connection.poll and the production main callback
+confirmed zero state notifications after the guard error and no stale/sync request
+when the old transport/track remain valid. First callback extraction attempt failed
+on CRLF boundaries; normalized-source rerun passed. No transport switches were
+performed on Designer. Designer UI freezing remains unverified: concurrent Python
+read paths and HTTP abort not proving native cancellation are risks, not a confirmed
+native deadlock. A fix should establish one explicit transport identity across
+snapshot/live/clock reads, recover expected context changes, and prevent repeated
+incompatible snapshot reads. Preserve all mutation context guards.
+
+# Track audio icon - 0.2.0-beta.48
+
+Replaced the track audio display-strip text with a five-bar SVG waveform icon.
+It inherits the same button dimensions, stroke and active styling as its neighbors.
+Accessible label and show/hide tooltip remain. Visibility behavior is unchanged.
+All 259 offline tests and package checks passed. Beta.48 installed on the Raspberry
+Pi; read-only verification confirmed the served icon and unchanged connection
+settings. No Designer mutations or live browser interaction tests performed.
+
+# Track audio visibility - 0.2.0-beta.47
+
+The first button on the shared display strip toggles the complete track audio row,
+including its waveform and beat labels. The button remains visible while hidden.
+This browser-local preference survives redraws and track changes, resets on page
+reload, and works in VIEW mode without sending commands or changing audio playback.
+The original peak waveform and corrected audio-local beat positions are retained.
+Validation: 259 offline tests and package smoke/page generation passed, with no skipped tests. Beta.47 is installed and read-only verified: the served script contains the toggle, connection settings are unchanged, connected in VIEW mode, peak waveform ready, beat zero aligned with audio at 32 seconds, and last_error empty. No Designer mutations or live browser interaction tests were performed.
+
+# Local waveform rollback retaining beat alignment - 0.2.0-beta.46
+
+The operator rejected beta.45 waveform loading time and requested reverting only
+waveform changes, explicitly preserving corrected beat markings. WAV/MOV decoding,
+disk cache identity/format and single peak-envelope rendering are restored to the
+pre-RMS implementation. Existing peak caches can be reused without rereading media
+when source identity is unchanged. Audio-origin metadata and the audio-local beat
+overlay remain, as do their regression tests. No Designer mutation is authorized.
+Validation: all 258 offline tests and package smoke/page generation passed. Beta.46 installed and read-only verified: unchanged connection settings, VIEW mode, waveform ready without RMS, audio and beat zero both at 32 seconds, no last error. No Designer mutations.
+
+# Local Companion waveform detail update - 0.2.0-beta.45
+
+WAV and PCM MOV decoders now retain channel-averaged RMS alongside unchanged
+peak envelopes. Channels are squared independently (no antiphase cancellation);
+the last bin uses its actual sample count. RMS is rounded to six decimals and
+validated in the disk cache. A versioned waveform key triggers one source reread
+without clearing thumbnails or touching media. Browser overview aggregation uses
+weighted squared RMS, not max RMS, and raises its sample budget when zoomed in.
+Bright average energy sits inside faint transient peaks without normalization.
+The waveform beat/bar overlay now uses the same audio-local origin and omits
+markers before the audio starts. The main timeline grid and snap targets remain
+global; Designer edit commands and audio playback are unchanged.
+
+Validation: all 260 offline tests and package smoke/page generation passed.
+Coverage includes sparse vs sustained equal-peak audio, stereo antiphase energy,
+partial bins, MOV RMS, cache validation and waveform-only beat-grid alignment
+across timed intros and multiple tempos. Beta.45 is installed on the existing
+Companion connection; beta.44 remains available for rollback. Installed read-only
+checks confirmed connected/VIEW, unchanged configuration, no errors/warnings,
+8187 peak/RMS bins, and matching audio/first beat origins at 16 seconds on the
+then-current track. No Designer project, selection or playback mutation occurred.
+
+# Local Companion track-audio placement fix - 0.2.0-beta.44
+
+The viewer snapshot resolves the current audio origin with
+`track.beatToTime(globalBeat - track.globalBeatToLocalBeat(globalBeat))`.
+This reads native timing only; it does not move the playhead, change selection,
+modify audio markers or write project data. Placement is rounded to nanoseconds
+so harmless floating-point noise does not force redraws. Unknown placement shows
+an explicit unavailable message. Track-audio identity/placement participates in
+renderRevision; Audio-layer clipping and positioning are unchanged.
+
+This remains a source waveform for the audio at the current playhead, not an
+all-section waveform or nonlinear audio-warp renderer. The audio-free intro has
+no current track audio, as before. Do not infer support for edited source beat
+markers, loops or every audio-section configuration from this offset fix.
+
+Validation: the regression first failed on the original zero-origin renderer.
+256 offline unit tests passed, including 38 isolated Python timing/error cases
+and rendered SVG placement/clipping checks. Bounded read-only Designer queries
+confirmed an audio-free intro followed by audio-local beat zero at 16 seconds.
+No native or installed mutation suite was run. Package constructor/action smoke
+checks and clean page generation passed. Beta.44 was imported into Companion and
+selected on the existing connection; beta.43 remains installed for rollback.
+The connection configuration hash and VIEW mode were unchanged. After Designer
+was started by the operator, installed read-only verification returned connected,
+no errors/warnings, a ready waveform and a 32-second track-audio origin on the
+then-current track. No playhead/selection/project mutation was performed.
+
+Build environment note: full npm ci failed because the locked @pkgr/core 0.3.8
+tarball returned 404. Runtime dependencies were installed with npm ci --omit=dev;
+only the necessary build dependencies were then extracted from the exact locked
+tarballs after integrity checks. Dependency versions/integrities were unchanged.
+The standard npm run package command completed with those build dependencies.
+GitHub publication is not authorized for this update.
+
 # Current release - 0.2.0-beta.43
 
 ## Deferred Designer diagnostics (operator decision, 2026-09-20)

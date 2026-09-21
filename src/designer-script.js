@@ -1,5 +1,6 @@
 'use strict'
 const viewerScript = require('./viewer-script')
+const gridScript = require('./viewer-grid-script')
 const layerGroupsScript = require('./designer-layer-groups')
 const waveformScript = require('./viewer-waveform-script')
 
@@ -20,7 +21,13 @@ import exceptions as pyerrors
 import d3
 p = json.loads(base64.b64decode('${payload}').decode('utf-8'))
 manager = guisystem.currentTransportManager
-track = manager.track
+track = manager.track if manager is not None else None
+if p['command'] in ('live_state','viewer_snapshot','refresh') and (track is None or
+        (p.get('transportUid') and str(manager.uid) != p['transportUid']) or
+        (p.get('trackUid') and str(track.uid) != p['trackUid'])):
+    return {'contextChanged':True,'contextAvailable':track is not None,
+            'transportUid':str(manager.uid) if manager is not None else None,
+            'trackUid':str(track.uid) if track is not None else None}
 if track is None:
     raise ValueError('No track selected in Designer')
 if p.get('trackUid') and str(track.uid) != p['trackUid']:
@@ -63,16 +70,20 @@ def fps():
     custom = float(manager.customFps().value_or(0))
     return custom if custom > 0 else float(manager.beatToTimecode(0).fps())
 
+${gridScript}
 def checked_snap(seconds):
     grid = p.get('snapGrid')
     if grid:
         unit, step, index = grid['unit'], float(grid['step']), int(grid['index'])
-        if (unit == 'beat') != bool(track.quant):
+        context = grid_context(seconds)
+        if unit != context['unit']:
             raise ValueError('Timeline mode changed; drag again')
-        choices = [1,2,4,8,16,32,64,128,256,512,1024] if unit == 'beat' else [1.0/fps(),2.0/fps(),5.0/fps(),10.0/fps(),1,2,5,10,15,30,60,120,300,600,1800,3600]
-        if not any(abs(step-s)<1e-9 for s in choices):
+        origin = context['originBeat'] if unit == 'beat' else context['originTime']
+        if abs(float(grid.get('origin',0))-origin)>0.000001:
+            raise ValueError('Timeline region changed; drag again')
+        if not any(abs(step-s)<1e-9 for s in grid_choices(unit)):
             raise ValueError('Timeline grid changed; drag again')
-        target = float(track.beatToTime(index*step)) if unit == 'beat' else index*step
+        target = float(track.beatToTime(origin+index*step)) if unit == 'beat' else origin+index*step
         if abs(target-seconds)>0.000001:
             raise ValueError('Timeline grid changed; drag again')
         return target
@@ -477,7 +488,7 @@ if p['command'] == 'annotation_edit':
 if p['command'] == 'live_state':
     seconds = float(track.beatToTime(manager.player.tCurrent))
     layers = all_layers()
-    result = {'timeline': {'time': seconds, 'playing': bool(manager.player.playing), 'trackUid': str(track.uid),
+    result = {'timeline': {'time': seconds, 'playing': bool(manager.player.playing), 'transportUid': str(manager.uid), 'trackUid': str(track.uid),
               'selectedLayerUids': [str(l.uid) for l in guisystem.selectedLayers if isinstance(l, Layer)],
               'layers': [{'uid': str(l.uid), 'start': float(track.beatToTime(l.tStart)), 'end': float(track.beatToTime(l.tEnd))} for l in layers]},
               'clock': clock_info()}
@@ -1120,7 +1131,7 @@ ${body
   .map((line) => '    ' + line)
   .join('\n')}
 result = companion_command()
-if isinstance(result, dict):
+if isinstance(result, dict) and not result.get('contextChanged'):
     positions = set()
     def collect_positions(value):
         if isinstance(value, dict):

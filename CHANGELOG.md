@@ -1,5 +1,65 @@
 # Changelog
 
+## 0.2.0-beta.54
+
+- Read TC IN from the selected transport monitor, including session-forwarded timecode when the local receiver reads zero.
+- Follow transport selection, discard obsolete subscription values and show a dash when no timecode source is configured.
+- Includes the audio placement, track-audio visibility, VIEW/FOLLOW, musical snap-grid and transport-switch fixes recorded below since the last published beta.43. Original peak-only waveform rendering is retained.
+- Validation: 282 offline tests, package checks and read-only installed-Companion verification passed. No live Designer transport-switch or physical local timecode-input test was performed for this release.
+
+## 0.2.0-beta.53
+
+- Recover automatically when Designer GUI selection switches to another transport or temporarily has no track.
+- Pin viewer reads to transport and track identity, discard late responses, and close obsolete clock subscriptions during resynchronisation.
+- Show SYNCHRONISING during selection changes and back off failed snapshot reads instead of repeatedly querying Designer.
+- Preserve native mutation guards; stale edit commands are discarded rather than replayed on the new transport.
+
+## 0.2.0-beta.52
+
+- Retain native beat-mode feedback when linked playback crosses time/BPM regions, so Companion timing choices update without a metadata refresh.
+
+## 0.2.0-beta.51
+
+- Increase timeline snap-grid contrast while retaining stronger major lines.
+- All beat-mode timing buttons and encoder step selections now offer 1/96, 1/16, 1/12, 1/8, 1/6, 1/4, 1/3, 1/2, 1 and 4 beats.
+- Default key timing is 1/96 beat. Snap grids support the same straight and triplet steps, with zoom selecting visible multiples; unsupported 1/128-beat snaps are rejected.
+
+## 0.2.0-beta.50
+
+- Build snap grid lines separately for native time and BPM regions, anchoring beat zero to each verified region origin.
+- Follow the selected timing step and zoom, including fractional beats; drawing and snapping use the same grid.
+- Revalidate native region, mode and beat/time mapping before accepting grid snaps. Unverified region mappings show a warning instead of guessed snap targets.
+
+## 0.2.0-beta.49
+
+- In VIEW mode with FOLLOW enabled, hide the blue edit cursor and its clock, and scroll the timeline with playback, without changing Designer time.
+
+## 0.2.0-beta.48
+
+- Replace the track audio visibility label with a compact waveform icon matching adjacent display buttons.
+
+## 0.2.0-beta.47
+
+- Add TRACK AUDIO as the first display-strip button to hide/show the complete track audio row without changing playback.
+
+## 0.2.0-beta.46 (local Companion update)
+
+- Revert beta.45 RMS calculation, additional waveform rendering and versioned energy cache at operator request due to loading delay.
+- Reuse the original peak cache without clearing it. Preserve corrected audio placement and audio-local beat/bar markings.
+
+## 0.2.0-beta.45 (local Companion update)
+
+- Draw average audio energy (RMS) brightly inside subdued peak transients, preserving timing and source amplitude without artificial normalization.
+- Start waveform beat/bar markings at the audio origin, leaving timed intros empty while preserving the main timeline ruler.
+- Preserve more source samples when zoomed in. WAV and PCM MOV energy is computed during the existing streaming read without additional source-file passes.
+- Version waveform summaries so cached peak-only previews are rebuilt once; thumbnails and source media are unchanged.
+
+## 0.2.0-beta.44 (local Companion update)
+
+- Place the current track-audio waveform at its native audio-local beat-zero origin instead of track time zero, preserving timed intros.
+- Include track-audio placement and identity in redraw invalidation. Missing placement is shown explicitly instead of guessing zero.
+- Layer waveform positioning and all Designer edit commands are unchanged.
+
 ## 0.2.0-beta.43
 
 - Update viewer edits immediately while preserving guarded native writes and rejecting stale feedback. Improve seek ordering, wheel/drag curves, multi-key previews and whole-layer movement without transient geometry jumps.

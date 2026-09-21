@@ -8,10 +8,10 @@ function fixture(count=1){
  const labels=Array.from({length:count},text),fields=labels.map((_,i)=>({name:'v'+i,value:i/1000}))
  const values=labels.map((label,i)=>({dataset:{parameterLayer:'1',parameterValue:'v'+i},querySelector:()=>label}))
  const button={dataset:{selectLayer:'1'}},head={id:'playhead',style:{}},header={id:'',style:{}},edit={id:'edithead',style:{}}
- const elements=new Map(), c={state:{layers:[{uid:'1',start:0,end:10,fields}],time:5,timecode:'00:00:05:00',fps:25,selectionEnabled:true,focusUid:'1',parameter:'v0',liveValue:0.5,editor:{linkTime:true},annotations:{tags:[{time:0,type:'CUE',value:1}],notes:[]},sections:[{start:0,end:10}]},frame:0,displayedTime:null,presentation:{size:0},activeSeekPreview:()=>null,playbackClock:()=>c.state.time,
+ const elements=new Map(), c={state:{layers:[{uid:'1',start:0,end:10,fields}],time:5,timecode:'00:00:05:00',fps:25,selectionEnabled:true,focusUid:'1',parameter:'v0',liveValue:0.5,editor:{linkTime:true},annotations:{tags:[{time:0,type:'CUE',value:1}],notes:[]},sections:[{start:0,end:10}]},follow:true,frame:0,displayedTime:null,presentation:{size:0},activeSeekPreview:()=>null,playbackClock:()=>c.state.time,
  sheet:{get clientWidth(){widthReads++;return 1240},querySelectorAll:s=>{scans++;return s==='[data-select-layer]'?[button]:s==='[data-parameter-value]'?values:s==='.header-playhead, #playhead'?[head,header]:[edit]}},
  $:id=>{if(!elements.has(id))elements.set(id,text());return elements.get(id)},x:t=>t*10,editClock:()=>c.state.editor.linkTime===false?c.state.editor.editTime:c.state.time}
- vm.createContext(c);vm.runInContext(source,c)
+ vm.createContext(c);vm.runInContext(browserScript.slice(browserScript.indexOf('  function editClock()'),browserScript.indexOf('  function previewTimecode(')),c);vm.runInContext(source,c)
  return{c,labels,button,head,header,edit,values,elements,stats:()=>({scans,writes,widthReads})}
 }
 test('600 follow frames avoid all parameter/text work and DOM rescans with 1000 parameters',()=>{
@@ -44,4 +44,38 @@ test('explicit short seeks snap immediately but subsequent playback remains smoo
  const f=fixture();f.c.updatePlayhead();f.c.state.time=4.9;f.c.displayedTime=null;f.c.updatePlayhead();assert.equal(f.head.style.transition,'none')
  f.c.state.time=5;f.c.updatePlayhead();assert.equal(f.head.style.transition,'left 100ms linear')
  assert.match(browserScript.slice(browserScript.indexOf('async function seekTimeline('),browserScript.indexOf('function seekTarget(')),/displayedTime=null\s+updatePlayhead\(\)/)
+})
+
+
+test('VIEW + FOLLOW hides the blue cursor and edit clock without editing native time',()=>{
+ const f=fixture();f.c.state.viewOnly=true
+ f.c.state.editor={linkTime:false,editTime:1,editTimecode:'00:00:01:00'}
+ const original=JSON.stringify(f.c.state.editor)
+ f.c.updatePlayhead()
+ assert.equal(f.edit.hidden,true)
+ assert.equal(f.elements.get('editClock').hidden,true)
+ assert.equal(f.head.hidden,false)
+ f.c.state.time=5.1;f.c.updatePlayhead()
+ assert.equal(f.edit.hidden,true)
+ f.c.follow=false;f.c.updatePlayhead()
+ assert.equal(f.c.editClock(),1)
+ assert.equal(f.edit.hidden,false)
+ assert.equal(f.elements.get('editClock').hidden,false)
+ f.c.follow=true;f.c.state.viewOnly=false;f.c.updatePlayhead()
+ assert.equal(f.c.editClock(),1)
+ assert.equal(f.edit.hidden,false)
+ assert.equal(f.elements.get('editClock').hidden,false)
+ assert.equal(JSON.stringify(f.c.state.editor),original)
+})
+
+test('VIEW + FOLLOW scrolls from playback rather than parked edit cursor',()=>{
+ const f=fixture();Object.assign(f.c,{start:0,span:10,targetStart:0,mouseGesture:null,requestAnimationFrame:()=>1,animate:()=>{}})
+ vm.runInContext(browserScript.slice(browserScript.indexOf('  function bounds('),browserScript.indexOf('  function animate(')),f.c)
+ f.c.state.viewOnly=true;f.c.state.length=100;f.c.state.time=25;f.c.state.editor={linkTime:false,editTime:5}
+ f.c.followClock()
+ assert.equal(f.c.targetStart,18.5)
+ assert.equal(f.c.frame,1)
+ f.c.follow=false;f.c.frame=0;f.c.targetStart=0;f.c.followClock()
+ assert.equal(f.c.targetStart,0)
+ assert.equal(f.c.frame,0)
 })

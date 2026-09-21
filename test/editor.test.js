@@ -371,8 +371,8 @@ test('beat timing steps replace frame/second units and send beat deltas', async 
   const e = await ready()
   e.snapshot.beatMode = true
   const labels = []
-  for (let i=0;i<7;i++) { labels.push(e.timeStepLabel); e.cycleTimeStep() }
-  assert.deepEqual(labels,['1 BEAT','2 BEATS','4 BEATS','8 BEATS','16 BEATS','32 BEATS','1/4 BEAT'])
+  for (let i=0;i<10;i++) { labels.push(e.timeStepLabel); e.cycleTimeStep() }
+  assert.deepEqual(labels,['1 BEAT','4 BEATS','1/96 BEAT','1/16 BEAT','1/12 BEAT','1/8 BEAT','1/6 BEAT','1/4 BEAT','1/3 BEAT','1/2 BEAT'])
   let request
   const original=e.client.execute.bind(e.client)
   e.client.execute=async (command,args)=>{ if(command==='nudge_time'){request=args;return {time:e.time}}return original(command,args) }
@@ -393,9 +393,9 @@ test('keyframe movement cycles fractional beats without unlocking selection', as
   assert.equal(e.usesBeatSteps, true)
   const labels = []
   for (let i=0; i<10; i++) { labels.push(e.timeStepLabel); e.cycleTimeStep() }
-  assert.deepEqual(labels, ['1/128 BEAT','1/64 BEAT','1/32 BEAT','1/16 BEAT','1/8 BEAT','1/4 BEAT','1/2 BEAT','1 BEAT','4 BEATS','8 BEATS'])
+  assert.deepEqual(labels, ['1/96 BEAT','1/16 BEAT','1/12 BEAT','1/8 BEAT','1/6 BEAT','1/4 BEAT','1/3 BEAT','1/2 BEAT','1 BEAT','4 BEATS'])
   assert.ok(e.moveKey)
-  assert.equal(e.timeStepAmount, 1/128)
+  assert.equal(e.timeStepAmount, 1/96)
   e.moveKey = null
   e.layerEdit = 'in'
   assert.equal(e.timeStepLabel, '1/4 BEAT')
@@ -404,6 +404,6 @@ test('keyframe movement cycles fractional beats without unlocking selection', as
 
 test('layer encoder presses cycle only the requested beat steps', async () => {
  const e=await ready();e.snapshot.beatMode=true;e.layerEdit='edit';const seen=[];
- for(let i=0;i<6;i++){seen.push(e.timeStepLabel);e.cycleLayerStep()}
- assert.deepEqual(seen,['1/4 BEAT','1 BEAT','4 BEATS','8 BEATS','16 BEATS','32 BEATS']);assert.equal(e.timeStepLabel,'1/4 BEAT');
+ for(let i=0;i<10;i++){seen.push(e.timeStepLabel);e.cycleLayerStep()}
+ assert.deepEqual(seen,['1/4 BEAT','1/3 BEAT','1/2 BEAT','1 BEAT','4 BEATS','1/96 BEAT','1/16 BEAT','1/12 BEAT','1/8 BEAT','1/6 BEAT']);assert.equal(e.timeStepLabel,'1/4 BEAT');
 })

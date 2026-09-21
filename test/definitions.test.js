@@ -51,9 +51,10 @@ test('Companion lifecycle supports demo load, action execution and shutdown', as
   assert.equal(instance.editor.timeStep, 'two')
   instance.editor.snapshot.beatMode = true
   instance.publish()
-  assert.equal(state.timing_step_0, '1/4 BEAT')
+  assert.equal(state.timing_step_0, '1/96 BEAT')
+  assert.equal(state.timing_step_9, '4 BEATS')
   await instance.actions.time_step_set.callback({ options: { slot: 3 } })
-  assert.equal(instance.editor.beatStep, 4)
+  assert.equal(instance.editor.beatStep, 1 / 8)
   instance.editor.snapshot.beatMode = false
   Object.assign(instance.editor.field, { min: 0, max: 1.000000047 })
   instance.publish()

@@ -63,7 +63,8 @@ test('focus changes refresh data and track changes cannot retain the old focus',
   assert.equal(s.calls(), 2)
   s.context.trackUid = 'new'
   const data = await s.server.state(new URLSearchParams())
-  assert.equal(data.focusUid, null)
+  assert.equal(data.synchronizing, true)
+  assert.equal(data.layers, undefined)
 })
 
 test('unavailable Designer returns an explicit error without native details', async (t) => {
@@ -114,4 +115,66 @@ test('thumbnail failure is retried and successful bytes are cached', async t => 
   assert.equal(await (await fetch(s.url + '/api/thumbnail/123?retry=1')).text(),'recovered')
   assert.equal((await fetch(s.url + '/api/thumbnail/123')).status,200)
   assert.equal(calls,2)
+})
+
+test('timing setting changes bypass the old grid cache and reach native reads',async t=>{
+ const s=await setup(t)
+ s.context.editor={gridSteps:{beat:1,second:0.04}}
+ const original=s.client.execute
+ let args
+ s.client.execute=async (command,input)=>{args=input;return original(command,input)}
+ await s.server.state(new URLSearchParams())
+ assert.deepEqual(args.gridSteps,{beat:1,second:0.04})
+ s.context.editor.gridSteps={beat:0.25,second:0.5}
+ await s.server.state(new URLSearchParams())
+ assert.equal(s.calls(),2)
+ assert.deepEqual(args.gridSteps,{beat:0.25,second:0.5})
+})
+
+test('viewer pins transport identity, coalesces switch notifications and resumes the acknowledged context',async t=>{
+ const s=await setup(t)
+ s.context.transportUid='11'
+ let notices=0,reads=0,args
+ const original=s.client.execute
+ s.client.execute=async(command,input)=>{reads++;args=input;return {...await original(),transportUid:'33'}}
+ s.server.options.contextChanged=(expected,next)=>{
+  notices++;assert.equal(expected.transportUid,'11');assert.equal(next.transportUid,'33')
+  s.context.synchronizing=true
+ }
+ const first=await s.server.state(new URLSearchParams())
+ assert.equal(first.synchronizing,true);assert.equal(first.connected,true)
+ assert.equal(args.transportUid,'11');assert.equal(args.trackUid,'1')
+ for(let i=0;i<20;i++)assert.equal((await s.server.state(new URLSearchParams())).synchronizing,true)
+ assert.equal(reads,1);assert.equal(notices,1)
+ s.context.transportUid='33';s.context.synchronizing=false;s.server.syncUntil=0
+ const ready=await s.server.state(new URLSearchParams())
+ assert.equal(ready.transportUid,'33');assert.equal(ready.trackUid,'1')
+ assert.equal(ready.synchronizing,undefined);assert.equal(reads,2)
+})
+
+test('late full snapshots cannot overwrite a new transport with the same track UID',async t=>{
+ const s=await setup(t)
+ s.context.transportUid='11'
+ const original=s.client.execute
+ let release
+ s.client.execute=async()=>{await new Promise(r=>release=r);return {...await original(),transportUid:'11'}}
+ const pending=s.server.state(new URLSearchParams())
+ s.context.transportUid='33';release()
+ const result=await pending
+ assert.equal(result.synchronizing,true)
+ assert.equal(s.server.cache,null)
+ s.client.execute=async()=>({...await original(),transportUid:'33'})
+ assert.equal((await s.server.state(new URLSearchParams())).transportUid,'33')
+})
+
+test('failed snapshot reads back off instead of retrying Python on each browser poll',async t=>{
+ const s=await setup(t)
+ let calls=0
+ const original=s.client.execute
+ s.client.execute=async()=>{calls++;throw Error('Temporary failure')}
+ for(let i=0;i<20;i++)await assert.rejects(s.server.state(new URLSearchParams()),/Temporary failure/)
+ assert.equal(calls,1)
+ s.server.retryAt=0;s.client.execute=original
+ assert.equal((await s.server.state(new URLSearchParams())).trackUid,'1')
+ assert.equal(s.server.readFailure,null)
 })

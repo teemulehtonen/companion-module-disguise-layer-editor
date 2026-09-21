@@ -1,8 +1,9 @@
 'use strict'
 
 const { paths } = require('./designer-api')
-// Transport input is raw incoming TC, not the timeline's TC-marker mapping.
-const externalProperty = "[str(getattr(object.timecode, 'current', getattr(object.timecode, 'timecode', ''))), str(getattr(object.timecode, 'statusString', ''))] if object.timecode is not None else None"
+// Use the selected transport monitor, including session-forwarded TC.
+// A local receiver may read zero on actors/editors following the director.
+const externalProperty = "[str(object.monitorString), str(object.tcStatusString)] if object.timecode is not None else None"
 const property =
   '[str(object.track.uid), object.track.beatToTime(object.player.tCurrent), str(object.beatToTimecode(object.player.tCurrent)), object.player.tCurrent, bool(object.track.quant), [object.track.bpmAt(object.player.tCurrent), object.track.beatToTime(1), object.track.beatToTime(16), object.track.lengthInBeats, object.track.lengthInSec]]'
 
@@ -24,7 +25,7 @@ class ViewerClock {
     if(revision!==this.editRevision){this.sample=null;this.editRevision=revision}
 
     const uid = context.transportUid
-    if (!this.closed && context.connected && /^\d+$/.test(uid || '')) {
+    if (!this.closed && context.connected && !context.synchronizing && /^\d+$/.test(uid || '')) {
       if (uid !== this.uid) {
         this.stop()
         this.uid = uid

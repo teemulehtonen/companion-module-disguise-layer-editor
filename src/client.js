@@ -92,10 +92,25 @@ class DesignerClient {
         const error = await response.json()
         details = error.status?.message || error.message || JSON.stringify(error)
       } catch {}
-      throw new Error(`Designer HTTP ${response.status}${details ? ': ' + details.slice(0, 1500) : ''}`)
+      const error = new Error(`Designer HTTP ${response.status}${details ? ': ' + details.slice(0, 1500) : ''}`)
+      if (/Transport changed\. Refresh before editing\.|Track changed\. Refresh before editing\./.test(details))
+        error.code = 'CONTEXT_CHANGED'
+      throw error
     }
     const body = await response.json()
-    const result = decodeExecution(body)
+    let result
+    try { result = decodeExecution(body) }
+    catch (error) {
+      if (/Transport changed\. Refresh before editing\.|Track changed\. Refresh before editing\./.test(error.message))
+        error.code = 'CONTEXT_CHANGED'
+      throw error
+    }
+    if (result?.contextChanged && command !== 'live_state') {
+      const error = new Error('Designer selection changed; synchronising')
+      error.code = 'CONTEXT_CHANGED'
+      error.context = result
+      throw error
+    }
     if (command === 'viewer_snapshot') result.layers.forEach(orderLayerParameters)
     return result
   }

@@ -361,3 +361,56 @@ test('new LiveUpdate feedback supersedes an in-flight HTTP poll', async () => {
   assert.equal(c.time, undefined)
   c.close()
 })
+
+test('read-only live polling retains time-to-beat mode transitions',async()=>{
+ let beatMode=false
+ const c=new Connection({execute:async()=>({timeline:{trackUid:'1',time:5,layers:[]},clock:{fps:25,beatMode}})},()=>{})
+ c.connected=true;c.transportUid='2';c.schedulePoll=()=>{}
+ try{
+  for(const mode of [false,true,false]){beatMode=mode;await c.poll();assert.equal(c.clock.beatMode,mode)}
+ }finally{c.close()}
+})
+
+test('transport-change polling beats obsolete LiveUpdate traffic and closes the old subscription',async()=>{
+ let resolve
+ const c=new Connection({baseUrl:'http://localhost',execute:()=>new Promise(r=>resolve=r)},()=>{}, {enableLiveUpdate:true,WebSocketImpl:Socket})
+ c.connected=true;c.schedulePoll=()=>{};c.watch('11')
+ try{
+  const socket=c.socket
+  socket.message({subscriptions:[{id:1,propertyPath:c.timelineProperty}]})
+  const pending=c.poll()
+  socket.message({valuesChanged:[{id:1,value:{trackUid:'22',time:1,layers:[]}}]})
+  resolve({contextChanged:true,contextAvailable:true,transportUid:'33',trackUid:'44'})
+  await pending
+  assert.equal(c.contextChanged,true);assert.equal(c.connected,true)
+  assert.equal(socket.wasClosed,true);assert.equal(c.socket,null);assert.equal(c.timeline,undefined)
+  c.watch('33')
+  assert.equal(c.contextChanged,false);assert.equal(c.transportUid,'33')
+ }finally{c.close()}
+})
+
+test('late context-change errors from superseded requests cannot invalidate a new target',async()=>{
+ let reject
+ const c=new Connection({execute:()=>new Promise((_,r)=>reject=r)},()=>{throw Error('Obsolete error published')})
+ c.connected=true;c.schedulePoll=()=>{};c.watch('11')
+ try{
+  const pending=c.poll();c.watch('33')
+  reject(Object.assign(new Error('Selection changed'),{code:'CONTEXT_CHANGED'}))
+  await pending
+  assert.equal(c.contextChanged,false);assert.equal(c.transportUid,'33')
+ }finally{c.close()}
+})
+
+test('startup without a selected transport keeps light polling until a track becomes available',async()=>{
+ let available=false,notified=0
+ const c=new Connection({execute:async(command,args)=>{
+  assert.equal(command,'live_state');assert.equal(args.transportUid,undefined)
+  return available?{timeline:{trackUid:'22',transportUid:'11',time:0,layers:[]},clock:{fps:25}}:{contextChanged:true,contextAvailable:false,trackUid:null,transportUid:null}
+ }},()=>notified++)
+ c.connected=true;c.contextChanged=true;c.contextAvailable=false;c.schedulePoll=()=>{}
+ try{
+  await c.poll();assert.equal(c.contextAvailable,false)
+  available=true;await c.poll()
+  assert.equal(c.contextAvailable,true);assert.equal(c.trackUid,'22');assert.equal(notified,2)
+ }finally{c.close()}
+})

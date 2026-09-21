@@ -7,7 +7,7 @@ const { createHash } = require('node:crypto')
 // timeline. Key values and curve samples still participate in this revision.
 function renderRevision(data) {
   const content = JSON.stringify(
-    [data.layers, data.sections, data.annotations, data.grid, data.beatGrid, data.arrows, data.trackWaveform],
+    [data.layers, data.sections, data.annotations, data.grid, data.beatGrid, data.arrows, data.trackAudio, data.trackWaveform],
     function (key, value) {
       return key === 'value' && typeof this.name === 'string' && Array.isArray(this.keys) ? undefined : value
     },

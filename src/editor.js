@@ -39,9 +39,9 @@ const TIME_STEP_LABELS = {
   twoMinutes: '2 MIN',
   fiveMinutes: '5 MIN',
 }
-const BEAT_STEPS = [0.25, 1, 2, 4, 8, 16, 32]
-const LAYER_BEAT_STEPS = [0.25, 1, 4, 8, 16, 32]
-const KEY_BEAT_STEPS = [1 / 128, 1 / 64, 1 / 32, 1 / 16, 1 / 8, 1 / 4, 1 / 2, 1, 4, 8]
+const BEAT_STEPS = [1 / 96, 1 / 16, 1 / 12, 1 / 8, 1 / 6, 1 / 4, 1 / 3, 1 / 2, 1, 4]
+const LAYER_BEAT_STEPS = BEAT_STEPS
+const KEY_BEAT_STEPS = BEAT_STEPS
 const beatStepLabel = (value) =>
   (value < 1 ? '1/' + Math.round(1 / value) : String(value)) + (value > 1 ? ' BEATS' : ' BEAT')
 const CLEAR_MENU = { resetLayer: 4, clearParameter: 5, resetParameter: 6, back: 7 }
@@ -437,9 +437,15 @@ class Editor {
       ? this.layerEdit
         ? this.layerBeatStep
         : this.moveKey
-          ? (this.keyBeatStep ?? 1 / 128)
+          ? (this.keyBeatStep ?? 1 / 96)
           : this.beatStep
       : TIME_STEP_SECONDS[this.timeStep]
+  }
+  get gridSteps() {
+    return {
+      beat: this.layerEdit ? this.layerBeatStep : this.moveKey ? (this.keyBeatStep ?? 1 / 96) : this.beatStep,
+      second: this.timeStep === 'frame' ? 1 / (this.snapshot?.fps || 25) : TIME_STEP_SECONDS[this.timeStep],
+    }
   }
   get timeStepChoices() {
     const values = this.beatMode
@@ -480,7 +486,7 @@ class Editor {
     }
     if (this.usesBeatSteps && this.moveKey) {
       const steps = KEY_BEAT_STEPS
-      this.keyBeatStep = steps[(steps.indexOf(this.keyBeatStep ?? 1 / 128) + 1) % steps.length]
+      this.keyBeatStep = steps[(steps.indexOf(this.keyBeatStep ?? 1 / 96) + 1) % steps.length]
       return
     }
     if (this.usesBeatSteps) {

@@ -7,15 +7,15 @@ if p['command'] == 'viewer_snapshot':
     seconds = float(track.beatToTime(manager.player.tCurrent))
     start = max(0.0, min(float(track.lengthInSec), float(p.get('viewStart', 0))))
     end = max(start, min(float(track.lengthInSec), float(p.get('viewEnd', track.lengthInSec))))
-    result = {'trackUid': str(track.uid), 'trackName': str(track.path).replace('\\\\', '/').rsplit('/', 1)[-1],
+    result = {'transportUid': str(manager.uid), 'trackUid': str(track.uid), 'trackName': str(track.path).replace('\\\\', '/').rsplit('/', 1)[-1],
               'length': float(track.lengthInSec), 'time': seconds, 'fps': fps(),
               'timecode': str(manager.beatToTimecode(track.timeToBeat(seconds))), 'layers': [], 'warnings': [], 'ticks': []}
     result['externalTimecode'] = None
     try:
         source = manager.timecode
         if source is not None:
-            incoming = getattr(source, 'current', getattr(source, 'timecode', ''))
-            result['externalTimecode'] = {'value': re.sub(r'[.;]', ':', str(incoming)), 'status': str(getattr(source, 'statusString', ''))}
+            incoming = manager.monitorString
+            result['externalTimecode'] = {'value': re.sub(r'[.;]', ':', str(incoming)), 'status': str(manager.tcStatusString)}
     except Exception:
         pass  # Optional display must never break the timeline snapshot.
     result['sections'] = []
@@ -50,6 +50,19 @@ if p['command'] == 'viewer_snapshot':
     result['quantized'] = bool(track.quant)
     result['beat'] = float(track.timeToBeat(seconds))
     result['trackAudio'] = viewer_resource(track.audioTrack(track.timeToBeat(seconds)), False)
+    if result['trackAudio']:
+        result['trackAudio']['start'] = None
+        try:
+            # Audio-local beat zero may follow a timed/silent track intro.
+            # Use native conversion: a fixed BPM ratio is wrong across sections.
+            audio_beat = float(track.timeToBeat(seconds))
+            audio_origin_beat = audio_beat - float(track.globalBeatToLocalBeat(audio_beat))
+            audio_origin = float(track.beatToTime(audio_origin_beat))
+            if math.isnan(audio_origin) or math.isinf(audio_origin):
+                raise ValueError('Invalid track audio position')
+            result['trackAudio']['start'] = round(audio_origin, 9)
+        except pyerrors.Exception:
+            result['warnings'].append('Track audio position unavailable')
     result['arrows'] = []
     ordered_layers = []
     def visit_layers(container, parent=None, depth=0):
@@ -121,34 +134,21 @@ if p['command'] == 'viewer_snapshot':
         result['layers'].append(row)
     result['grid'] = []
     width = max(320, min(3840, float(p.get('width', 1200))))
-    if result['quantized']:
-        b0, b1 = track.timeToBeat(start), track.timeToBeat(end)
-        choices = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
-        step = next((s for s in choices if s*width/max(0.001,b1-b0) >= 18), choices[-1])
-        major = max(1, int(math.ceil(110.0/(step*width/max(0.001,b1-b0)))))
-        first = int(math.ceil(b0/step))
-        for i in range(first, min(first+1000, int(math.floor(b1/step))+1)):
-            at = float(track.beatToTime(i*step))
-            result['grid'].append({'time': at, 'beat': i*step, 'snapGrid': {'unit':'beat','step':step,'index':i}, 'major': i % major == 0,
-                                  'label': str(manager.beatToTimecode(track.timeToBeat(at)))})
-    else:
-        choices = sorted(set([1.0/fps(), 2.0/fps(), 5.0/fps(), 10.0/fps(), 1,2,5,10,15,30,60,120,300,600,1800,3600]))
-        step = next((s for s in choices if s*width/max(0.001,end-start) >= 18), choices[-1])
-        major = max(1,int(math.ceil(110.0/(step*width/max(0.001,end-start)))))
-        first = int(math.ceil(start/step))
-        for i in range(first,min(first+1000,int(math.floor(end/step))+1)):
-            at = i*step
-            result['grid'].append({'time': at,'snapGrid': {'unit':'second','step':step,'index':i},'major': i % major == 0,
-                                  'label': str(manager.beatToTimecode(track.timeToBeat(at)))})
+    try:
+        result['grid'] = timeline_grid(start,end,width,p.get('gridSteps') or {})
+    except pyerrors.Exception:
+        result['warnings'].append('Timeline grid unavailable: region mapping or step could not be verified')
     result['beatGrid'] = []
-    if result['trackAudio']:
-        b0, b1 = track.timeToBeat(start), track.timeToBeat(end)
+    if result['trackAudio'] and result['trackAudio'].get('start') is not None:
+        # Waveform labels use audio-local beats; the main timeline grid stays global.
+        b0 = max(0.0, float(track.timeToBeat(start)) - audio_origin_beat)
+        b1 = float(track.timeToBeat(end)) - audio_origin_beat
         steps = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
         step = next((s for s in steps if s*width/max(0.001,b1-b0) >= 24), steps[-1])
         major = max(1, int(math.ceil(72.0/(step*width/max(0.001,b1-b0)))))
         first = int(math.ceil(b0/step))
         for i in range(first, min(first+1000, int(math.floor(b1/step))+1)):
-            result['beatGrid'].append({'time': float(track.beatToTime(i*step)), 'beat': i*step, 'major': i % major == 0})
+            result['beatGrid'].append({'time': float(track.beatToTime(audio_origin_beat+i*step)), 'beat': i*step, 'major': i % major == 0})
     for i in range(7):
         at = start + (end-start)*i/6.0
         result['ticks'].append({'time': at, 'label': str(manager.beatToTimecode(track.timeToBeat(at)))})

@@ -35,7 +35,7 @@ class Connection {
       clearTimeout(this.resumeTimer)
       this.resumeTimer = setTimeout(() => {
         this.resumeTimer = null
-        this.watch(this.transportUid, this.fieldTarget)
+        if (!this.contextChanged) this.watch(this.transportUid, this.fieldTarget)
       }, 120)
       this.resumeTimer.unref?.()
     }
@@ -68,6 +68,14 @@ class Connection {
     this.pollTimer = setTimeout(() => this.poll(), this.live ? 1500 : 500)
     this.pollTimer.unref?.()
   }
+  noteContextChange(context = {}) {
+    this.dropSocket()
+    this.contextChanged = true
+    this.contextAvailable = context.contextAvailable !== false
+    this.polling = false
+    this.pollError = ''
+    if (!this.closed) this.onState(this)
+  }
   async poll() {
     const transport = this.transportUid,
       targetKey = this.targetKey,
@@ -75,7 +83,7 @@ class Connection {
       revision = this.feedbackRevision,
       liveRevision = this.liveRevision
     try {
-      if (this.connected && transport && !this.closed) {
+      if (this.connected && (transport || this.contextChanged) && !this.closed) {
         const result = await this.client.execute('live_state', { transportUid: transport, fieldTarget })
         // A response can arrive after an encoder selection or configuration change.
         // Never publish the old parameter's keys into the new selection.
@@ -83,10 +91,17 @@ class Connection {
           this.closed ||
           this.transportUid !== transport ||
           this.targetKey !== targetKey ||
-          this.feedbackRevision !== revision ||
-          this.liveRevision !== liveRevision
+          this.feedbackRevision !== revision
         )
           return
+        // Old LiveUpdate messages must not hide a GUI transport switch.
+        if (result.contextChanged) {
+          this.noteContextChange(result)
+          return
+        }
+        if (this.liveRevision !== liveRevision) return
+        this.contextAvailable = true
+        this.pollError = ''
         if (!Number.isFinite(result.timeline?.time) || !Array.isArray(result.timeline.layers))
           throw new Error('Invalid live state')
         this.timeline = {
@@ -96,13 +111,14 @@ class Connection {
         this.time = result.timeline.time
         this.trackUid = result.timeline.trackUid
         this.fieldValue = result.fieldValue
-        this.clock = { fps: result.clock.fps, mode: result.clock.tcMode, custom: result.clock.customFps }
+        this.clock = { fps: result.clock.fps, mode: result.clock.tcMode, custom: result.clock.customFps, beatMode: result.clock.beatMode }
         this.polling = true
         this.pulseHeartbeat()
         this.onState(this)
       }
     } catch (error) {
-      if (!this.closed) {
+      if (!this.closed && this.transportUid === transport && this.targetKey === targetKey && this.feedbackRevision === revision) {
+        if (error.code === 'CONTEXT_CHANGED') { this.noteContextChange(error.context); return }
         this.polling = false
         this.pollError = error.message
       }
@@ -122,7 +138,7 @@ class Connection {
       this.transports = transports
       this.probeFeedbackRevision = feedbackRevision
       this.probeRevision = (this.probeRevision || 0) + 1
-      if (this.transportUid && !this.socket) this.watch(this.transportUid, this.fieldTarget)
+      if (this.transportUid && !this.socket && !this.contextChanged) this.watch(this.transportUid, this.fieldTarget)
     } catch (error) {
       if (this.closed) return
       this.connected = false
@@ -141,6 +157,8 @@ class Connection {
   watch(transportUid, fieldTarget = null) {
     if (!this.connected || this.closed) return
     if (!/^(?:0x[0-9a-f]+|[0-9]+)$/i.test(transportUid)) return
+    this.contextChanged = false
+    this.contextAvailable = true
     const targetKey = JSON.stringify(fieldTarget)
     if (
       (this.socket || !this.enableLiveUpdate || this.resumeTimer || Date.now() < this.retryAt) &&

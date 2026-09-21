@@ -49,6 +49,7 @@ function describeEditor(editor) {
     mediaKeyframe: editor.mediaKeyframe,
     mediaKeyTime: editor.mediaKeyframe ? editor.mediaKeyTime : null,
     timeStep: editor.timeStepLabel,
+    gridSteps: editor.gridSteps,
     precision: editor.precision,
     canSelectKey: editor.canSelectKey,
     canResetDefault: editor.canResetDefault,
@@ -105,7 +106,8 @@ function validGrid(grid) {
   return grid === undefined || Boolean(grid && ['beat','second'].includes(grid.unit) &&
     Number.isFinite(grid.step) && grid.step > 0 && grid.step <= 3600 &&
     Number.isSafeInteger(grid.index) && grid.index >= 0 && grid.index <= 1e12 &&
-    Object.keys(grid).every(key=>['unit','step','index'].includes(key)))
+    (grid.origin === undefined || (Number.isFinite(grid.origin) && grid.origin >= 0 && grid.origin <= 1e12)) &&
+    Object.keys(grid).every(key=>['unit','step','index','origin'].includes(key)))
 }
 function validEditRequest(value) {
   if(value?.action==='group_move') return /^[a-f0-9]{64}$/.test(value.token || '') && /^\d+$/.test(value.trackUid || '') && /^\d+$/.test(value.layerUid || '') && Number.isFinite(value.targetTime) && Math.abs(value.targetTime)<=1e8 && typeof value.snap==='boolean' && validGrid(value.snapGrid) && (!value.snapGrid || value.snap) && Array.isArray(value.members) && value.members.length>1 && value.members.length<=10000 && value.members.every(m=>/^\d+$/.test(m.uid || '') && Number.isFinite(m.start) && Number.isFinite(m.end) && m.end>=m.start && Object.keys(m).every(k=>['uid','start','end'].includes(k))) && Object.keys(value).every(k=>['action','token','trackUid','layerUid','targetTime','snap','snapGrid','members'].includes(k))

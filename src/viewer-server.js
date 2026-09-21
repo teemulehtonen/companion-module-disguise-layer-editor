@@ -11,6 +11,14 @@ const { layerTypeLabel } = require('./layer-types')
 const { WaveformCache } = require('./viewer-waveform')
 const { validEditRequest } = require('./viewer-editor')
 
+function matchesContext(expected, actual) {
+  return ['trackUid','transportUid'].every(key => expected[key] === undefined || expected[key] === actual[key])
+}
+function synchronizing(context) {
+  return {connected: context.connected !== false, synchronizing: true,
+    trackUid: context.trackUid, transportUid: context.transportUid, editRevision: context.editRevision || 0}
+}
+
 // Browser commands are opt-in and use the shared Companion queue. No route
 // accepts native code, filesystem paths or arbitrary resource IDs.
 class ViewerServer {
@@ -68,6 +76,8 @@ class ViewerServer {
   }
   async state(query) {
     const context = this.context()
+    if (context.synchronizing || Date.now() < (this.syncUntil || 0)) return synchronizing(context)
+    if (this.readFailure && Date.now() < this.retryAt) throw this.readFailure
     const start = Number(query.get('start') || 0)
     const end = query.has('end') ? Number(query.get('end')) : undefined
     if (
@@ -89,9 +99,11 @@ class ViewerServer {
       allDetails,
       expanded,
       context.trackUid,
+      context.transportUid,
       context.focusUid,
       context.contentRevision,
       context.tempoKey,
+      context.editor?.gridSteps,
       start,
       end,
       width,
@@ -99,9 +111,15 @@ class ViewerServer {
     ])
     if (!this.cache || signature !== this.signature || Date.now() - this.updated >= 1500) {
       if (this.pending) await this.pending
+      if (!matchesContext(context,this.context()) || this.context().synchronizing || Date.now() < (this.syncUntil || 0))
+        return synchronizing(this.context())
+      if (this.readFailure && Date.now() < this.retryAt) throw this.readFailure
       if (!this.cache || signature !== this.signature || Date.now() - this.updated >= 1500) {
         this.pending = (async () => {
           const data = await this.client.execute('viewer_snapshot', {
+            trackUid: context.trackUid,
+            transportUid: context.transportUid,
+            gridSteps: context.editor?.gridSteps,
             focusUid: context.focusUid,
             expanded,
             allDetails,
@@ -109,12 +127,20 @@ class ViewerServer {
             viewStart: start,
             ...(end === undefined ? {} : { viewEnd: end }),
           })
+          if (!matchesContext(context,this.context()) || this.context().synchronizing) return
+          if (!matchesContext(context,data)) {
+            const error = new Error('Viewer context changed')
+            error.code = 'CONTEXT_CHANGED'
+            error.context = {transportUid:data.transportUid,trackUid:data.trackUid,contextAvailable:Boolean(data.trackUid)}
+            throw error
+          }
           try {
             data.annotations = await this.client.annotations(data.trackUid)
           } catch {
             data.annotations = {}
             data.warnings.push('Track annotations unavailable')
           }
+          if (!matchesContext(context,this.context()) || this.context().synchronizing) return
           data.focusUid = context.trackUid === data.trackUid ? context.focusUid : null
           this.waveforms.retain(
             new Set([
@@ -141,18 +167,32 @@ class ViewerServer {
               for (const resource of [field.current, ...field.keys.map((key) => key.resource)])
                 if (resource?.thumbnail) allowed.add(resource.uid)
             }
+          if (!matchesContext(context,this.context()) || this.context().synchronizing) return
           this.allowedThumbnails = allowed
           this.cache = data
           data.renderRevision = renderRevision(data)
           this.signature = signature
           this.updated = Date.now()
-        })().finally(() => {
+          this.readFailure = null
+        })().catch(error => {
+          if (error.code === 'CONTEXT_CHANGED') {
+            this.syncUntil = Date.now() + 500
+            if (!this.closed && matchesContext(context,this.context()))
+              this.options.contextChanged?.(context,error.context)
+            return
+          }
+          this.readFailure = error
+          this.retryAt = Date.now() + 1500
+          throw error
+        }).finally(() => {
           this.pending = null
         })
         await this.pending
       }
     }
     const current = this.context()
+    if (current.synchronizing || !this.cache || !matchesContext(context,current) || !matchesContext(current,this.cache) || Date.now() < (this.syncUntil || 0))
+      return synchronizing(current)
     return {
       ...this.cache,
       contentRevision: context.contentRevision,

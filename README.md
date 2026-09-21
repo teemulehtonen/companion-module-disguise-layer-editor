@@ -6,7 +6,7 @@ Disguise layer, keyframe and resource control for Bitfocus Companion and Stream 
 
 ## Install
 
-**Downloads (0.2.0-beta.43):** [Companion module](../../releases/download/v0.2.0-beta.43/disguise-layer-control-0.2.0-beta.43.tgz) · [Stream Deck XL page](../../releases/download/v0.2.0-beta.43/D3-Stream-Deck-XL.companionconfig) · [Companion page](../../releases/download/v0.2.0-beta.43/D3-Stream-Deck-Plus.companionconfig)
+**Downloads (0.2.0-beta.54):** [Companion module](../../releases/download/v0.2.0-beta.54/disguise-layer-control-0.2.0-beta.54.tgz) · [Stream Deck XL page](../../releases/download/v0.2.0-beta.54/D3-Stream-Deck-XL.companionconfig) · [Companion page](../../releases/download/v0.2.0-beta.54/D3-Stream-Deck-Plus.companionconfig)
 
 Tested with Designer 32.4.17 and Companion 5.0.5.
 
@@ -27,7 +27,7 @@ Both pages are generated and tested on every release. Importing a page replaces 
 
 ## Additional Stream Deck presets
 
-In Companion **Presets**, select this connection and drag buttons from **Adaptive timing steps** or **Transport and time linking** onto any page or Stream Deck. Timing slots automatically follow the current track and editing mode: frame/seconds on time tracks, beats on quantized tracks, with finer fractions while moving keys. The selected step is highlighted; unused slots display a dash and do nothing. Selecting a step keeps the selected key/layer editing mode.
+In Companion **Presets**, select this connection and drag buttons from **Adaptive timing steps** or **Transport and time linking** onto any page or Stream Deck. Timing slots automatically follow the current track and editing mode: frame/seconds on time tracks, beats in BPM regions. All beat modes share 1/96, 1/16, 1/12, 1/8, 1/6, 1/4, 1/3, 1/2, 1 and 4 beats. The selected step is highlighted; unused slots display a dash and do nothing. Selecting a step keeps the selected key/layer editing mode.
 
 Transport presets provide PLAY, PLAY TO END, PLAY LOOP, STOP, PLAY / STOP (last play mode), PREVIOUS/NEXT SECTION and LINK TIME. They share state with the viewer.
 
@@ -55,6 +55,12 @@ The transport icon group before +VIDEO provides previous section, PLAY, PLAY TO 
 Enable **ENABLE TIMELINE VIEWER** in module settings and open `http://127.0.0.1:8765`. Select layers/parameters, seek from timeline points, and inspect native curves and resource thumbnails. Optional **ALLOW VIEWER EDIT** enables shared Companion editing and a compact resource picker; it defaults to off. [Viewer guide and limitations](docs/TIMELINE-VIEWER.md).
 
 For network audio on Raspberry Pi, enter the SMB share and credentials in module settings. No SSH or OS mount is needed. [Network audio setup](docs/RASPBERRY-PI-SMB.md).
+
+## Latest beta
+
+`0.2.0-beta.54` adds transport-monitor TC IN, transport-switch recovery, region-aware beat snapping and ten shared musical steps. Track audio and its beat markings respect timed intros; a compact waveform button hides the audio row. VIEW + FOLLOW scrolls with playback and hides the blue edit cursor. Original peak waveform rendering and caching are retained.
+
+Validation: 282 offline tests and package checks passed. Read-only checks verified the installed Raspberry Pi module and advancing TC IN. Live Designer transport switching and physical local timecode input were not exercised in this release.
 
 ## Build
 
