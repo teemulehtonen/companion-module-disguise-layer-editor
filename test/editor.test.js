@@ -194,14 +194,21 @@ test('encoder bursts accumulate without floating point drift or network calls', 
   assert.equal(e.value, 1.5)
   assert.equal(e.dirty, true)
 })
-test('layer selection wraps but parameter selection stops at each end', async () => {
+test('layer and parameter selection stop at each end', async () => {
   const e = await ready()
   e.adjustValue(3)
   e.select('layer', -1)
+  assert.equal(e.layer.name, 'Background')
+  assert.equal(e.value, 3.5)
+  assert.equal(e.dirty, true)
+  e.select('layer', 1)
+  assert.equal(e.layer.name, 'Foreground')
+  e.select('layer', 1)
   assert.equal(e.layer.name, 'Foreground')
   assert.equal(e.value, 1)
   assert.equal(e.dirty, false)
-  e.select('layer', 1)
+  e.select('layer', -1)
+  assert.equal(e.layer.name, 'Background')
   e.select('field', -1)
   assert.equal(e.fieldIndex, 0)
   e.select('field', 1)
@@ -210,6 +217,22 @@ test('layer selection wraps but parameter selection stops at each end', async ()
   assert.equal(e.field.name, 'speed')
   e.select('field', -1)
   assert.equal(e.fieldIndex, 0)
+})
+test('batched live layer selection reads Designer once and clamps to each end', async () => {
+  const e = await ready()
+  let liveReads=0,fieldReads=0
+  const execute=e.client.execute.bind(e.client)
+  e.client.execute=async(command,args)=>{
+    if(command==='live_state')liveReads++
+    if(command==='read_field')fieldReads++
+    return execute(command,args)
+  }
+  await e.selectLive('layer',1,64)
+  assert.equal(e.layer.name,'Foreground')
+  await e.selectLive('layer',-1,64)
+  assert.equal(e.layer.name,'Background')
+  assert.equal(liveReads,2)
+  assert.equal(fieldReads,2)
 })
 test('key navigation selects exact time and value, without moving Designer', async () => {
   const e = await ready()
@@ -382,6 +405,22 @@ test('beat timing steps replace frame/second units and send beat deltas', async 
   assert.equal(request.delta,1)
   e.snapshot.beatMode=false
   assert.equal(e.timeStepLabel,'1 FRAME')
+})
+test('batched normal time turns become one combined native delta', async () => {
+  const e=await ready()
+  e.timeStep='second'
+  let request
+  const execute=e.client.execute.bind(e.client)
+  e.client.execute=async(command,args)=>{
+    if(command==='nudge_time')request=args
+    return execute(command,args)
+  }
+  await e.adjustLiveTime(1,0,{detents:12})
+  assert.equal(request.delta,12)
+  assert.equal(e.time,12)
+  await e.adjustLiveTime(-1,0,{detents:5})
+  assert.equal(request.delta,-5)
+  assert.equal(e.time,7)
 })
 
 test('keyframe movement cycles fractional beats without unlocking selection', async () => {

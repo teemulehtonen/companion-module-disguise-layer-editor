@@ -19,7 +19,7 @@ test('transport API uses guarded target and proper section envelope; toggle reta
     }
   })
   const context = { trackUid: '1', transportUid: '2' }
-  for (const operation of ['play', 'playsection', 'playloopsection', 'stop', 'gotoprevsection', 'gotonextsection']) {
+  for (const operation of ['play', 'playsection', 'playloopsection', 'stop', 'gotoprevsection', 'gotonextsection', 'gotoprevtrack', 'gotonexttrack']) {
     await c.transport(context, operation)
     const r = requests.at(-1)
     assert.ok(r.url.endsWith('/' + operation))
@@ -34,6 +34,17 @@ test('transport API uses guarded target and proper section envelope; toggle reta
   assert.ok(requests.at(-1).url.endsWith('/stop'))
   await assert.rejects(() => c.transport(context, 'delete'), /Invalid/)
   c.close()
+})
+test('track navigation invalidates the editor context and clears track-bound modes', async () => {
+  const calls=[]
+  const e=new Editor({transport:async (context,operation)=>{calls.push({context,operation});return {command:operation,playing:true}}})
+  e.snapshot={trackUid:'track-1',transportUid:'transport-1'}
+  e.moveKey={time:1};e.selectedKeyTime=1;e.layerEdit='edit';e.mediaMode=true;e.mediaAll=[{}]
+  await e.controlTransport('gotonexttrack')
+  assert.deepEqual(calls,[{context:{trackUid:'track-1',transportUid:'transport-1'},operation:'gotonexttrack'}])
+  assert.equal(e.stale,true);assert.equal(e.contextStale,true)
+  assert.equal(e.moveKey,null);assert.equal(e.selectedKeyTime,null);assert.equal(e.layerEdit,'')
+  assert.equal(e.mediaMode,false);assert.deepEqual(e.mediaAll,[])
 })
 test('viewer playback remembers mode and never changes unlinked edit time', async () => {
   const c = new DemoClient(),

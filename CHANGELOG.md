@@ -1,5 +1,90 @@
 # Changelog
 
+## 0.2.0-beta.69 (local Companion update)
+
+- Add `PREV TRACK` and `NEXT TRACK` Companion presets for the transport currently selected in the layer editor.
+- Use Designer's guarded previous/next-track transport commands and invalidate track-bound editor state until the new track has synchronised.
+- Keep these presets independent of the CC1 master-fader transport selection and out of generated controller pages.
+- Reproduce the operator's current Yamaha CC1 page 8 as a sanitised generated download, alongside the page 9 transport selector; exclude the live connection ID, Designer address, selected transport and secrets.
+
+## 0.2.0-beta.68 (local Companion update)
+
+- Promote the HTTP fallback's exact current entry from `timecodeSamples` to `timecodeSample`, preserving the native absolute timecode anchor during playback when LiveUpdate is silent.
+- Cover the complete fallback handoff from Connection to Editor so full polls cannot clear the running display anchor.
+
+## 0.2.0-beta.67 (local Companion update)
+
+- Prevent full and fast publications from alternating confirmed and interpolated time values by routing both through one presentation clock.
+- Advance absolute native timecode labels from the latest confirmed anchor between samples, including drop-frame arithmetic, instead of displaying dashes on interpolated frames.
+
+## 0.2.0-beta.66 (local Companion update)
+
+- Interpolate Companion playback variables every 40 ms between confirmed native samples, including the 500 ms HTTP fallback, without adding Designer requests.
+- Stop local advancement within 750 ms without a fresh sample and immediately on stop, disconnect, context change or track mismatch.
+
+## 0.2.0-beta.65 (local Companion update)
+
+- Add a separate 40 ms Companion clock subscription that updates only playback-facing variables; retain the coherent 100 ms timeline/value subscription for editor state.
+- Clear fast-clock samples together with all other live feedback on writes, transport changes and disconnects.
+
+## 0.2.0-beta.64 (local Companion update)
+
+- Read the lightweight viewer playback clock at 40 ms and interpolate only its presentation with `requestAnimationFrame`, correcting against every native sample and freezing within 500 ms if samples stall.
+- Render the viewer timecode and playhead continuously during playback instead of stepping at the HTTP polling cadence.
+- Refresh heavy timeline geometry every five seconds during stable playback while retaining immediate content, selection, view and edit invalidation; stopped editing keeps the 1.5-second recovery refresh.
+
+## 0.2.0-beta.63 (local Companion update)
+
+- Change the `JOG ACTIVE / LOCKED` preset background to the theme's danger red while the jog wheel is locked.
+
+## 0.2.0-beta.62 (local Companion update)
+
+- Add a persistent `JOG ACTIVE / LOCKED` preset that suppresses timeline dial rotation while locked and leaves key navigation and other controls available.
+- Add a Yamaha CC1 transport selector export for Companion page 9 with 42 live Designer transport slots and selected-target highlighting.
+- Let an exact transport slot select the brightness and volume master-fader target; empty slots do nothing.
+- Validation: the full offline regression suite and package checks passed with no skips. Beta.62 is installed on the Raspberry Pi and page 9 was imported against the existing `d3layers` connection. No Designer write was performed.
+
+## 0.2.0-beta.61 (local Companion update)
+
+- Refresh external Designer transport brightness and volume changes through a dedicated non-overlapping 400 ms REST poll instead of the five-second health check.
+- Publish motor-fader feedback only when transport master data changes; keep connection health and editor synchronisation independent.
+- Discard master reads made obsolete by a local fader write so old feedback cannot pull the motor backwards.
+- Validation: 301 offline tests and package checks passed with no skips. Beta.61 is installed on the Raspberry Pi and the existing page 8, surface mapping and trigger were verified read-only. No Designer write was performed.
+
+## 0.2.0-beta.60 (local Companion update)
+
+- Add a Yamaha CC1 page export for Companion page 8 with the Stream Deck + controls, RC5 viewer zoom and RC6 timeline time.
+- Discover all Designer transports and let the CC1 panel select one without wrapping at the list ends.
+- Drive the selected transport brightness and volume together from the motor fader. Rapid absolute positions keep one request in flight and collapse pending input to the newest value.
+- Return the confirmed transport level to the fader motor; when brightness and volume differ, display their lower value and expose the mismatch in Companion variables.
+- Validation: 300 offline tests and package checks passed with no skips. Beta.60 is installed on the Raspberry Pi; page 8, the CC1 surface mapping and the enabled variable-change trigger were read back from Companion. No Designer write was performed during verification.
+
+## 0.2.0-beta.59 (local Companion update)
+
+- Replace the TIME-row event-filter text with compact themed SVG icons: C, T, M, N and a four-cell ALL symbol.
+- Retain full tooltips, accessible labels and the existing event-row filtering behavior.
+- Validation: 294 offline tests and package checks passed with no skips; installed viewer and connection verified read-only.
+
+## 0.2.0-beta.58 (local Companion update)
+
+- Add CUE, TIMECODE, MIDI and NOTES visibility controls to the TIME row.
+- Let ALL restore every event row or hide all of them; omitted rows release their timeline height to the layer view.
+- Validation: 294 offline tests and package checks passed with no skips; installed viewer and connection verified read-only.
+
+## 0.2.0-beta.57 (local Companion update)
+
+- Coalesce rapid turns from all four normal dials into one bounded trailing action, with unsent reversals cancelling each other.
+- Prevent long post-release action queues while retaining native key/layer limits and command ordering.
+- Stop layer selection at the first and last active layer instead of wrapping around.
+- Validation: 292 offline tests and package checks passed; installed connection verified read-only.
+
+## 0.2.0-beta.56 (local Companion update)
+
+- Refresh ordinary content in the background without entering full-view SYNCHRONISING or restarting the display clock.
+- Preserve full synchronisation for track/transport identity changes and reconnects, with existing write guards.
+- Remove the retry cooldown after successful content refreshes; retain failure backoff.
+- Validation: 289 offline tests and package checks passed; installed connection verified read-only.
+
 ## 0.2.0-beta.55
 
 - Centre effect/precomp connection arrows on their visible source layer and separate overlapping paths by 8 pixels.

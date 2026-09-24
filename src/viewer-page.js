@@ -7,10 +7,11 @@ const { selectionScroll } = require('./viewer-selection-scroll')
 const { timecode } = require('./timecode')
 const { duplicateMarkerKeys } = require('./viewer-marker-duplicates')
 const { createPresentationQueue } = require('./viewer-presentation')
+const { acceptPlaybackSample, extrapolatedPlayback } = require('./viewer-playback-clock')
 
 // Embedded at bundle time: the packaged module needs no external web runtime.
 // All project strings reach the DOM through textContent, never HTML parsing.
-function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode, duplicateMarkerKeys, createUiGeometry, createPresentationQueue) {
+function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode, duplicateMarkerKeys, createUiGeometry, createPresentationQueue, acceptPlaybackSample, extrapolatedPlayback) {
   const $ = (id) => document.getElementById(id)
   let uiScale = 1
   let preserveGestureScroll=null
@@ -28,6 +29,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     rendered = '',
     trackUid
   let trackAudioVisible = true
+  const annotationKinds = new Set(['cue','tc','midi','notes'])
   let trackWaveHeight = 64
   let trackBars = false
   let allLayerDetails = false
@@ -41,6 +43,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     lastView = ''
   let seekPreview=null
   let displayedTime = null
+  let playbackSample = null, clockFrame = 0
   let resizingWaveform = false
   let editPending = false
   let mouseGesture = null
@@ -1202,7 +1205,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     return seekPreview && state?.connected!==false && seekPreview.trackUid===state?.trackUid &&
       seekPreview.token===state?.selectionToken && seekPreview.linked===(state?.editor?.linkTime!==false) ? seekPreview : null
   }
-  function playbackClock() { const preview=activeSeekPreview(); return preview?.linked ? preview.time : state?.time }
+  function playbackClock() { const preview=activeSeekPreview(); return preview?.linked ? preview.time : extrapolatedPlayback(playbackSample,state,performance.now()) }
   function editClock() { if (state?.viewOnly && follow) return playbackClock(); return activeSeekPreview()?.time ?? (state?.editor?.linkTime === false ? state.editor.editTime : state?.time) }
   function previewTimecode(seconds) {
     const anchor=(state.dragTimecodes || []).filter(a=>a.time<=seconds+1e-7).at(-1)
@@ -1734,6 +1737,39 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
   }
   function grid() {
     const ruler = row('TIME', 'ruler')
+    const filters = el('div', 'wave-controls annotation-filters')
+    const kinds = [['cue','CUE'],['tc','TIMECODE'],['midi','MIDI'],['notes','NOTES']]
+    const icons = {
+      cue: 'M16 5.5C14.8 4.5 13.4 4 11.5 4 7.9 4 5 6.7 5 10s2.9 6 6.5 6c1.9 0 3.3-.5 4.5-1.5',
+      tc: 'M5 4h12M11 4v12',
+      midi: 'M4 16V4l7 7 7-7v12',
+      notes: 'M5 16V4l12 12V4',
+      all: 'M4 4h6v5H4zM12 4h6v5h-6zM4 11h6v5H4zM12 11h6v5h-6z',
+    }
+    for (const [kind,label] of [...kinds,['all','ALL']]) {
+      const button=el('button','annotation-filter')
+      const icon=document.createElementNS('http://www.w3.org/2000/svg','svg')
+      icon.setAttribute('viewBox','0 0 22 20')
+      icon.setAttribute('aria-hidden','true')
+      const path=document.createElementNS(icon.namespaceURI,'path')
+      path.setAttribute('d',icons[kind])
+      icon.append(path);button.append(icon)
+      const all=kind==='all'
+      const pressed=all ? kinds.every(([value])=>annotationKinds.has(value)) : annotationKinds.has(kind)
+      button.title=all ? (pressed ? 'HIDE ALL EVENT ROWS' : 'SHOW ALL EVENT ROWS') : (pressed ? 'HIDE '+label+' ROW' : 'SHOW '+label+' ROW')
+      button.setAttribute('aria-label',button.title)
+      button.setAttribute('aria-pressed',String(pressed))
+      button.onclick=()=>{
+        if(all) {
+          if(pressed) annotationKinds.clear()
+          else for(const [value] of kinds)annotationKinds.add(value)
+        } else if(pressed)annotationKinds.delete(kind)
+        else annotationKinds.add(kind)
+        draw()
+      }
+      filters.append(button)
+    }
+    ruler.side.append(filters)
     const enableSeek = (lane) => {
       if (!state.seekEnabled) return
       // Let the seek handler clear key selection and jump in one transaction.
@@ -2052,6 +2088,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       ['MIDI', 'midi'],
       ['NOTES', 'notes'],
     ]) {
+      if (!annotationKinds.has(kind)) continue
       const r = row(title, 'annotations')
       r.lane.dataset.markerKind=kind
       annotationMouse(r.lane,kind)
@@ -2460,7 +2497,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     setText($('externalTc'),' \u00b7 TC IN: ' + (external?.value || '\u2014'))
     $('externalTc').title = external ? String(external.status || '').toUpperCase() : ''
     const preview=activeSeekPreview()
-    setText($('clock'),preview?.linked ? previewTimecode(preview.time) : state.timecode || '—')
+    setText($('clock'),preview?.linked ? previewTimecode(preview.time) : state.playing ? previewTimecode(playbackClock()) : state.timecode || '—')
     $('editClock').hidden = state.editor?.linkTime !== false || Boolean(state.viewOnly && follow)
     setText($('editClock'),preview && !preview.linked ? previewTimecode(preview.time) : state.editor?.editTimecode || '—')
     setText($('beat'),state.quantized && Number.isFinite(state.beat) ? 'BEAT ' + Number(state.beat.toFixed(2)) : '')
@@ -2509,7 +2546,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     }
     updatePlayheadPosition()
   }
-  function updatePlayheadPosition(panning=false) {
+  function updatePlayheadPosition(panning=false,continuous=false) {
     if(!state)return
     const nodes=timelineNodes()
     const width=Math.max(0,sheet.clientWidth-240)
@@ -2518,7 +2555,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     const clock=playbackClock()
     const fraction = x(clock) / 100
     const position = fraction * width
-    const transition = !panning && !frame && displayedTime !== null && Math.abs(clock - displayedTime) < 0.75
+    const transition = !continuous && !panning && !frame && displayedTime !== null && Math.abs(clock - displayedTime) < 0.75
       ? 'left 100ms linear' : 'none'
     for (const node of nodes.heads) {
       // Newly drawn segments have no previous screen position to animate from.
@@ -2533,6 +2570,19 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
       node.hidden=state.editor?.linkTime !== false || Boolean(state.viewOnly && follow) || editFraction<0 || editFraction>1
     }
     displayedTime = clock
+  }
+  function syncPlaybackSample(incoming) {
+    playbackSample=acceptPlaybackSample(playbackSample,incoming,performance.now())
+    if(!clockFrame && incoming?.playing && !document.hidden)clockFrame=requestAnimationFrame(paintPlaybackFrame)
+  }
+  function paintPlaybackFrame() {
+    clockFrame=0
+    if(!state?.playing || document.hidden)return
+    const preview=activeSeekPreview()
+    setText($('clock'),preview?.linked ? previewTimecode(preview.time) : previewTimecode(playbackClock()))
+    updatePlayheadPosition(false,true)
+    followClock()
+    clockFrame=requestAnimationFrame(paintPlaybackFrame)
   }
   function bounds(value) {
     return Math.max(0, Math.min(Math.max(0, (state?.length || span) - span), value))
@@ -2709,6 +2759,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
           const currentEditor = state.editor
           const modeChanged = state.viewOnly !== live.viewOnly
           Object.assign(state, live)
+          syncPlaybackSample(incoming)
           if (modeChanged) {
             presentation.clear()
             editRevision++; lastFullRead = 0; rendered = ''
@@ -2755,7 +2806,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
     try {
       if (!document.hidden && !mouseGesture && !layerMarquee && !editPending && !interactionBusy && performance.now()>=liveGeometryUntil) {
         const view = JSON.stringify([start, span, viewport.clientWidth, [...waveformOpen], expandedLayers()])
-        const full = !state || !rendered || view !== lastView || performance.now() - lastFullRead >= 1500
+        const full = !state || !rendered || view !== lastView || performance.now() - lastFullRead >= (state?.playing ? 5000 : 1500)
         if (!full) return
         const readRevision = editRevision
         const response = await fetch(
@@ -2788,6 +2839,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
           presentation.clear()
           pendingGroupGeometry.clear()
           state = incoming
+          syncPlaybackSample(incoming)
           if (editPending) state.editor = currentEditor
           mergeLiveClock(state,compatibleLive,confirmedRevision)
           lastFullRead = performance.now()
@@ -2845,6 +2897,7 @@ function browserMain(applyEditPatch, discreteSegments, selectionScroll, timecode
 }
 
 const stylesheet = `
+.ruler>.label{position:relative}.annotation-filters{top:8px}.annotation-filters button[aria-pressed=true]{background:#10343d}
 .parameter .label .select-label{font-size:13px}.parameter .label small{font-size:12px;font-variant-numeric:tabular-nums;max-width:110px}.parameter .label small[role=button]:hover{color:#63d4e7}
 .resource-folder-row{display:flex;flex-wrap:nowrap;gap:4px;flex-shrink:0;overflow-x:auto;padding:3px 0;border-bottom:1px solid #29363d;scrollbar-width:thin}.resource-folder-row button{flex:0 0 auto;max-width:240px}.resource-folder-row button:hover{color:#63d4e7;background:#10343d}
 .resource-folder-parent{color:#729db4;font-size:10px;padding:5px 0}.resource-file>span:last-child{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
@@ -2855,4 +2908,4 @@ const stylesheet = `
 `
 const page = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Disguise Layer Editor · Timeline</title><link rel="stylesheet" href="/viewer.css"><script src="/viewer.js" defer></script></head><body><header><span class="brand-logo"><img src="${brandLogo}" alt="VEHKA AV"></span><div><h1>DISGUISE LAYER EDITOR</h1><small>TIMELINE VIEWER</small></div><div class="spacer"></div><div id="clockBlock"><span id="clock">—</span><span id="beat"></span><div id="editClock" hidden></div><div id="clockDetails"></div><div id="sectionRemaining" aria-live="off"></div></div><button id="helpButton" type="button" popovertarget="viewerHelp" aria-label="HELP" title="HELP"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8"/><path d="M10 9v5M10 6v.5"/></svg></button><aside id="viewerHelp" popover aria-label="VIEWER SHORTCUTS"><strong>SHORTCUTS</strong><div>CTRL + WHEEL: ZOOM</div><div>SHIFT + WHEEL: PAN</div><div>S: SNAP ON/OFF</div><div>F: FOLLOW</div><div>T: FIT TRACK</div><div>L: FIT LAYER</div><div>SHIFT+L: LINK TIME</div><div>WHEEL: SELECTED KEY VALUE</div><div>SHIFT+DRAG: SELECT KEYS</div></aside><div class="ui-size-controls" role="group" aria-label="INTERFACE SIZE"><button data-ui-size="small" aria-label="SMALL" title="SMALL · 100%" aria-pressed="true"><svg viewBox="0 0 22 20" aria-hidden="true"><path d="M4 10h14"/></svg></button><button data-ui-size="medium" aria-label="MEDIUM" title="MEDIUM · 120%" aria-pressed="false"><svg viewBox="0 0 22 20" aria-hidden="true"><path d="M4 7h14M4 13h14"/></svg></button><button data-ui-size="large" aria-label="LARGE" title="LARGE · 140%" aria-pressed="false"><svg viewBox="0 0 22 20" aria-hidden="true"><path d="M4 4h14M4 10h14M4 16h14"/></svg></button></div><button id="status" type="button" title="LIVE / VIEW" disabled>CONNECTING</button></header><div class="toolbar"><strong><span id="track">TRACK</span><span id="externalTc" hidden></span></strong><div class="spacer"></div><button id="fitTrack" title="FIT TRACK">FIT TRACK</button><button id="fitLayer" title="CENTRE SELECTED LAYER">FIT LAYER</button><button id="follow" title="FOLLOW PLAYHEAD" aria-pressed="true">FOLLOW</button><button id="zoomOut" aria-label="ZOOM OUT" title="ZOOM OUT">−</button><button id="zoomIn" aria-label="ZOOM IN" title="ZOOM IN">+</button></div><main id="viewport" aria-label="Designer timeline"><div id="sheet"></div></main><footer><span id="selectionMessage" role="status"></span><span id="warnings"></span></footer></body></html>`
 
-module.exports = { page, stylesheet, browserScript: '(' + browserMain.toString() + ')(' + applyEditPatch.toString() + ',' + discreteSegments.toString() + ',' + selectionScroll.toString() + ',' + timecode.toString() + ',' + duplicateMarkerKeys.toString() + ',' + createUiGeometry.toString() + ',' + createPresentationQueue.toString() + ')' }
+module.exports = { page, stylesheet, browserScript: '(' + browserMain.toString() + ')(' + applyEditPatch.toString() + ',' + discreteSegments.toString() + ',' + selectionScroll.toString() + ',' + timecode.toString() + ',' + duplicateMarkerKeys.toString() + ',' + createUiGeometry.toString() + ',' + createPresentationQueue.toString() + ',' + acceptPlaybackSample.toString() + ',' + extrapolatedPlayback.toString() + ')' }

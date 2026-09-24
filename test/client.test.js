@@ -62,6 +62,31 @@ test('HTTP errors, malformed responses and invalid hosts fail clearly', async ()
   assert.throws(() => new DesignerClient('host/path', 80), /hostname/)
   assert.throws(() => new DesignerClient('localhost', 0), /port/)
 })
+test('transport master uses the official list, brightness and volume endpoints without retries', async () => {
+  const requests=[]
+  const client=new DesignerClient('localhost',80,async(url,options={})=>{
+    requests.push({url,method:options.method||'GET',body:options.body&&JSON.parse(options.body)})
+    if(url.endsWith('/transports'))return {ok:true,json:async()=>({status:{code:0},transports:[
+      {uid:'123',name:'Music',brightness:0.25,volume:0.75,engaged:true,playmode:'Stop'},
+      {uid:'invalid',name:'Ignored',brightness:1,volume:1},
+    ]})}
+    return {ok:true,json:async()=>({status:{code:0}})}
+  })
+  assert.deepEqual(await client.listTransports(),[{uid:'123',name:'Music',brightness:0.25,volume:0.75,engaged:true,playmode:'Stop'}])
+  await client.setTransportMaster('123',0.375)
+  assert.deepEqual(requests.slice(1).map(request=>request.url.split('/').at(-1)).sort(),['brightness','volume'])
+  assert.deepEqual(requests.find(request=>request.url.endsWith('/brightness')).body,
+    {transports:[{transport:{uid:'123'},brightness:0.375}]})
+  assert.deepEqual(requests.find(request=>request.url.endsWith('/volume')).body,
+    {transports:[{transport:{uid:'123'},volume:0.375}]})
+  assert.equal(requests.length,3)
+  await assert.rejects(client.setTransportMaster('bad',0.5),/UID/)
+  await assert.rejects(client.setTransportMaster('123',1.1),/level/)
+  assert.equal(requests.length,3)
+  client.viewOnly=true
+  await assert.rejects(client.setTransportMaster('123',0.5),/VIEW ONLY/)
+  assert.equal(requests.length,3)
+})
 test('Python payload safely transports quotes, Unicode and code-like field names', () => {
   const field = "äö'); raise ValueError('injected') #"
   const script = makeScript('key_set', { field, value: 1 })

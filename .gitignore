@@ -18,3 +18,5 @@ assets/*
 *.key
 
 /D3-Stream-Deck-XL.companionconfig
+/D3-Yamaha-CC1.companionconfig
+/D3-Yamaha-CC1-Transports.companionconfig

@@ -57,6 +57,22 @@ function control(preset, notes = '') {
     })),
   }
 }
+function customVariableButton(preset, value, notes = '') {
+  const button = control(preset, notes)
+  button.steps[0].action_sets.down = [{
+    type: 'action',
+    id: id(),
+    connectionId: 'internal',
+    definitionId: 'custom_variable_set_value',
+    options: {
+      name: literal('cc1_fader'),
+      create: literal(true),
+      value: literal(String(value)),
+    },
+    upgradeIndex: -1,
+  }]
+  return button
+}
 const expression = (value) => ({ value, isExpression: true })
 const variable = (name) => `$(d3layers:${name})`
 const controls = { 0: {}, 1: {}, 2: {}, 3: {} }
@@ -325,3 +341,33 @@ xl.page.controls[3][4]=xlButton(definitions.link_time,'Link editing to Designer 
 const xlOutput = path.join(root, 'D3-Stream-Deck-XL.companionconfig')
 fs.writeFileSync(xlOutput, JSON.stringify(xl, null, 2) + '\n')
 console.log(`Companion XL page: ${xlOutput}`)
+
+// Yamaha CC1 page 8 is an operator-arranged layout captured from Companion.
+// Keep only the page/control data in the committed template; the clean instance
+// wrapper below supplies a neutral host and the current module version.
+const cc1 = structuredClone(page)
+cc1.page = structuredClone(require('../templates/yamaha-cc1-page8.json'))
+cc1.oldPageNumber = 8
+const cc1Output=path.join(root,'D3-Yamaha-CC1.companionconfig')
+fs.writeFileSync(cc1Output,JSON.stringify(cc1,null,2)+'\n')
+console.log(`Companion CC1 page: ${cc1Output}`)
+
+// Yamaha CC1 transport selector: page 9. Names and selected-state feedback are
+// live, so the page follows Designer's transport list without regeneration.
+const cc1Transports=structuredClone(page)
+cc1Transports.page.id='d3-yamaha-cc1-transports-page'
+cc1Transports.page.name='Disguise Transports - Yamaha CC1'
+cc1Transports.oldPageNumber=9
+cc1Transports.page.gridSize={minColumn:0,maxColumn:5,minRow:0,maxRow:6}
+cc1Transports.page.controls=Object.fromEntries(Array.from({length:7},(_,row)=>[row,{}]))
+for(let slot=1;slot<=42;slot++) {
+  const row=Math.floor((slot-1)/6),column=(slot-1)%6
+  const c=control(definitions['master_transport_'+slot],`Select Designer transport ${slot} for the Yamaha CC1 master fader.`)
+  c.style.layers=c.style.layers.filter(layer=>layer.type!=='image')
+  const text=c.style.layers.find(layer=>layer.type==='text')
+  text.fontsize=literal(theme.type.tool)
+  cc1Transports.page.controls[row][column]=c
+}
+const cc1TransportsOutput=path.join(root,'D3-Yamaha-CC1-Transports.companionconfig')
+fs.writeFileSync(cc1TransportsOutput,JSON.stringify(cc1Transports,null,2)+'\n')
+console.log(`Companion CC1 transports page: ${cc1TransportsOutput}`)

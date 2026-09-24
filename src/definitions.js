@@ -31,9 +31,8 @@ function actions(instance) {
     callback: (event) => {
       const dial=['Select active layer','Select parameter / media folder','Adjust live value / preview media','Scrub live / move selected key'].includes(name)
       const e=instance.editor
-      const batch=dial && !e?.mediaMode && !e?.clearKeysBrowser && (e?.layerEdit==='edit' || (e?.moveKey && !e.moveKey.group) || (name==='Adjust live value / preview media' && e?.field && !e.moveKey?.group)) && instance.performDetents
-      const run=batch ? (fn,opts)=>instance.performDetents(name+JSON.stringify(event.options),fn,opts) : (fn,opts)=>instance.perform(fn,opts)
-      return run((editor,detents=1) => {
+      const batch=dial && !e?.mediaMode && !e?.clearKeysBrowser && !e?.moveKey?.group && instance.performDetents
+      const dispatch=(editor,o) => {
         if (editor.viewOnly) {
           const browsing = ['Time keypad','Select adaptive timing step','Read layers and values from Designer',
             'Select active layer','Select parameter / media folder','Scrub live / move selected key',
@@ -56,33 +55,69 @@ function actions(instance) {
         }
         // Leaving the confirmation through any dial/tool cancels it, never hides it.
         if (!name.startsWith('Context button')) editor.clearKeysPrompt = null
-        return fn(editor, {...event.options,detents})
-      }, queueOptions)
+        return fn(editor,o)
+      }
+      if(batch) {
+        const identity={...event.options};delete identity.direction
+        return instance.performDetents(name+JSON.stringify(identity),Number(event.options.direction),
+          (editor,direction,detents)=>dispatch(editor,{...event.options,direction,detents}),queueOptions)
+      }
+      return instance.perform(editor=>dispatch(editor,{...event.options,detents:1}),queueOptions)
     },
   })
   return {
+    viewer_zoom: {
+      name: 'Zoom timeline viewer',
+      options: [direction],
+      callback: (event) => {
+        const direction = Number(event.options.direction)
+        if (direction !== -1 && direction !== 1) return
+        instance.viewer?.rotateZoomDirect(direction * Math.max(1, Number(event.options.detents) || 1))
+        instance.publish?.()
+      },
+    },
+    transport_master_select: {
+      name: 'Select transport for master fader',
+      options: [direction],
+      callback: (event) => instance.selectMasterTransport?.(Number(event.options.direction)),
+    },
+    transport_master_select_slot: {
+      name: 'Select transport slot for master fader',
+      options: [numeric('slot', 'Transport slot (1–42)', 1, 1, 42)],
+      callback: (event) => instance.selectMasterTransportSlot?.(Number(event.options.slot) - 1),
+    },
+    transport_master_level: {
+      name: 'Set selected transport brightness + volume',
+      options: [{type:'number',id:'level',label:'Master level (0–100)',default:100,min:0,max:100,step:0.1,useVariables:true}],
+      callback: (event) => instance.setTransportMasterLevel?.(event.options.level),
+    },
     time_keypad: action('Time keypad', [{type:'dropdown',id:'key',label:'Key',default:'go',choices:[...Array.from({length:10},(_,i)=>({id:String(i),label:String(i)})),{id:'back',label:'Backspace'},{id:'clear',label:'Clear'},{id:'go',label:'Jump'}]}], (e,o)=>e.enterTime(o.key), {synchronise:false}),
     time_step_set: action('Select adaptive timing step', [numeric('slot','Step slot (0–9)',0,0,9)], (e,o)=>e.setTimeStep(Number(o.slot))),
-    transport: action('Transport control', [{type:'dropdown',id:'operation',label:'Operation',default:'play',choices:[{id:'play',label:'Play'},{id:'playsection',label:'Play to end of section'},{id:'playloopsection',label:'Play loop section'},{id:'stop',label:'Stop'},{id:'toggle',label:'Play / stop (last mode)'},{id:'gotoprevsection',label:'Previous section'},{id:'gotonextsection',label:'Next section'}]}], (e,o)=>e.controlTransport(o.operation)),
+    transport: action('Transport control', [{type:'dropdown',id:'operation',label:'Operation',default:'play',choices:[{id:'play',label:'Play'},{id:'playsection',label:'Play to end of section'},{id:'playloopsection',label:'Play loop section'},{id:'stop',label:'Stop'},{id:'toggle',label:'Play / stop (last mode)'},{id:'gotoprevsection',label:'Previous section'},{id:'gotonextsection',label:'Next section'},{id:'gotoprevtrack',label:'Previous track'},{id:'gotonexttrack',label:'Next track'}]}], (e,o)=>e.controlTransport(o.operation)),
     section_edit: action('Cut / merge section at active edit time', [{type:'dropdown',id:'operation',label:'Operation',default:'cut',choices:[{id:'cut',label:'Cut section'},{id:'merge',label:'Merge with previous section'}]}], (e,o)=>e.editSection(o.operation)),
     refresh: action('Read layers and values from Designer', [], (e) => e.refresh()),
     link_time: action('Toggle playhead follow while editing', [], (e) => e.setLinkTime(!e.linkTime)),
+    jog_lock: {
+      name: 'Toggle jog wheel lock',
+      options: [],
+      callback: () => instance.toggleJogLock?.(),
+    },
     play_stop: action('Play to end of section / stop', [], (e) => e.togglePlayback()),
     layer: action('Select active layer', [direction], (e, o) =>
       e.layerEdit === 'edit'
         ? e.adjustLayerTiming('in', Number(o.direction),{detents:o.detents})
         : e.mediaMode
           ? e.selectMediaField(Number(o.direction))
-          : !e.moveKey && !e.layerEdit && instance.viewer?.rotateZoom(Number(o.direction))
+            : !e.moveKey && !e.layerEdit && instance.viewer?.rotateZoom(Number(o.direction) * (o.detents || 1))
             ? undefined
-            : e.selectLive('layer', Number(o.direction)),
+            : e.selectLive('layer', Number(o.direction), o.detents),
     ),
     field: action('Select parameter / media folder', [direction], (e, o) =>
       e.layerEdit === 'edit'
         ? e.adjustLayerTiming('move', Number(o.direction),{detents:o.detents})
         : e.mediaMode
           ? e.selectMediaFolder(Number(o.direction))
-          : e.selectLive('field', Number(o.direction)),
+          : e.selectLive('field', Number(o.direction), o.detents),
     ),
     value: action(
       'Adjust live value / preview media',
@@ -98,7 +133,7 @@ function actions(instance) {
       'Scrub live / move selected key',
       [direction, numeric('step', 'Seconds override (0 = selected time step)', 0, 0)],
       (e, o) =>
-        e.mediaMode || e.layerEdit === 'edit'
+        instance.jogLocked || e.mediaMode || e.layerEdit === 'edit'
           ? undefined
           : e.adjustLiveTime(Number(o.direction), Number(o.step),{detents:o.detents,previewCurve:Boolean(e.moveKey)&&curvePreviewDue(e)}),
       { scrub: true },
@@ -181,6 +216,13 @@ function presets(label = 'd3layers') {
       [entry('time', { direction: -1, step: 0 })],
       [entry('time', { direction: 1, step: 0 })],
     ),
+    dial_zoom: button(
+      'Dial 5: timeline viewer zoom',
+      'ZOOM\nVIEWER',
+      [],
+      [entry('viewer_zoom', { direction: -1 })],
+      [entry('viewer_zoom', { direction: 1 })],
+    ),
     key_set: button('Save keyframe', 'SAVE\nKEYFRAME', [entry('key_set')]),
     play_stop: button('Play to end of section / stop', '$(this:playback_label)', [entry('play_stop')]),
     constant_set: button('Apply constant parameter', 'APPLY\nCONSTANT', [entry('constant_set')]),
@@ -199,6 +241,12 @@ function presets(label = 'd3layers') {
     key_type: button('Keyframe interpolation', 'KEYFRAME TYPE\n$(this:key_type)', [entry('key_type')]),
     media: button('Resources and media', 'RESOURCES', [entry('media')]),
     layer_edit: button('Layer move / in / out', 'LAYER\nEDIT', [entry('layer_edit')]),
+    master_prev: button('Previous master-fader transport', 'MASTER ◀\n$(this:master_transport)', [entry('transport_master_select',{direction:-1})]),
+    master_next: button('Next master-fader transport', 'MASTER ▶\n$(this:master_transport)', [entry('transport_master_select',{direction:1})]),
+    master_zero: button('Set selected transport master to zero', 'MASTER\n0%', [entry('transport_master_level',{level:0})]),
+    master_full: button('Set selected transport master to full', 'MASTER\n100%', [entry('transport_master_level',{level:100})]),
+    master_status: button('Selected master-fader transport', '$(this:master_transport)\n$(this:transport_master_level)%', []),
+    jog_lock: button('Lock or unlock jog wheel', 'JOG\n$(this:jog_lock_label)', [entry('jog_lock')]),
   }
   for (const [group, names] of Object.entries({
     navigation: ['key_prev', 'key_next'],
@@ -213,7 +261,7 @@ function presets(label = 'd3layers') {
     p['timing_'+i]=button('Adaptive timing step '+(i+1),'$(this:timing_step_'+i+')',[entry('time_step_set',{slot:i})])
     p['timing_'+i].feedbacks=[{feedbackId:'timing_step_selected',options:{slot:i},style:{bgcolor:theme.active}},{feedbackId:'timing_step_unavailable',options:{slot:i},style:{bgcolor:0,color:theme.secondary}}]
   }
-  for(const [operation,text] of [['play','PLAY'],['playsection','PLAY\nTO END'],['playloopsection','PLAY\nLOOP'],['stop','STOP'],['toggle','PLAY /\nSTOP'],['gotoprevsection','PREV\nSECTION'],['gotonextsection','NEXT\nSECTION']]) {
+  for(const [operation,text] of [['play','PLAY'],['playsection','PLAY\nTO END'],['playloopsection','PLAY\nLOOP'],['stop','STOP'],['toggle','PLAY /\nSTOP'],['gotoprevsection','PREV\nSECTION'],['gotonextsection','NEXT\nSECTION'],['gotoprevtrack','PREV\nTRACK'],['gotonexttrack','NEXT\nTRACK']]) {
     p['transport_'+operation]=button(text,text,[entry('transport',{operation})])
     p['transport_'+operation].style.bgcolor=theme.groups.playback
     if(['play','playsection','playloopsection','stop'].includes(operation)) p['transport_'+operation].feedbacks=[{feedbackId:'transport_state',options:{operation},style:{bgcolor:theme.active}}]
@@ -221,6 +269,11 @@ function presets(label = 'd3layers') {
   for (const operation of ['cut','merge']) p['section_'+operation]=button(operation+' section',operation.toUpperCase()+'\nSECTION',[entry('section_edit',{operation})])
   p.link_time=button('Link editing time to Designer','LINK\nTIME',[entry('link_time')])
   p.link_time.feedbacks=[{feedbackId:'link_time',options:{},style:{bgcolor:theme.active}}]
+  p.jog_lock.feedbacks=[{feedbackId:'jog_locked',options:{},style:{bgcolor:theme.danger}}]
+  for(let slot=1;slot<=42;slot++) {
+    p['master_transport_'+slot]=button('Select master-fader transport '+slot,'$(this:master_transport_'+slot+')',[entry('transport_master_select_slot',{slot})])
+    p['master_transport_'+slot].feedbacks=[{feedbackId:'transport_master_selected',options:{slot},style:{bgcolor:theme.active}}]
+  }
   p.connection.feedbacks = [{ feedbackId: 'connected', options: {}, style: { bgcolor: theme.active } }]
   p.fine.feedbacks = [{ feedbackId: 'fine', options: {}, style: { bgcolor: theme.active } }]
   p.dial_value.feedbacks = [{ feedbackId: 'dirty', options: {}, style: { bgcolor: theme.active } }]
@@ -260,12 +313,22 @@ function presets(label = 'd3layers') {
         id: 'timing', name: 'Adaptive timing steps', definitions:Array.from({length:10},(_,i)=>'timing_'+i),
       },
       {
-        id: 'transport', name:'Transport and time linking', definitions:['transport_gotoprevsection','transport_play','transport_playsection','transport_playloopsection','transport_stop','transport_gotonextsection','transport_toggle','link_time','section_cut','section_merge'],
+        id: 'transport', name:'Transport and time linking', definitions:['transport_gotoprevtrack','transport_gotoprevsection','transport_play','transport_playsection','transport_playloopsection','transport_stop','transport_gotonextsection','transport_gotonexttrack','transport_toggle','link_time','section_cut','section_merge'],
       },
       {
         id: 'additional',
         name: 'Additional controls and status',
-        definitions: ['key_set', 'constant_set', 'fine', 'seek', 'connection', 'brand'],
+        definitions: ['key_set', 'constant_set', 'fine', 'seek', 'connection', 'brand', 'dial_zoom'],
+      },
+      {
+        id: 'master',
+        name: 'CC1 transport master fader',
+        definitions: ['master_prev','master_next','master_zero','master_full','master_status',...Array.from({length:42},(_,i)=>'master_transport_'+(i+1))],
+      },
+      {
+        id: 'safety',
+        name: 'Safety locks',
+        definitions: ['jog_lock'],
       },
     ],
     p,

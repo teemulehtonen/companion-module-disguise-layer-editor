@@ -56,6 +56,33 @@ test('a write invalidates cached feedback and delayed same-parameter polls', asy
     c.close()
   }
 })
+test('transport master feedback publishes changed external values without waiting for health checks', async () => {
+  let result = [{ uid: '1', name: 'Music', brightness: 0.2, volume: 0.2, engaged: true, playmode: 'Stop' }]
+  let publishes = 0
+  const c = new Connection({ listTransports: async () => result }, () => publishes++)
+  c.connected = true
+  c.scheduleMasterPoll = () => {}
+  c.masterTransports = structuredClone(result)
+  try {
+    await c.pollMasters()
+    assert.equal(publishes, 0)
+    result = [{ ...result[0], brightness: 0.7, volume: 0.7 }]
+    await c.pollMasters()
+    assert.equal(publishes, 1)
+    assert.equal(c.masterTransports[0].brightness, 0.7)
+
+    let release
+    c.client.listTransports = () => new Promise(resolve => { release = resolve })
+    const pending = c.pollMasters()
+    c.invalidateMasterFeedback()
+    release([{ ...result[0], brightness: 0.1, volume: 0.1 }])
+    await pending
+    assert.equal(c.masterTransports[0].brightness, 0.7)
+    assert.equal(publishes, 1)
+  } finally {
+    c.close()
+  }
+})
 test('production feedback never opens faulting LiveUpdate subscriptions and retains polling targets', async () => {
   const c = new Connection({ probe: async () => [] }, () => {}, {
     WebSocketImpl: class {
@@ -116,6 +143,21 @@ test('LiveUpdate subscribes with lossless hex UID, receives time and closes clea
     c.close()
   }
 })
+test('fast clock publishes at frame cadence without running the full state callback',async()=>{
+ let full=0,fast=0
+ const client={baseUrl:'http://localhost:80',probe:async()=>[]}
+ const c=new Connection(client,()=>full++,{enableLiveUpdate:true,WebSocketImpl:Socket,onClock:()=>fast++})
+ await c.start();full=0
+ try{
+  c.watch('123');const socket=c.socket;socket.dispatchEvent(new Event('open'))
+  const subscription=socket.sent.find(item=>item.subscribe.configuration.updateFrequencyMs===40)
+  assert.ok(subscription);assert.deepEqual(subscription.subscribe.properties,[c.fastClockProperty])
+  socket.message({subscriptions:[{id:7,propertyPath:c.fastClockProperty}]})
+  socket.message({valuesChanged:[{id:7,value:{time:12.04,timecodeSample:{seconds:12.04,label:'00:00:12.01'},playing:true,trackUid:'55'}}]})
+  assert.equal(fast,1);assert.equal(full,0)
+  assert.equal(c.time,12.04);assert.equal(c.trackUid,'55');assert.equal(c.fastClock.playing,true)
+ }finally{c.close()}
+})
 test('HTTP failure disconnects and subsequent health check recovers without Python calls', async () => {
   let failing = true
   const c = new Connection(
@@ -149,6 +191,7 @@ test('socket error clears feedback and late messages cannot restore old values',
   assert.equal(c.socket, null)
   socket.message({ valuesChanged: [{ id: 0, value: 500 }] })
   assert.equal(c.time, undefined)
+  assert.equal(c.fastClock, undefined)
   c.close()
 })
 test('stale snapshots prevent edits until explicit refresh', async () => {
@@ -254,6 +297,20 @@ test('polling supplies timeline and parameter feedback when LiveUpdate is silent
   } finally {
     c.close()
   }
+})
+test('HTTP fallback promotes the current native timecode sample to a live anchor',async()=>{
+ const result={timeline:{time:12,layers:[],trackUid:'22',transportUid:'11',playing:true},timecodeSamples:[{seconds:0,label:'05:00:00.00'},{seconds:12,label:'05:00:12.00'}],clock:{fps:25,tcMode:'25',customFps:false,beatMode:false}}
+ const c=new Connection({execute:async()=>result},()=>{})
+ c.connected=true;c.transportUid='11';c.targetKey=JSON.stringify(null);c.schedulePoll=()=>{}
+ try{
+  await c.poll()
+  assert.deepEqual(c.timeline.timecodeSample,{seconds:12,label:'05:00:12.00'})
+  const e=new Editor(new DemoClient());await e.refresh();e.snapshot.trackUid='22';e.snapshot.transportUid='11'
+  c.timeline.layers=e.snapshot.layers.map(layer=>({uid:layer.uid,start:0,end:20}))
+  e.activeLayerSignature=e.snapshot.layers.map(layer=>layer.uid).sort().join(',')
+  e.followTimeline(c.timeline)
+  assert.deepEqual(e.liveTimecodeSample,{seconds:12,label:'05:00:12.00'})
+ }finally{c.close()}
 })
 
 test('Designer layer reorder updates dial order without metadata reload or changing the edit target', async () => {

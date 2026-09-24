@@ -158,7 +158,7 @@ class Editor {
     // only after it catches up, or after the bounded grace period expires.
     if (!timeline || !this.snapshot || this.busy || this.stale) return
     if (timeline.trackUid !== this.snapshot.trackUid) {
-      this.stale = true
+      this.stale = this.contextStale = true
       return
     }
     // A mouse selection supersedes a pending jump even while old time feedback
@@ -337,7 +337,7 @@ class Editor {
         this.designerSelectionIds = []
         this.designerLayerUid = null
       }
-      this.stale = false
+      this.stale = this.contextStale = false
       this.activeLayerSignature = next.layers
         .filter((l) => (l.start ?? 0) <= this.time + 1e-7 && (l.end ?? Infinity) >= this.time - 1e-7)
         .map((l) => l.uid)
@@ -531,11 +531,12 @@ class Editor {
       this.liveTimecodeSample = null
     }
   }
-  async selectLive(kind, direction) {
+  async selectLive(kind, direction, detents = 1) {
     this.local()
     this.requireReady()
     if (this.moveKey && (kind === 'layer' || kind === 'field')) return
     if (direction !== -1 && direction !== 1) throw new Error('Direction must be -1 or 1')
+    detents = Math.max(1, Math.min(64, Math.floor(Number(detents) || 1)))
     if (kind === 'layer') {
       // An encoder choice overrides Designer's existing highlight, including a
       // highlight not yet delivered by polling. Only a subsequent mouse change
@@ -548,12 +549,14 @@ class Editor {
       this.followTimeline(state.timeline)
       if (this.stale) await this.refresh({ preserve: true })
     }
+    let changed = false
+    // Media browsing opens explicitly and keeps the numeric parameter selection.
+    for (let index = 0; index < detents; index++) changed = this.select(kind, direction) || changed
+    if (!changed) return
     this.layerEdit = ''
     this.selectedKeyTime = null
     this.navigationTime = null
     this.pendingJump = null
-    // Media browsing opens explicitly and keeps the numeric parameter selection.
-    this.select(kind, direction)
     this.moveKey = null
     if (this.field)
       await this.remote(async () => this.acceptLive(await this.client.execute('read_field', this.liveArgs())))
@@ -776,7 +779,8 @@ class Editor {
     this.pendingJump = null
     const beats = !stepOverride && this.usesBeatSteps
     const frames = !beats && !stepOverride && this.timeStep === 'frame'
-    const delta = number(direction) * (stepOverride || this.timeStepAmount)
+    const detents = Math.max(1, Math.min(64, Math.floor(Number(pointer.detents) || 1)))
+    const delta = number(direction) * (stepOverride || this.timeStepAmount) * (this.moveKey ? 1 : detents)
     if(this.moveKey?.group)return this.editKeyGroup('move',{delta,frames,beats,...pointer})
     if (this.layerEdit) {
       await this.remote(async () => {
@@ -1363,6 +1367,12 @@ class Editor {
     this.playing=result.playing
     this.pendingJump=null
     this.navigationTime=null
+    if (['gotonexttrack','gotoprevtrack'].includes(operation)) {
+      this.moveKey=null;this.selectedKeyTime=null;this.layerEdit=''
+      this.mediaMode=false;this.mediaAll=[]
+      this.stale=this.contextStale=true
+      return
+    }
     if (this.linkTime && ['gotonextsection','gotoprevsection'].includes(operation)) {
       this.moveKey=null;this.selectedKeyTime=null;this.layerEdit=''
       this.mediaMode=false;this.mediaAll=[]
@@ -1393,7 +1403,8 @@ class Editor {
           ? direction > 0
             ? 0
             : list.length - 1
-          : (current + direction + list.length) % list.length
+          : Math.max(0, Math.min(list.length - 1, current + direction))
+      if (!list.length || this.snapshot.layers.indexOf(list[index]) === this.layerIndex) return false
       this.layerIndex = list.length ? this.snapshot.layers.indexOf(list[index]) : -1
       this.selectDefaultParameter()
       this.mediaAll = []
@@ -1401,9 +1412,12 @@ class Editor {
       this.lastMediaField = null
     } else if (kind === 'field') {
       const count = this.layer?.fields.length ?? 0
-      this.fieldIndex = count ? Math.max(0, Math.min(count - 1, this.fieldIndex + direction)) : 0
+      const index = count ? Math.max(0, Math.min(count - 1, this.fieldIndex + direction)) : 0
+      if (index === this.fieldIndex) return false
+      this.fieldIndex = index
     } else throw new Error('Unknown selector')
     this.loadValue()
+    return true
   }
   adjustValue(delta) {
     this.local()

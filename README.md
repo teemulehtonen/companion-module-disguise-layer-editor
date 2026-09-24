@@ -6,7 +6,7 @@ Disguise layer, keyframe and resource control for Bitfocus Companion and Stream 
 
 ## Install
 
-**Downloads (0.2.0-beta.55):** [Companion module](../../releases/download/v0.2.0-beta.55/disguise-layer-control-0.2.0-beta.55.tgz) · [Stream Deck XL page](../../releases/download/v0.2.0-beta.55/D3-Stream-Deck-XL.companionconfig) · [Companion page](../../releases/download/v0.2.0-beta.55/D3-Stream-Deck-Plus.companionconfig)
+**Downloads (0.2.0-beta.69):** [Companion module](../../releases/download/v0.2.0-beta.69/disguise-layer-control-0.2.0-beta.69.tgz) · [Stream Deck + page](../../releases/download/v0.2.0-beta.69/D3-Stream-Deck-Plus.companionconfig) · [Stream Deck XL page](../../releases/download/v0.2.0-beta.69/D3-Stream-Deck-XL.companionconfig) · [Yamaha CC1 page 8](../../releases/download/v0.2.0-beta.69/D3-Yamaha-CC1.companionconfig) · [Yamaha CC1 transport page 9](../../releases/download/v0.2.0-beta.69/D3-Yamaha-CC1-Transports.companionconfig)
 
 Tested with Designer 32.4.17 and Companion 5.0.5.
 
@@ -23,13 +23,19 @@ Import **D3-Stream-Deck-XL.companionconfig** into one chosen page and map it to 
 
 PLAY, PLAY TO END, PLAY LOOP and STOP highlight their active state; PREV/NEXT SECTION and CUT/MERGE SECTION are above them. CUT splits at active edit time; MERGE removes the current section boundary, preserving tags and notes. LINK TIME has its own highlight. Unavailable beat slots are dark and inert.
 
-Both pages are generated and tested on every release. Importing a page replaces that destination page only; preserve any custom layout first.
+All page exports are generated and tested on every release. Importing a page replaces that destination page only; preserve any custom layout first.
+
+## Yamaha CC1
+
+Import **D3-Yamaha-CC1.companionconfig** to Companion page 8 and map it to the existing d3layers connection. This clean 8 × 7 export reproduces the operator layout from the reference Companion: eight context keys, Stream Deck + displays, RC1–RC4 controls, RC5 viewer zoom, RC6 timeline time, previous/next track and section controls, jog lock and playback. Its page button opens the page 9 transport selector.
+
+The motor fader follows the selected Disguise transport and writes its brightness and volume together. See [Yamaha CC1 setup](docs/YAMAHA-CC1.md) for the custom-variable, trigger and motor-target settings.
 
 ## Additional Stream Deck presets
 
 In Companion **Presets**, select this connection and drag buttons from **Adaptive timing steps** or **Transport and time linking** onto any page or Stream Deck. Timing slots automatically follow the current track and editing mode: frame/seconds on time tracks, beats in BPM regions. All beat modes share 1/96, 1/16, 1/12, 1/8, 1/6, 1/4, 1/3, 1/2, 1 and 4 beats. The selected step is highlighted; unused slots display a dash and do nothing. Selecting a step keeps the selected key/layer editing mode.
 
-Transport presets provide PLAY, PLAY TO END, PLAY LOOP, STOP, PLAY / STOP (last play mode), PREVIOUS/NEXT SECTION and LINK TIME. They share state with the viewer.
+Transport presets provide PLAY, PLAY TO END, PLAY LOOP, STOP, PLAY / STOP (last play mode), PREVIOUS/NEXT SECTION, PREVIOUS/NEXT TRACK and LINK TIME. Track navigation affects the transport currently open in the editor, independently of the CC1 master-fader target.
 
 ## Controls
 
@@ -58,9 +64,9 @@ For network audio on Raspberry Pi, enter the SMB share and credentials in module
 
 ## Latest beta
 
-`0.2.0-beta.55` centres effect/precomp connection arrows on their source layer and separates overlapping paths by 8 pixels. It also includes transport-monitor TC IN, transport-switch recovery, region-aware beat snapping and ten shared musical steps. Track audio and its beat markings respect timed intros; a compact waveform button hides the audio row. VIEW + FOLLOW scrolls with playback and hides the blue edit cursor. Original peak waveform rendering and caching are retained.
+`0.2.0-beta.69` adds previous/next-track presets for the transport open in the editor and packages the operator's clean Yamaha CC1 page 8 together with the page 9 transport selector. It also includes faster interpolated playback timecode, bounded dial input, jog locking, transport-master motor feedback and the timeline improvements from beta.56–68.
 
-Validation: 286 offline tests and package checks passed. Read-only checks verified the installed Raspberry Pi module and advancing TC IN. Live Designer transport switching and physical local timecode input were not exercised in this release.
+Validation: 316 offline tests and package checks passed with the clean page 8 export included. The Raspberry Pi runs beta.69; Designer track navigation was not triggered during verification.
 
 ## Build
 

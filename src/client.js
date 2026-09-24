@@ -65,6 +65,42 @@ class DesignerClient {
       throw new Error(body.status?.message || 'Invalid Designer transport response')
     return body.result
   }
+  async listTransports() {
+    const response = await this.fetch(this.baseUrl + paths.allTransports, {
+      signal: AbortSignal.any([this.controller.signal, AbortSignal.timeout(5000)]),
+    })
+    if (!response.ok) throw new Error(`Designer HTTP ${response.status} (transport list)`)
+    const body = requireSuccess(await response.json(), 'Invalid Designer transport list')
+    if (!Array.isArray(body.transports)) throw new Error('Invalid Designer transport list')
+    return body.transports.map((transport) => ({
+      uid: String(transport.uid || ''),
+      name: String(transport.name || ''),
+      brightness: Number(transport.brightness),
+      volume: Number(transport.volume),
+      engaged: Boolean(transport.engaged),
+      playmode: String(transport.playmode || ''),
+    })).filter((transport) => /^(?:0x[0-9a-f]+|[0-9]+)$/i.test(transport.uid))
+  }
+  async setTransportMaster(uid, value) {
+    this.assertWritable()
+    uid = String(uid || '')
+    value = Number(value)
+    if (!/^(?:0x[0-9a-f]+|[0-9]+)$/i.test(uid)) throw new Error('Invalid transport UID')
+    if (!Number.isFinite(value) || value < 0 || value > 1) throw new Error('Invalid transport master level')
+    const set = async (kind) => {
+      const response = await this.fetch(this.baseUrl + paths.transportLevel(kind), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transports: [{ transport: { uid }, [kind]: value }] }),
+        signal: AbortSignal.any([this.controller.signal, AbortSignal.timeout(5000)]),
+      })
+      if (!response.ok) throw new Error(`Designer HTTP ${response.status} (transport ${kind})`)
+      requireSuccess(await response.json(), `Transport ${kind} failed`)
+    }
+    // These are separate official endpoints. Send one request for each without
+    // retrying either: an uncertain response must never duplicate a live write.
+    await Promise.all([set('brightness'), set('volume')])
+  }
   assertWritable() {
     if (this.viewOnly) {
       const error = new Error('VIEW ONLY')
@@ -124,20 +160,20 @@ class DesignerClient {
     return body.result.annotations
   }
   async transport(context, operation, lastMode = 'playsection') {
-    if (!['play','playsection','playloopsection','stop','toggle','gotonextsection','gotoprevsection'].includes(operation)) throw new Error('Invalid transport operation')
+    if (!['play','playsection','playloopsection','stop','toggle','gotonextsection','gotoprevsection','gotonexttrack','gotoprevtrack'].includes(operation)) throw new Error('Invalid transport operation')
     this.assertWritable()
     const state = await this.execute('playback_state', context)
     this.assertWritable()
     const command = operation === 'toggle' ? (state.playing ? 'stop' : lastMode) : operation
-    const section = command === 'gotonextsection' || command === 'gotoprevsection'
+    const navigation = ['gotonextsection','gotoprevsection','gotonexttrack','gotoprevtrack'].includes(command)
     const response = await this.fetch(this.baseUrl + paths.transport(command), {
       method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({transports:[section ? {transport:{uid:context.transportUid}} : {uid:context.transportUid}]}),
+      body:JSON.stringify({transports:[navigation ? {transport:{uid:context.transportUid}} : {uid:context.transportUid}]}),
       signal:AbortSignal.any([this.controller.signal,AbortSignal.timeout(5000)]),
     })
     if (!response.ok) throw new Error('Designer HTTP '+response.status+' ('+command+')')
     requireSuccess(await response.json(),'Transport command failed')
-    return {playing:section ? state.playing : command !== 'stop',command}
+    return {playing:navigation ? state.playing : command !== 'stop',command}
   }
   async togglePlayback(context) {
     this.assertWritable()

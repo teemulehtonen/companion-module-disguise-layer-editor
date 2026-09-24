@@ -2,6 +2,7 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const { timecode } = require('../src/timecode')
 const { absoluteTimecode } = require('../src/timecode')
+const { anchoredTimecode } = require('../src/timecode')
 
 test('absolute labels use Designer TC markers, including discontinuous marker regions', () => {
   const samples = [
@@ -37,4 +38,11 @@ test('fractional NDF and DF labels retain the actual frame rate', () => {
   assert.equal(timecode(17982 / fps, fps, true), '00:10:00:00')
   assert.equal(timecode(107892 / fps, fps, true), '01:00:00:00')
   assert.equal(timecode(24 / (24000 / 1001), 24000 / 1001), '00:00:01:00')
+})
+test('native timecode anchors advance continuously between confirmed samples',()=>{
+ assert.equal(anchoredTimecode(10.04,25,false,{seconds:10,label:'05:00:10.00'}),'05:00:10:01')
+ assert.equal(anchoredTimecode(11,25,false,{seconds:10,label:'05:00:10.00'}),'05:00:11:00')
+ const fps=30000/1001
+ assert.equal(anchoredTimecode(60/fps,fps,true,{seconds:0,label:'00:00:00.00'}),'00:00:02:00')
+ assert.equal(anchoredTimecode(0.04,25,false,null),'00:00:00:01')
 })

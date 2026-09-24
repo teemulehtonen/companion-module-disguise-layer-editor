@@ -35,8 +35,8 @@ $sourceFiles = @(
     'AGENTS.md','README.md','LICENSE','CHANGELOG.md','KNOWN-LIMITATIONS.md','DISCLAIMER.md','SECURITY.md',
     'scripts/release.ps1',
     'scripts/regression.cjs','scripts/test-plan.cjs','scripts/installed-regression.cjs','scripts/installed-oracle.py','scripts/native-regression.cjs','scripts/native-regression.py','docs/REGRESSION-TESTS.md',
-    'scripts/build-page.cjs','scripts/verify-package.mjs','templates/button-style.json',
-    'docs/RASPBERRY-PI-SMB.md','docs/PROJECT-HANDOFF.md','docs/VIEWER-DEVELOPMENT.md','docs/TIMELINE-VIEWER.md','docs/VIEWER-TEST-REPORT.md','docs/ARCHITECTURE.md','docs/DEVELOPER-MANUAL.md','docs/TRACK-1-TESTS.md','docs/TRACK-6-TESTS.md','docs/GITHUB-SETUP.md','docs/BUILD.md'
+    'scripts/build-page.cjs','scripts/verify-package.mjs','templates/button-style.json','templates/yamaha-cc1-page8.json',
+    'docs/RASPBERRY-PI-SMB.md','docs/PROJECT-HANDOFF.md','docs/VIEWER-DEVELOPMENT.md','docs/TIMELINE-VIEWER.md','docs/VIEWER-TEST-REPORT.md','docs/ARCHITECTURE.md','docs/DEVELOPER-MANUAL.md','docs/TRACK-1-TESTS.md','docs/TRACK-6-TESTS.md','docs/GITHUB-SETUP.md','docs/BUILD.md','docs/YAMAHA-CC1.md'
 )
 foreach ($folder in @('src','test','companion')) {
     $sourceFiles += Get-ChildItem -LiteralPath (Join-Path $projectRoot $folder) -File -Recurse | ForEach-Object { $_.FullName.Substring($projectRoot.Length + 1) }
@@ -48,7 +48,7 @@ foreach ($relative in $sourceFiles) {
 }
 $bundle = Join-Path $staging 'bundle'
 New-Item -ItemType Directory -Path $bundle | Out-Null
-foreach ($relative in @("disguise-layer-control-$version.tgz",'D3-Stream-Deck-Plus.companionconfig','D3-Stream-Deck-XL.companionconfig','README.md','LICENSE','CHANGELOG.md','KNOWN-LIMITATIONS.md','DISCLAIMER.md','SECURITY.md')) {
+foreach ($relative in @("disguise-layer-control-$version.tgz",'D3-Stream-Deck-Plus.companionconfig','D3-Stream-Deck-XL.companionconfig','D3-Yamaha-CC1.companionconfig','D3-Yamaha-CC1-Transports.companionconfig','README.md','LICENSE','CHANGELOG.md','KNOWN-LIMITATIONS.md','DISCLAIMER.md','SECURITY.md')) {
     Copy-Item -LiteralPath (Join-Path $projectRoot $relative) -Destination $bundle
 }
 New-Item -ItemType Directory -Path (Join-Path $bundle 'docs') | Out-Null
@@ -59,6 +59,7 @@ Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/BUILD.md') -Destination (Jo
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/TRACK-1-TESTS.md') -Destination (Join-Path $bundle 'docs')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/TRACK-6-TESTS.md') -Destination (Join-Path $bundle 'docs')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/GITHUB-SETUP.md') -Destination (Join-Path $bundle 'docs')
+Copy-Item -LiteralPath (Join-Path $projectRoot 'docs/YAMAHA-CC1.md') -Destination (Join-Path $bundle 'docs')
 Copy-Item -LiteralPath (Join-Path $projectRoot 'CONTRIBUTING.md') -Destination $bundle
 Compress-Archive -Path (Join-Path $source '*') -DestinationPath (Join-Path $bundle "disguise-layer-editor-$releaseName-source.zip")
 
@@ -70,8 +71,8 @@ try {
     foreach ($relative in $sourceFiles) { if ($entries -notcontains $relative.Replace('\','/')) { throw "Missing source file: $relative" } }
     if ($entries | Where-Object { $_ -match '(^|/)(node_modules|\.tools|track-[345]|history)/|\.d3$|\.log$' }) { throw 'Development data entered source archive.' }
 } finally { $zip.Dispose() }
-# Small installation download: module and both clean Companion pages.
-Compress-Archive -LiteralPath @((Join-Path $bundle "disguise-layer-control-$version.tgz"), (Join-Path $bundle 'D3-Stream-Deck-Plus.companionconfig'), (Join-Path $bundle 'D3-Stream-Deck-XL.companionconfig')) -DestinationPath (Join-Path $bundle "disguise-layer-editor-$releaseName-companion.zip")
+# Small installation download: module and all clean Companion pages.
+Compress-Archive -LiteralPath @((Join-Path $bundle "disguise-layer-control-$version.tgz"), (Join-Path $bundle 'D3-Stream-Deck-Plus.companionconfig'), (Join-Path $bundle 'D3-Stream-Deck-XL.companionconfig'), (Join-Path $bundle 'D3-Yamaha-CC1.companionconfig'), (Join-Path $bundle 'D3-Yamaha-CC1-Transports.companionconfig')) -DestinationPath (Join-Path $bundle "disguise-layer-editor-$releaseName-companion.zip")
 $hashes = Get-ChildItem -LiteralPath $bundle -File -Recurse | Sort-Object FullName | ForEach-Object {
     $name = $_.FullName.Substring($bundle.Length + 1).Replace('\','/')
     $stream = [IO.File]::OpenRead($_.FullName)

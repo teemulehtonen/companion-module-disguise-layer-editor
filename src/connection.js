@@ -2,18 +2,30 @@
 const { paths } = require('./designer-api')
 const { contentProperty } = require('./live-properties')
 
+function sameMasterTransports(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false
+  return a.every((transport, index) => {
+    const next = b[index]
+    return next && transport.uid === next.uid && transport.name === next.name &&
+      transport.brightness === next.brightness && transport.volume === next.volume &&
+      transport.engaged === next.engaged && transport.playmode === next.playmode
+  })
+}
+
 // REST health checks never execute Python. A successful probe identifies Designer,
 // rather than treating any open TCP port as a valid connection.
 class Connection {
   constructor(
     client,
     onState,
-    { interval = 5000, WebSocketImpl = WebSocket, enableLiveUpdate = false, onHeartbeat = () => {} } = {},
+    { interval = 5000, masterInterval = 400, WebSocketImpl = WebSocket, enableLiveUpdate = false, onHeartbeat = () => {}, onClock = () => {} } = {},
   ) {
     this.client = client
     this.onState = onState
     this.onHeartbeat = onHeartbeat
+    this.onClock = onClock
     this.interval = interval
+    this.masterInterval = masterInterval
     this.WebSocket = WebSocketImpl
     // LiveUpdate supplies fast feedback; sequential HTTP remains the recovery path.
     this.enableLiveUpdate = enableLiveUpdate
@@ -24,6 +36,7 @@ class Connection {
     this.ids = new Map()
     this.feedbackRevision = 0
     this.liveRevision = 0
+    this.masterFeedbackRevision = 0
     this.retryAt = 0
   }
   // A control action supersedes both cached feedback and an in-flight poll.
@@ -44,10 +57,37 @@ class Connection {
     this.fieldValue = undefined
     this.trackUid = undefined
     this.clock = undefined
+    this.fastClock = undefined
   }
   start() {
     if (typeof this.client.execute === 'function') this.schedulePoll()
+    if (typeof this.client.listTransports === 'function') this.scheduleMasterPoll()
     return this.check()
+  }
+  invalidateMasterFeedback() {
+    this.masterFeedbackRevision++
+  }
+  scheduleMasterPoll() {
+    if (this.closed) return
+    this.masterPollTimer = setTimeout(() => this.pollMasters(), this.connected ? this.masterInterval : 1000)
+    this.masterPollTimer.unref?.()
+  }
+  async pollMasters() {
+    const revision = this.masterFeedbackRevision
+    try {
+      if (this.connected && !this.closed) {
+        const transports = await this.client.listTransports()
+        if (this.closed || revision !== this.masterFeedbackRevision) return
+        if (!sameMasterTransports(this.masterTransports, transports)) {
+          this.masterTransports = transports
+          this.onState(this)
+        }
+      }
+    } catch {
+      // Master feedback is advisory. The ordinary health check owns connection state.
+    } finally {
+      this.scheduleMasterPoll()
+    }
   }
   // The timer only ends a pulse. Only a validated Designer response starts one.
   pulseHeartbeat() {
@@ -104,9 +144,12 @@ class Connection {
         this.pollError = ''
         if (!Number.isFinite(result.timeline?.time) || !Array.isArray(result.timeline.layers))
           throw new Error('Invalid live state')
+        const timecodeSample=result.timecodeSample || result.timecodeSamples?.find(sample=>
+          Number.isFinite(sample?.seconds) && Math.abs(sample.seconds-result.timeline.time)<1e-7)
         this.timeline = {
           ...result.timeline,
           ...(result.timecodeSamples ? { timecodeSamples: result.timecodeSamples } : {}),
+          ...(timecodeSample ? {timecodeSample} : {}),
         }
         this.time = result.timeline.time
         this.trackUid = result.timeline.trackUid
@@ -130,12 +173,16 @@ class Connection {
     if (this.closed) return
     const feedbackRevision = this.feedbackRevision
     try {
-      const transports = await this.client.probe()
+      const [transports, masterTransports] = await Promise.all([
+        this.client.probe(),
+        typeof this.client.listTransports === 'function' ? this.client.listTransports() : undefined,
+      ])
       if (this.closed) return
       this.connected = true
       this.pulseHeartbeat()
       this.error = ''
       this.transports = transports
+      if (masterTransports) this.masterTransports = masterTransports
       this.probeFeedbackRevision = feedbackRevision
       this.probeRevision = (this.probeRevision || 0) + 1
       if (this.transportUid && !this.socket && !this.contextChanged) this.watch(this.transportUid, this.fieldTarget)
@@ -182,6 +229,8 @@ class Connection {
       "{'time': object.track.beatToTime(object.player.tCurrent), 'timecodeSample': {'seconds': object.track.beatToTime(object.player.tCurrent), 'label': str(object.beatToTimecode(object.player.tCurrent))}, 'playing': bool(object.player.playing), 'trackUid': str(object.track.uid), 'selectedLayerUids': [str(l.uid) for l in guisystem.selectedLayers if isinstance(l, Layer)], 'layers': [{'uid': str(l.uid), 'start': object.track.beatToTime(l.tStart), 'end': object.track.beatToTime(l.tEnd)} for l in object.track.getLeafLayers(Module)]}"
     this.clockProperty =
       "{'fps': object.customFps().value_or(object.beatToTimecode(0).fps()), 'mode': {Timecode.SMPTE23976:'23.976', Timecode.SMPTE24:'24', Timecode.SMPTE25:'25', Timecode.SMPTE2997:'29.97 NDF', Timecode.SMPTE2997DF:'29.97 DF', Timecode.SMPTE30:'30'}.get(object.smpteClockType(), 'Other'), 'custom': object.customFps().value_or(0) > 0}"
+    this.fastClockProperty =
+      "{'time': object.track.beatToTime(object.player.tCurrent), 'timecodeSample': {'seconds': object.track.beatToTime(object.player.tCurrent), 'label': str(object.beatToTimecode(object.player.tCurrent))}, 'playing': bool(object.player.playing), 'trackUid': str(object.track.uid)}"
     const socket = (this.socket = new this.WebSocket(
       this.client.baseUrl.replace(/^http/, 'ws') + paths.liveUpdate,
     ))
@@ -223,21 +272,36 @@ class Connection {
           }),
         )
     })
+    socket.addEventListener('open', () => {
+      if (current())
+        socket.send(
+          JSON.stringify({
+            subscribe: {
+              object: `getByUID(0x${BigInt(transportUid).toString(16)})`,
+              configuration: { updateFrequencyMs: 40 },
+              properties: [this.fastClockProperty],
+            },
+          }),
+        )
+    })
     socket.addEventListener('message', (event) => {
       if (!current()) return
       try {
         const data = JSON.parse(String(event.data))
         if (data.error) throw new Error(String(data.error))
         if (Array.isArray(data.subscriptions))
-          this.ids = new Map(data.subscriptions.map((s) => [s.id, s.propertyPath]))
+          for (const subscription of data.subscriptions) this.ids.set(subscription.id,subscription.propertyPath)
         if (data.valuesChanged?.length) {
           this.liveRevision++
           this.pulseHeartbeat()
         }
+        let stateChanged=false, clockChanged=false
         for (const change of data.valuesChanged || []) {
           const property = this.ids.get(change.id)
-          if (property === contentProperty && typeof change.value === 'string')
+          if (property === contentProperty && typeof change.value === 'string') {
             this.contentRevision = change.value
+            stateChanged=true
+          }
           if (
             property === this.timelineProperty &&
             Number.isFinite(change.value?.time) &&
@@ -249,20 +313,36 @@ class Connection {
             this.live = true
             this.liveError = ''
             clearTimeout(this.socketTimer)
+            stateChanged=true
           }
           if (property === 'object.track.beatToTime(object.player.tCurrent)' && Number.isFinite(change.value)) {
             this.time = change.value
             this.live = true
             this.liveError = ''
             clearTimeout(this.socketTimer)
+            stateChanged=true
           }
-          if (property === 'str(object.track.uid)' && typeof change.value === 'string')
+          if (property === 'str(object.track.uid)' && typeof change.value === 'string') {
             this.trackUid = change.value
-          if (property === this.valueProperty && Number.isFinite(change.value?.value))
+            stateChanged=true
+          }
+          if (property === this.valueProperty && Number.isFinite(change.value?.value)) {
             this.fieldValue = change.value
-          if (property === this.clockProperty && Number.isFinite(change.value?.fps)) this.clock = change.value
+            stateChanged=true
+          }
+          if (property === this.clockProperty && Number.isFinite(change.value?.fps)) { this.clock = change.value; stateChanged=true }
+          if (property === this.fastClockProperty && Number.isFinite(change.value?.time) && typeof change.value.trackUid === 'string') {
+            this.fastClock=change.value
+            this.time=change.value.time
+            this.trackUid=change.value.trackUid
+            this.live=true
+            this.liveError=''
+            clearTimeout(this.socketTimer)
+            clockChanged=true
+          }
         }
-        this.onState(this)
+        if(clockChanged)this.onClock(this)
+        if(stateChanged)this.onState(this)
       } catch (error) {
         this.liveError = error.message
         this.retryAt = Date.now() + 30000
@@ -289,6 +369,7 @@ class Connection {
     this.trackUid = undefined
     this.fieldValue = undefined
     this.clock = undefined
+    this.fastClock = undefined
     this.ids.clear()
     clearTimeout(this.socketTimer)
     if (socket) socket.close()
@@ -298,6 +379,7 @@ class Connection {
     clearTimeout(this.timer)
     clearTimeout(this.resumeTimer)
     clearTimeout(this.pollTimer)
+    clearTimeout(this.masterPollTimer)
     clearTimeout(this.heartbeatTimer)
     this.heartbeat = false
     this.dropSocket()

@@ -89,7 +89,7 @@ test('linked playback crossing BPM regions updates Companion timing choices with
  const e=new Editor(new DemoClient());await e.refresh()
  e.followTimeline=()=>{};e.acceptPlaybackMode=()=>{}
  const state={connected:true,trackUid:e.snapshot.trackUid,probeRevision:1,clock:{fps:25,mode:'25',custom:false,beatMode:false},watch(){}}
- const host={connection:state,editor:e,lastProbeRevision:1,connectionStatus(){},publish(){},requestSync(){throw Error('Unexpected refresh')}}
+ const host={connection:state,editor:e,lastProbeRevision:1,connectionStatus(){},publish(){},acceptClockPresentation(){},requestSync(){throw Error('Unexpected refresh')}}
  const callback=vm.runInNewContext('(function(){return '+source.slice(from,end)+'}}).call(host)',{host,connection:state})
  for(const mode of [false,true,false]){
   state.clock.beatMode=mode;callback(state)

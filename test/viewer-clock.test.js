@@ -32,6 +32,7 @@ test('viewer clock uses one atomic subscription, native TC and HTTP fallback', (
     const ws = c.socket
     ws.dispatchEvent(new Event('open'))
     assert.equal(ws.sent.subscribe.object, 'getByUID(0xfffffffffffffffe)')
+    assert.equal(ws.sent.subscribe.configuration.updateFrequencyMs, 40)
     assert.equal(ws.sent.subscribe.properties.length, 2)
     ws.message({ subscriptions: [{ id: 1, propertyPath: ws.sent.subscribe.properties[0] }] })
     ws.message({ valuesChanged: [{ id: 1, value: ['1', 3, '05:00:03.00'] }] })
@@ -133,6 +134,16 @@ test('TC monitor follows transport switches and ignores late old values', () => 
     current.message({ valuesChanged: [{ id: 1, value: ['00:00:00.00','playing'] }] })
     assert.equal(c.read(next).externalTimecode.value, '00:00:00:00', 'Zero is a valid monitor value')
   } finally { c.close() }
+})
+
+test('viewer clock publishes native playback state with its time sample',()=>{
+ const c=new ViewerClock({baseUrl:'http://localhost'},Socket),ctx={transportUid:'1',trackUid:'1',time:2,connected:true}
+ try {
+  c.read(ctx);const ws=c.socket;ws.dispatchEvent(new Event('open'))
+  ws.message({subscriptions:[{id:1,propertyPath:ws.sent.subscribe.properties[0]}]})
+  ws.message({valuesChanged:[{id:1,value:['1',3,'00:00:03.00',75,false,[],true]}]})
+  assert.equal(c.read(ctx).playing,true)
+ } finally { c.close() }
 })
 
 test('native snapshot and live TC use transport monitor for remote and local input', () => {

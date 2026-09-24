@@ -83,7 +83,7 @@ test('a newer preview remains visible while an older seek is acknowledged',async
  const first=c.seekTimeline(2);await c.seekTimeline(4);assert.equal(c.seekPreview.time,4);completions.shift()();await new Promise(resolve=>setImmediate(resolve));assert.equal(c.seekPreview.time,4);assert.equal(c.state.time,2);completions.shift()();await first;assert.equal(c.seekPreview,null);assert.equal(c.state.time,4)
 })
 test('preview clock follows link mode and never crosses track or permission context',()=>{
- const code=browserScript.slice(browserScript.indexOf('function activeSeekPreview('),browserScript.indexOf('  function previewTimecode('));const c={state:{trackUid:'a',selectionToken:'token',connected:true,time:8,editor:{linkTime:true}},seekPreview:{trackUid:'a',token:'token',linked:true,time:2}};vm.createContext(c);vm.runInContext(code,c)
+ const code=browserScript.slice(browserScript.indexOf('function activeSeekPreview('),browserScript.indexOf('  function previewTimecode('));const c={state:{trackUid:'a',selectionToken:'token',connected:true,time:8,editor:{linkTime:true}},seekPreview:{trackUid:'a',token:'token',linked:true,time:2},playbackSample:null,performance:{now:()=>0},extrapolatedPlayback:(_sample,state)=>state.time};vm.createContext(c);vm.runInContext(code,c)
  assert.equal(c.playbackClock(),2);assert.equal(c.editClock(),2);assert.equal(c.state.time,8)
  c.state.editor={linkTime:false,editTime:7};assert.equal(c.playbackClock(),8);assert.equal(c.editClock(),7)
  c.seekPreview.linked=false;assert.equal(c.playbackClock(),8);assert.equal(c.editClock(),2)

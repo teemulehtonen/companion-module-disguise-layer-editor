@@ -55,6 +55,18 @@ test('viewer serves read-only assets and coalesces live requests', async (t) => 
   assert.equal((await fetch(s.url + '/api/state?start=NaN')).status, 503)
 })
 
+test('stable playback keeps heavy geometry cached longer than stopped editing', async t => {
+  const s=await setup(t)
+  s.context.playing=true
+  await s.server.state(new URLSearchParams())
+  s.server.updated-=2000
+  await s.server.state(new URLSearchParams())
+  assert.equal(s.calls(),1,'Playback reuses geometry for five seconds')
+  s.context.playing=false
+  await s.server.state(new URLSearchParams())
+  assert.equal(s.calls(),2,'Stopped editing retains the 1.5 second recovery refresh')
+})
+
 test('focus changes refresh data and track changes cannot retain the old focus', async (t) => {
   const s = await setup(t)
   await s.server.state(new URLSearchParams())

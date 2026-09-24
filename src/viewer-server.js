@@ -51,7 +51,12 @@ class ViewerServer {
   }
   rotateZoom(direction) {
     if (!this.zoomAvailable() || !this.zoomMode) return false
-    if (Number.isFinite(direction)) this.zoomSteps += Math.sign(direction)
+    if (Number.isFinite(direction)) this.zoomSteps += Math.max(-64,Math.min(64,Math.trunc(direction)))
+    return true
+  }
+  rotateZoomDirect(direction) {
+    if (!this.zoomAvailable()) return false
+    if (Number.isFinite(direction)) this.zoomSteps += Math.max(-64,Math.min(64,Math.trunc(direction)))
     return true
   }
   async start(port = 8765, lan = false) {
@@ -109,12 +114,13 @@ class ViewerServer {
       width,
       [...waveformLayers],
     ])
-    if (!this.cache || signature !== this.signature || Date.now() - this.updated >= 1500) {
+    const cacheAge = context.playing ? 5000 : 1500
+    if (!this.cache || signature !== this.signature || Date.now() - this.updated >= cacheAge) {
       if (this.pending) await this.pending
       if (!matchesContext(context,this.context()) || this.context().synchronizing || Date.now() < (this.syncUntil || 0))
         return synchronizing(this.context())
       if (this.readFailure && Date.now() < this.retryAt) throw this.readFailure
-      if (!this.cache || signature !== this.signature || Date.now() - this.updated >= 1500) {
+      if (!this.cache || signature !== this.signature || Date.now() - this.updated >= cacheAge) {
         this.pending = (async () => {
           const data = await this.client.execute('viewer_snapshot', {
             trackUid: context.trackUid,

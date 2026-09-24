@@ -1,3 +1,43 @@
+# Timeline event-filter icons - 0.2.0-beta.59
+
+The TIME-row filters use the same compact outlined SVG treatment as the other
+timeline display controls. C, T, M and N represent cue, timecode, MIDI and notes;
+ALL uses a four-cell symbol. Visible text was removed while full title and ARIA
+labels remain. Filtering behavior and browser-local state are unchanged.
+Validation: 294 offline tests and package checks passed without skips. Beta.59
+is installed on the Raspberry Pi with the existing connection settings preserved.
+Read-only checks confirmed the served SVG paths, a connected and
+non-synchronising viewer, and an empty last_error. Designer was not mutated.
+
+# Timeline event-row filters - 0.2.0-beta.58
+
+The TIME row now includes local CUE, TIMECODE, MIDI, NOTES and ALL display
+controls. Individual controls omit their event row from the DOM; ALL restores
+every row when any are hidden and clears every row when all are shown. Removing
+rows reduces the sticky timeline header so the layer area receives the released
+height. This is browser-local display state and does not write to Designer.
+Validation: 294 offline tests and package checks passed without skips. New tests
+cover individual/ALL transitions and layout omission. Beta.58 is installed on the
+Raspberry Pi with the existing connection settings preserved. Read-only checks
+confirmed the served filter code, a connected and non-synchronising viewer, and
+an empty last_error. Designer was not mutated.
+
+# Background content refresh - 0.2.0-beta.56
+
+Separate editor.contextStale from general stale content. Only initial loading,
+identity changes and reconnects synchronise the entire viewer and stop its clock.
+Ordinary content/layer-set updates refresh through the guarded host queue without
+clearing presentation or disabling the viewer. Pre-write refresh, target/token
+validation and native mutation guards remain in place. Successful refresh clears
+the retry cooldown; failed reads retain the existing backoff.
+Validation: 289 offline tests and package checks passed without skips. New tests
+cover pending content refresh with uninterrupted clock subscription, immediate
+subsequent refresh, reconnect/track-change blocking and failed-read backoff.
+Beta.56 installed on Raspberry Pi, preserving current EDIT settings. Read-only
+verification confirmed connected, not synchronising and no last_error. No native
+edit or transport switch was performed. Actual editing latency awaits user review.
+GitHub remains beta.55 until publication is requested.
+
 # Centred connection arrows - 0.2.0-beta.55
 
 Effect/precomp connection arrows are drawn at the visible source layer's temporal
@@ -674,3 +714,89 @@ Beta.101: alignment counts only coincidences within 1 microsecond across differe
 Beta.102: ALLOW VIEWER EDIT is opt-in. viewer-editor.js validates a shared-state fingerprint and delegates to existing definitions.js actions inside main.perform(). Browser drags are relative encoder steps (12 px per step); never implement separate beat/frame math. Resource picker uses native resource_items for every supported resource parameter, server-owned indices, and UID equality checks. /api/resource-list batches 64 items; metadata refreshes at most once per 2.5 seconds while a picker is open. Native VideoClip.transportDuration supplies trimmed clip duration; enabledVersion selects the current version filename where unambiguous. Source files are never modified. Browser selection, file lists and native interpolation were tested; continuous physical mouse drags and all layer/device combinations were not certified.
 
 Beta.102 final verification: 142 automated tests and packaged-module smoke checks passed. Browser fixture covered a 130-item library, folder changes and selecting item 99. Native read checks covered audio, output, mapping, palette, video and CDL lists. An inactive native test layer verified HOLD/LINEAR/CUBIC; a temporary clip verified trim duration changes without modifying source frame count. Installed Companion integration verified browser-to-Companion and Companion-to-browser precision changes, native audio/output listing, and an empty last_error. No broad live playback or physical Stream Deck certification was performed.
+# Bounded dial coalescing - 0.2.0-beta.57
+
+All four normal Companion dials now share a bounded latest-intent queue. At most
+one native action is running and one trailing dial action is pending. Same-direction
+turns combine up to 64 detents; reversals cancel unsent detents instead of adding
+opposite work behind them. Layer/field selection, normal time nudging, values,
+key/layer timing and viewer zoom consume the combined distance in one update.
+Buttons and mode changes remain ordering barriers, and context invalidation still
+discards pending work.
+
+Layer selection is clamped at the first and last active layer. Turning farther at
+an endpoint is inert and preserves staged state; it never wraps to the other end.
+Parameter selection retains its existing clamped behavior.
+
+Validation: 292 offline tests and package checks passed with zero skips. Coverage
+includes burst saturation, reversal cancellation, action barriers, normal dial
+routing, combined native time delta, layer endpoints, one-read batched selection
+and zoom distance. Beta.57 installed on Raspberry Pi while preserving current
+settings; read-only verification found connected, not synchronising and no
+last_error. No physical dial burst or native edit was performed in verification,
+so final feel and latency await operator testing. GitHub remains beta.55.
+# Fast CC1 motor feedback - 0.2.0-beta.61
+
+External Designer brightness/volume changes now return to the Yamaha CC1 motor
+through a dedicated 400 ms REST poll. The poll runs sequentially, publishes only
+changed master data and does not invoke Python or editor synchronisation. Local
+fader writes invalidate overlapping reads so stale values cannot pull the motor
+backwards after a write.
+
+Beta.61 is installed on the Raspberry Pi. All 301 offline tests and package
+checks pass without skips. Read-only verification confirmed the connection,
+page 8, surface input/output settings and enabled trigger. No Designer mutation
+was used for verification.
+
+# Yamaha CC1 transport master - 0.2.0-beta.60
+
+The generated Yamaha CC1 layout targets Companion page 8. Its twelve LCD keys
+and RC1-RC4 follow the Stream Deck + page, RC5 zooms the timeline viewer and RC6
+moves timeline time. Panel buttons cover keyframe editing, media, transport
+selection, master 0/100 and time linking.
+
+The module reads every Designer transport through the official transport API.
+Transport selection clamps at the list ends. The motor fader writes brightness
+and volume together; while a request is active, intermediate input is discarded
+and only the newest absolute position remains pending. The confirmed selected
+transport level drives the motor. A brightness/volume mismatch uses the lower
+value and is visible through dedicated Companion variables.
+
+Beta.60 is installed on the Raspberry Pi. Companion page 8, the `cc1_fader`
+custom variable, Yamaha surface input/output settings and the enabled
+variable-change trigger were verified from a full configuration export. The
+existing page 8 and the full pre-trigger configuration are backed up privately
+under `.tools`. All 300 offline tests and package checks pass without skips. No
+Designer mutation was used for deployment verification.
+## Jog safety and transport selector - 0.2.0-beta.62
+
+The `JOG ACTIVE / LOCKED` preset persists its state and suppresses time-dial rotation while locked; key navigation and other controls remain available. `D3-Yamaha-CC1-Transports.companionconfig` targets page 9 with 42 live transport slots. Each populated button shows the Designer transport name, selects that transport for the shared brightness and volume fader, and highlights the selected target. Empty slots are inert. The generated page and module use Designer's read-only transport inventory; selection itself does not alter a Designer project.
+
+## Jog lock colour - 0.2.0-beta.63
+
+The jog lock preset uses the theme danger red while locked and returns to its normal surface colour while active. This is a preset feedback change; existing buttons created from the preset retain the feedback when moved in Companion.
+
+## Smooth playback presentation - 0.2.0-beta.64
+
+ViewerClock now samples its small atomic time/playback payload every 40 ms. The browser interpolates the displayed timecode and playhead with requestAnimationFrame, corrects to every native sample and stops extrapolating after 500 ms without fresh data. Playback-state propagation is part of the same guarded transport/track sample. Heavy viewer snapshots remain immediately invalidated by content, selection, viewport and edit changes, but their periodic recovery interval is five seconds while playing and 1.5 seconds while stopped. This reduces native Python work during playback without delaying edits.
+
+## Companion fast clock - 0.2.0-beta.65
+
+The installed Companion path now uses its own guarded 40 ms LiveUpdate property for time, native timecode anchor, playing and track identity. It updates only playback-facing variables and transport feedback, avoiding the full preset/thumbnail publication cost at frame cadence. The existing coherent 100 ms timeline, layer bounds and selected-value subscription remains authoritative for editing. Fast samples are cleared on writes, transport changes and disconnects, and track identity prevents an old transport clock from reaching the UI.
+
+## Companion fallback interpolation - 0.2.0-beta.66
+
+Playback-facing Companion variables now interpolate locally every 40 ms between confirmed clock samples. This also smooths the sequential 500 ms HTTP recovery path when LiveUpdate is silent, without increasing native request frequency. Presentation stops within 750 ms without a fresh sample and immediately when confirmed playback stops, the connection drops, context changes or track identity differs. Confirmed editor time remains separate from disposable display interpolation.
+
+## Unified Companion clock presentation - 0.2.0-beta.67
+
+Full and fast Companion publications now resolve time, live time, dial timecode and layer elapsed/remaining from the same presentation clock, preventing alternating confirmed/interpolated values. Interpolated absolute timecode advances from the latest native label anchor rather than passing through the exact-sample-only formatter, which previously produced alternating labels and dashes during playback. The anchored formatter includes 29.97/59.94 drop-frame frame-count conversion.
+
+## HTTP timecode anchor - 0.2.0-beta.68
+
+The sequential `live_state` fallback already returned a native label for the current transport position inside `timecodeSamples`, but Connection passed no `timecodeSample` to Editor. `Editor.acceptTimecodes` therefore cleared the running anchor on every poll and interpolated frames rendered as dashes. Connection now promotes the exact current sample into the timeline payload before Editor consumes it. No Designer script or project mutation is involved.
+## 0.2.0-beta.69
+
+Companion exposes PREV TRACK and NEXT TRACK presets for the transport in the editor snapshot. They call the documented `/api/session/transport/gotoprevtrack` and `gotonexttrack` endpoints with the nested transport locator, independently of the CC1 master-fader target. A successful track navigation immediately invalidates track-bound selection and editing modes so normal context synchronisation must identify the new track before another edit. The presets are available in the Transport and time linking group and are not placed on generated pages.
+
+The Yamaha CC1 page 8 download is generated from `templates/yamaha-cc1-page8.json`, a sanitised copy of the operator's current 8 x 7 Companion layout. It retains controls and page-9 navigation while replacing the live connection ID with the standard import placeholder. The generated wrapper supplies only the neutral localhost configuration and current module version. Release archives include page 8 and the page 9 transport selector.

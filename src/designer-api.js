@@ -5,14 +5,19 @@
 const paths = Object.freeze({
   execute: '/api/session/python/execute',
   transports: '/api/session/transport/activetransport',
+  allTransports: '/api/session/transport/transports',
   annotations: (uid) => '/api/session/transport/annotations?uid=' + encodeURIComponent(uid),
   liveUpdate: '/api/session/liveupdate',
   thumbnail: (uid) => `/api/v1/thumbnail/${uid}?width=160&height=90`,
   transport: (operation) => {
-    if (!['play','playsection','playloopsection','stop','gotonextsection','gotoprevsection'].includes(operation)) throw new Error('Invalid transport operation')
+    if (!['play','playsection','playloopsection','stop','gotonextsection','gotoprevsection','gotonexttrack','gotoprevtrack'].includes(operation)) throw new Error('Invalid transport operation')
     return '/api/session/transport/' + operation
   },
   playback: (playing) => `/api/session/transport/${playing ? 'stop' : 'playsection'}`,
+  transportLevel: (kind) => {
+    if (!['brightness','volume'].includes(kind)) throw new Error('Invalid transport level')
+    return '/api/session/transport/' + kind
+  },
 })
 
 function requireSuccess(body, fallback = 'Invalid Designer API response') {

@@ -27,7 +27,7 @@ Share the repository URL, branch and commit, not a configured Companion backup. 
 2. Set a new version in `package.json`, both lockfile version entries and `companion/manifest.json`. Update README download links, changelog and handoff. Keep the internal module ID unchanged.
 3. Run the build/release commands in [BUILD](BUILD.md). The release script reads the package version; change the script only if the supported version series or artifact layout changes.
 4. Commit and push the final source. Create a GitHub prerelease with tag `v<package-version>` targeting that commit. Do not reuse an existing published tag.
-5. Attach the module TGZ, both clean page exports, Companion ZIP, source ZIP and `SHA256SUMS.txt` from `releases/0.2.beta/`.
+5. Attach the module TGZ, all four clean page exports, Companion ZIP, source ZIP and `SHA256SUMS.txt` from `releases/0.2.beta/`.
 6. Verify public downloads, checksums and version agreement. Import the TGZ into Companion and explicitly select the new version for the connection; importing alone does not activate it. Preserve custom pages and local connection settings.
 
 The public source and source ZIP must contain everything needed for offline development. Private test probes, credentials, local projects and installed dependencies do not belong in either. Git history preserves committed source revisions; release assets preserve the matching installable builds. The repository owner's public GitHub identity remains visible.

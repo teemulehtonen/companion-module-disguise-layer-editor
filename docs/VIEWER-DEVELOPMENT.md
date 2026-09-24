@@ -140,7 +140,7 @@ Resource fields have a `resource` discriminator, placeholder numeric value 0 for
 
 ## Update model
 
-Live reads run every 75 ms independently of heavy geometry snapshots. Geometry refreshes every 1.5 seconds or after selection/content/viewport invalidation. Companion edits advance viewerEditRevision. Confirmed selections update cached rows immediately; stale full responses must not restore old selections. Hidden tabs pause browser polling. Full DOM redraw is avoided for clock/value-only changes.
+Live reads run every 75 ms independently of heavy geometry snapshots. The small native playback clock samples at 40 ms; the browser interpolates only presentation between confirmed samples and freezes after 500 ms without a new sample. Stable playback geometry refreshes every five seconds, while stopped editing retains the 1.5-second recovery refresh. Selection, content, viewport and edit invalidation still refresh immediately. Companion edits advance viewerEditRevision. Confirmed selections update cached rows immediately; stale full responses must not restore old selections. Hidden tabs pause browser polling and animation. Full DOM redraw is avoided for clock/value-only changes.
 
 Native curves use FieldSequence.eval in beat time. Convert through track.timeToBeat/beatToTime; beats are not necessarily seconds. Preserve fractional FPS. Last valid frame is ceil(end * fps - epsilon) - 1. Sections use native sectionInfo. Cue/MIDI/TC/notes come from transport annotations.
 

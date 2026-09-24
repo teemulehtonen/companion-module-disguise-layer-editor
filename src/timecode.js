@@ -33,4 +33,17 @@ function absoluteTimecode(seconds, fps, dropFrame, samples, liveSample) {
   // displaying track-relative time while waiting for a newly observed key.
   return samples?.length ? '--:--:--:--' : timecode(seconds, fps, dropFrame)
 }
-module.exports = { timecode, absoluteTimecode }
+function anchoredTimecode(seconds, fps, dropFrame, anchor) {
+  if (!Number.isFinite(seconds) || !Number.isFinite(fps) || fps <= 0 || !Number.isFinite(anchor?.seconds))
+    return timecode(seconds,fps,dropFrame)
+  const match=/^(\d+):(\d{2}):(\d{2})[.:;](\d{2})$/.exec(String(anchor.label || ''))
+  if(!match)return timecode(seconds,fps,dropFrame)
+  const nominal=Math.round(fps),hours=Number(match[1]),minutes=Number(match[2]),secs=Number(match[3]),frames=Number(match[4])
+  let anchorFrames=((hours*60+minutes)*60+secs)*nominal+frames
+  if(dropFrame && (nominal===30 || nominal===60)) {
+    const dropped=nominal===60?4:2,totalMinutes=hours*60+minutes
+    anchorFrames-=dropped*(totalMinutes-Math.floor(totalMinutes/10))
+  }
+  return timecode((anchorFrames+Math.round((seconds-anchor.seconds)*fps))/fps,fps,dropFrame)
+}
+module.exports = { timecode, absoluteTimecode, anchoredTimecode }

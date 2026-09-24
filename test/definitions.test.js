@@ -36,6 +36,7 @@ test('Companion lifecycle supports demo load, action execution and shutdown', as
   ])
     instance[method] = () => {}
   instance.setVariableValues = (values) => Object.assign(state, values)
+  instance.saveConfig = () => {}
   instance.setActionDefinitions = (definitions) => {
     instance.actions = definitions
   }
@@ -77,6 +78,14 @@ test('Companion lifecycle supports demo load, action execution and shutdown', as
   instance.editor.stale = true
   await instance.actions.time.callback({ options: { direction: 1, step: 1 } })
   assert.equal(state.time, 4)
+  await instance.actions.jog_lock.callback({ options: {} })
+  assert.equal(state.jog_locked, true)
+  assert.equal(state.jog_lock_label, 'LOCKED')
+  await instance.actions.time.callback({ options: { direction: 1, step: 1 } })
+  assert.equal(state.time, 4)
+  await instance.actions.jog_lock.callback({ options: {} })
+  await instance.actions.time.callback({ options: { direction: 1, step: 1 } })
+  assert.equal(state.time, 5)
   assert.equal(state.last_error, '')
   instance.editor.client.data.layers = []
   instance.editor.stale = true
@@ -138,6 +147,23 @@ test('all shipped presets are reachable from a preset group', () => {
   assert.deepEqual([...ids].sort(), Object.keys(definitions).sort())
 })
 
+test('previous and next track presets target the editor transport', () => {
+  const [groups, definitions] = presets()
+  for (const operation of ['gotoprevtrack', 'gotonexttrack']) {
+    const preset = definitions['transport_' + operation]
+    assert.equal(preset.steps[0].down[0].actionId, 'transport')
+    assert.deepEqual(preset.steps[0].down[0].options, { operation })
+    assert.ok(groups.find((group) => group.id === 'transport').definitions.includes('transport_' + operation))
+  }
+})
+
+test('jog lock preset changes to the danger colour while locked', () => {
+  const theme = require('../src/theme')
+  const [, definitions] = presets()
+  assert.equal(definitions.jog_lock.feedbacks[0].feedbackId, 'jog_locked')
+  assert.equal(definitions.jog_lock.feedbacks[0].style.bgcolor, theme.danger)
+})
+
 test('friendly layer types use Add Layer names and keep unknown types readable', () => {
   const { layerTypeLabel } = require('../src/layer-types')
   assert.equal(layerTypeLabel('VariableVideoModule'), 'Video')
@@ -146,4 +172,28 @@ test('friendly layer types use Add Layer names and keep unknown types readable',
   assert.equal(layerTypeLabel('ColourAdjustModule'), 'Colour Adjust')
   assert.equal(layerTypeLabel('FutureEffectModule'), 'Future Effect')
   assert.equal(layerTypeLabel(), '')
+})
+
+test('fast clock publication updates only playback-facing variables',()=>{
+ const instance=Object.create(DisguiseLayerControl.prototype),values={}
+ instance.editor={snapshot:{fps:25,customFps:false,tcMode:'25'},time:2,playing:true,layer:{start:1,end:5},timecodeSamples:[],liveTimecodeSample:null}
+ instance.connection={time:2};instance.setVariableValues=v=>Object.assign(values,v);instance.checkFeedbacks=()=>{}
+ instance.publishClock()
+ assert.equal(values.timecode,'00:00:02:00')
+ assert.equal(values.live_timecode,'00:00:02:00')
+ assert.equal(values.playback_label,'STOP')
+ assert.equal(values.layer_elapsed,'1')
+ assert.equal(values.layer_remaining,'3')
+ assert.equal(values.dial_value_3,'00:00:02:00')
+})
+
+test('Companion display interpolates confirmed playback without extra Designer reads',()=>{
+ const instance=Object.create(DisguiseLayerControl.prototype),values={},actualNow=Date.now
+ Object.assign(instance,{editor:{snapshot:{fps:25,customFps:false,tcMode:'25',trackUid:'1',length:20},time:2,viewerTransportTime:2,playing:true,linkTime:true,layer:{start:1,end:5},timecodeSamples:[],liveTimecodeSample:null},connection:{time:2,connected:true},setVariableValues:v=>Object.assign(values,v),checkFeedbacks(){},clockPresentation:{trackUid:'1',time:2,playing:true,received:1000}})
+ try{Date.now=()=>1040;instance.publishClock()}finally{Date.now=actualNow}
+ assert.equal(values.time,2.04)
+ assert.equal(values.live_time,2.04)
+ assert.equal(values.timecode,'00:00:02:01')
+ assert.notEqual(values.timecode,'--:--:--:--')
+ assert.equal(values.layer_elapsed,'1.04')
 })
