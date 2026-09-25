@@ -27,7 +27,7 @@ test('GUI transport switches resynchronise through the real host queue without n
  const connection=new Connection(client,()=>{})
  host.connection=connection;connection.connected=true;connection.schedulePoll=()=>{};connection.watch('11')
  const src=fs.readFileSync(path.join(__dirname,'../src/main.js'),'utf8').replaceAll(String.fromCharCode(13),'')
- const from=src.indexOf('          (state) => {',src.indexOf('const connection = new Connection('))
+ const from=src.indexOf('          (state, update) => {',src.indexOf('const connection = new Connection('))
  const end=src.indexOf(String.fromCharCode(10)+'          },'+String.fromCharCode(10)+'          {',from)
  assert.ok(from>=0 && end>from)
  connection.onState=vm.runInNewContext('(function(){return '+src.slice(from,end)+'}}).call(host)',{host,connection})

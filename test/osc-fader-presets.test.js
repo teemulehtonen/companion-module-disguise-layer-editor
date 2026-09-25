@@ -1,0 +1,95 @@
+'use strict'
+const {test}=require('node:test')
+const assert=require('node:assert/strict')
+const {DisguiseLayerControl}=require('../src/main')
+const {actions,presets}=require('../src/definitions')
+function instance(t){
+ const item=Object.create(DisguiseLayerControl.prototype),sent=[],values={}
+ Object.assign(item,{config:{oscHost:'127.0.0.1',oscPort:9000},oscFaderValues:Array(8).fill(0),masterTransportUid:'1',masterTransports:[{uid:'1',name:'One',brightness:.4,volume:.4}],
+ oscSend(...args){sent.push(args)},log(){},connectionStatus(){},setVariableValues(v){Object.assign(values,v)},checkFeedbacks(){},saveConfig(v){this.saved=structuredClone(v);this.saves=(this.saves||0)+1}})
+ t.after(()=>{clearTimeout(item.masterPublishTimer);clearTimeout(item.oscSaveTimer)})
+ return {item,sent,values}
+}
+test('eight fixed transport slots precede eight OSC targets; refresh preserves OSC selection',t=>{
+ const {item}=instance(t)
+ item.acceptMasterTransports(Array.from({length:12},(_,i)=>({uid:String(i+1),name:'Transport '+(i+1)})))
+ assert.equal(item.masterTransports.length,8)
+ item.selectMasterTransportSlot(15)
+ assert.equal(item.masterTransportUid,'osc:fader8')
+ item.acceptMasterTransports([{uid:'3',name:'Three',brightness:.5,volume:.5}])
+ assert.equal(item.masterTransportUid,'osc:fader8')
+ const v=item.masterVariableValues(true)
+ assert.equal(v.master_transport_1,'Three');assert.equal(v.master_transport_2,'')
+ assert.equal(v.master_transport_9,'OSC FADER 1');assert.equal(v.master_transport_16,'OSC FADER 8')
+ assert.equal(v.master_transport_17,'')
+ item.selectMasterTransportSlot(16);assert.equal(item.masterTransportUid,'osc:fader8')
+ item.selectMasterTransportSlot(3);assert.equal(item.masterTransportUid,'osc:fader8')
+})
+test('OSC emits only one float 0–1 and keeps independent per-channel memory and motor targets',async t=>{
+ const {item,sent,values}=instance(t)
+ item.selectMasterTransportSlot(8)
+ await item.setTransportMasterLevel(23.4)
+ assert.deepEqual(sent[0],['127.0.0.1',9000,'/vehka/fader1',[{type:'f',value:.234}]])
+ item.selectMasterTransportSlot(9)
+ item.publishMaster()
+ assert.equal(values.transport_master_level,0)
+ await item.setTransportMasterLevel(80)
+ item.selectMasterTransportSlot(8)
+ item.publishMaster()
+ assert.equal(values.transport_master_level,23.4)
+ assert.equal(values.osc_fader_1,.234);assert.equal(values.osc_fader_2,.8)
+ assert.equal(sent.length,2,'selection and motor recall must not transmit OSC')
+ item.selectMasterTransportSlot(15)
+ await item.setTransportMasterLevel(100)
+ await item.setTransportMasterLevel(0)
+ assert.deepEqual(sent.at(-2).slice(2),['/vehka/fader8',[{type:'f',value:1}]])
+ assert.deepEqual(sent.at(-1).slice(2),['/vehka/fader8',[{type:'f',value:0}]])
+ item.flushOscFaderValues()
+ assert.deepEqual(item.saved.oscFaderValues,[.234,.8,0,0,0,0,0,0])
+})
+test('OSC burst persistence is batched, including final shutdown flush',async t=>{
+ const {item}=instance(t)
+ item.selectMasterTransportSlot(8)
+ const before=item.saves
+ for(let n=0;n<=100;n++)await item.setTransportMasterLevel(n)
+ assert.equal(item.saves,before)
+ await item.destroy()
+ assert.equal(item.saves,before+1)
+ assert.equal(item.saved.oscFaderValues[0],1)
+ assert.equal(item.oscSaveTimer,null)
+})
+test('invalid OSC destination, invalid levels and VIEW cannot send or alter memory',async t=>{
+ const {item,sent}=instance(t)
+ item.selectMasterTransportSlot(8)
+ for (const [host,port] of [['',9000],['bad host',9000],['localhost',0],['localhost',65536],['localhost',1.2]]) {
+  Object.assign(item.config,{oscHost:host,oscPort:port})
+  await item.setTransportMasterLevel(50)
+ }
+ Object.assign(item.config,{oscHost:'localhost',oscPort:9000})
+ for(const value of [-1,101,NaN,Infinity]) await assert.rejects(item.setTransportMasterLevel(value))
+ item.config.viewOnly=true;await item.setTransportMasterLevel(50)
+ assert.deepEqual(sent,[]);assert.equal(item.oscFaderValues[0],0)
+})
+test('an in-flight transport write stays on its original target when switching to OSC',async t=>{
+ const {item,sent,values}=instance(t);let release
+ const gate=new Promise(resolve=>{release=resolve}),writes=[]
+ item.client={async setTransportMaster(uid,value){writes.push([uid,value]);await gate},close(){}}
+ const pending=item.setTransportMasterLevel(30)
+ item.setTransportMasterLevel(45)
+ item.selectMasterTransportSlot(8)
+ await item.setTransportMasterLevel(70)
+ release();await pending
+ assert.deepEqual(writes,[['1',.3]])
+ assert.equal(sent.length,1)
+ assert.equal(values.transport_master_level,70)
+ assert.equal(item.masterTransports[0].brightness,.3)
+})
+test('preset catalog exposes exactly eight transports and eight OSC selectors with compatible action IDs',()=>{
+ const [groups,p]=presets()
+ const selectors=groups.find(g=>g.id==='master').definitions.filter(id=>id.startsWith('master_transport_'))
+ assert.equal(selectors.length,16)
+ assert.match(p.master_transport_9.name,/OSC fader 1/)
+ assert.match(p.master_transport_16.name,/OSC fader 8/)
+ assert.equal(p.master_transport_9.steps[0].down[0].actionId,'transport_master_select_slot')
+ assert.ok(actions({}).transport_master_level)
+})

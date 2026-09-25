@@ -800,3 +800,148 @@ The sequential `live_state` fallback already returned a native label for the cur
 Companion exposes PREV TRACK and NEXT TRACK presets for the transport in the editor snapshot. They call the documented `/api/session/transport/gotoprevtrack` and `gotonexttrack` endpoints with the nested transport locator, independently of the CC1 master-fader target. A successful track navigation immediately invalidates track-bound selection and editing modes so normal context synchronisation must identify the new track before another edit. The presets are available in the Transport and time linking group and are not placed on generated pages.
 
 The Yamaha CC1 page 8 download is generated from `templates/yamaha-cc1-page8.json`, a sanitised copy of the operator's current 8 x 7 Companion layout. It retains controls and page-9 navigation while replacing the live connection ID with the standard import placeholder. The generated wrapper supplies only the neutral localhost configuration and current module version. Release archives include page 8 and the page 9 transport selector.
+## 0.2.0-beta.70
+
+CC1 master-transport selection now saves its target, returns to Companion immediately and defers a master-only variable/feedback publication. This lets a following internal set-page action run without waiting for the full editor publication path. LiveUpdate timeline samples compare track, layer bounds and Designer selection; time/playback-only changes go to the lightweight clock callback. Selected-field-only changes publish just value-facing variables. Structural, content, clock-format and context changes retain the full guarded publication path.
+## 0.2.0-beta.71
+
+Yamaha CC1 page 8 assigns a detent divisor of two to RC1–RC6. The module retains a signed half-step independently for each encoder, emits one editor step after two matching physical detents and cancels opposite half-steps. Stream Deck presets retain divisor one. The sensitivity is action configuration in the exported Yamaha page so the shared action implementation does not infer hardware identity.
+## Pending local change - manual transport list refresh
+
+The CC1 transport selector keeps its names, order and membership cached after the
+initial connection read. Page 8 navigation to page 9 remains an internal page change
+only. The new REFRESH TRANSPORTS preset in CC1 transport master fader invokes
+transport_master_refresh to reread and publish all 42 name slots on demand. Empty
+slots are cleared and selection uses the existing fallback when its UID disappears.
+Place the preset on the desired page; it is not inserted into the 42-slot export.
+
+The 400 ms REST read remains necessary for live brightness/volume motor feedback,
+but merges levels into cached slots by UID and does not publish name variables.
+Health checks no longer reread the full master inventory. Manual refreshes coalesce,
+retain cached data on error and protect newer local fader levels from stale reads.
+This reduces inventory publication work; physical page-switch latency is unmeasured.
+
+Validation: 321 offline tests passed, zero failures/skips, through the reusable
+regression runner; packaged Companion action smoke checks and clean page generation
+passed. Coverage includes cached names/order, live levels, explicit refresh, read
+failure, coalescing, fader-write overlap, closure, preset wiring and navigation-only
+page opening. No installed-Companion probes, native mutations, deployment or
+publication were performed for this change.
+## Beta.72 installed - manual transport refresh
+
+Installed 0.2.0-beta.72 on the existing Companion connection. The first hot version
+switch entered a repeated initialise/restart cycle; logs showed successful module
+initialisation followed by another process start. Temporarily restoring beta.71
+recovered the connection. Switching to beta.72 with the connection disabled, then
+enabling it, produced a stable process. The underlying hot-switch cause is not yet
+established; no source change was needed for the successful activation.
+
+Read-only installed checks confirmed beta.72, unchanged configuration hash,
+connected viewer, empty last_error and master_refresh in the installed preset
+catalog. Subsequent logs showed no repeat restart after the clean activation.
+Beta.72 package smoke checks passed; the behavior had passed 321 offline tests.
+No Designer mutation or physical page-switch latency test was performed.
+## Yamaha CC1 display latency - local surface driver 0.5.1-beta.1
+
+The operator confirmed that Companion's browser updated colours immediately while
+Yamaha's LCD was delayed. The installed page-9 opener had only an internal set_page
+action, with no module refresh or action delay. Yamaha surface 0.5.0 queued every
+LCD tile indefinitely; animated clock displays could outpace its 4 ms tile pacing.
+
+A local Yamaha 0.5.1-beta.1 build now sends one LCD image at a time and retains only
+the newest pending image for each key, preserving fairness and serial pacing.
+Status images use the same queue; close discards pending images. The patch, tests,
+upstream commit and rebuild instructions are in support/yamaha-cc1/README.md.
+This changes the Yamaha surface driver, not the Disguise module, which remains
+beta.72. No GitHub publication was performed.
+
+Validation: Yamaha TypeScript build, protocol/layout/lifecycle tests, latest-paint
+queue regressions, manifest/license check and package build passed. Read-only
+installed verification confirmed 0.5.1-beta.1, connected CC1 and unchanged surface
+and page-group settings. The operator confirmed page/colour latency disappeared
+or decreased clearly after installation. No numerical latency or Designer mutation
+test was performed. Upstream Yamaha 0.5.0 remains available for rollback.
+## Beta.73 installed - standalone track/page navigation presets
+
+Added three presets under Track / page navigation: a persistent shared mode
+switch, Previous and Next. The adaptive presets use native Companion IF/ELSE:
+navigation_track feedback selects the existing transport action. PAGE is the
+initial mode; the operator explicitly chose to add normal Companion surface
+page actions to the empty ELSE branches. No TCP helper remains and no TCP
+setting was changed. No installed button placement or page-layout mutation was
+performed. This does not implement partial-surface paging.
+
+Validation: 324 offline tests and package smoke passed, including persisted mode
+reload and real packaged preset/feedback registration. The common preset test now
+recursively checks IF/ELSE action branches. Initial validation exposed its former
+flat-action assumption; that coverage was extended rather than skipping entries.
+Installed beta.73 with a disabled/version-switch/enabled sequence. Read-only
+checks confirmed enabled beta.73, unchanged configuration hash, all three presets
+in the catalog, PAGE mode and empty last_error. No physical page press or native
+Designer mutation test was performed. No remote publication was performed.
+
+## Beta.74 installed - track/section navigation
+
+The operator replaced the track/page design with TRACK/SECTION navigation and
+will configure separate fixed page buttons (1 and 2). Both PREV/NEXT preset
+branches are now complete: existing guarded track actions when navigation_track
+is true, matching section actions otherwise. False/default mode displays SECTION.
+The mode action, feedback and config IDs remain compatible. Existing placed
+PREV/NEXT copies are not rewritten; replace them from Track / section navigation
+to receive the new ELSE branches. No button placements or page settings changed.
+
+All 324 offline tests and package smoke passed, including both section directions,
+VIEW guards for both branches, state persistence and packaged feedback/variables.
+Read-only installed checks confirmed beta.74 enabled, unchanged configuration,
+presets available, SECTION state and empty last_error. No native Designer mutation
+or physical button test was performed. No remote publication was performed.
+
+## Beta.75 installed - eight transport and eight OSC fader presets
+
+Operator requested presets only and will arrange the selector page. The master
+preset group now exposes eight fixed transport slots, then OSC FADER 1–8. The
+cached transport inventory is capped at eight; unused transport slots remain
+empty so OSC slot numbers are stable (9–16). Legacy variables/export cells 17–42
+remain blank; the old export layout is retained without extra visible presets.
+No installed controls, layouts, OSC destination or port settings were changed.
+
+OSC destination IP/hostname and UDP port (default 9000) are configurable. Blank
+host disables output. The existing fader action dispatches OSC channels through
+Companion oscSend with explicit type f, normalized 0–1, paths /vehka/fader1–8.
+Each channel has its own config-persisted value (250 ms batched saves; clean
+shutdown/reload flush). Selecting a channel recalls transport_master_level for
+the existing motor binding; selection/startup does not transmit OSC. VIEW blocks
+output. Receiver delivery is not acknowledged by UDP and values are local memory.
+
+Yamaha driver 0.5.1-beta.2 was necessary to prevent motor recall movement from
+feeding back as user input. Only touched fader samples publish position; targets
+received while held are deferred until release. Existing transfer variable IDs,
+surface identity, page group and layout are preserved. The combined reusable
+patch and tests are in support/yamaha-cc1/latest-paint.patch.
+
+Validation: 331 offline tests and package smoke passed. Typed OSC arguments and
+independent recall/persistence were tested with a mocked SDK sender. Yamaha TS
+build, protocol/layout/lifecycle, paint queue, motor recall tests, license/manifest
+check and package build passed. Windows Yarn invocation needed a local direct
+Node/Corepack build-tool adaptation; initial failed packaging was rebuilt cleanly.
+Read-only installed checks confirmed module beta.75 enabled, expected presets,
+unchanged config hash, empty last_error; Yamaha beta.2 connected with unchanged
+surface/group config. No live OSC receiver test, physical motor test, native
+Designer mutation test or remote publication was performed.
+
+## Beta.76 installed - Designer timeline zoom encoder
+
+Extended existing viewer_zoom action to call the native timeline zoom API in
+addition to local viewer zoom. Existing button/encoder placements were untouched.
+PrivateState guiTimeStep and enabledZoomLevels were confirmed on the installed
+Designer by a read-only probe. Native writes use a small standalone script, read
+current state on execution, skip disabled levels and clamp at endpoints. Positive
+encoder motion selects smaller time steps (zoom in). Burst queue is independent
+of editor synchronization, bounded to eight pending steps, one request in flight,
+with no retry on uncertainty. VIEW/demo only zoom the local viewer.
+
+Validation: 336 offline tests and package smoke passed; Python zoom fixture,
+action detent scaling, burst limits, disconnect/error behavior and VIEW protection
+covered. Clean installation confirmed beta.76 enabled, unchanged configuration
+and empty last_error. No native zoom mutation or physical encoder test was run.
+No publication or page-layout mutation was performed.

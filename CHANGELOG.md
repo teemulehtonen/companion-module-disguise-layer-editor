@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.2.0-beta.71 (local Companion update)
+
+- Reduce Yamaha CC1 RC1–RC6 sensitivity to one editor step per two physical detents while leaving Stream Deck dial sensitivity unchanged.
+- Keep fractional detents isolated per physical Yamaha encoder and cancel opposite half-steps.
+## 0.2.0-beta.70 (local Companion update)
+
+- Return immediately from CC1 master-transport selection and publish only its motor, status variables and selected-slot feedback.
+- Route timeline-only LiveUpdate changes through the lightweight clock publisher instead of rebuilding every editor variable and feedback at 100 ms.
+- Publish an externally changing selected parameter through a small value-only update when no geometry or selection changed.
+
 ## 0.2.0-beta.69 (local Companion update)
 
 - Add `PREV TRACK` and `NEXT TRACK` Companion presets for the transport currently selected in the layer editor.
@@ -390,3 +400,26 @@
 - Layer timing, native timecode, resource browsing and section playback.
 - Git source contains only development files and documentation; installers, shortcuts, obsolete fixtures and generated pages are excluded.
 - Concise English instructions and documented limitations. See [test report](docs/TRACK-1-TESTS.md).
+
+## 0.2.0-beta.72
+
+- Cache CC1 transport names and slots until the REFRESH TRANSPORTS preset is pressed.
+- Keep live master-level feedback separate from inventory/name publication.
+- Avoid redundant full master-inventory reads during connection health checks.
+## 0.2.0-beta.73
+
+- Add standalone TRACK/PAGE toggle and adaptive Previous / Next presets. Mode is shared and saved; navigation uses native Companion IF/ELSE. Add the normal surface page action to each empty ELSE branch. Existing buttons and page layouts are unchanged.
+
+## 0.2.0-beta.74
+
+- Change navigation presets to TRACK/SECTION, with complete previous/next track and section branches. Use separate Companion buttons for page changes. Replace previously placed PREV/NEXT presets to receive the new branches.
+
+## 0.2.0-beta.75
+
+- Add eight OSC fader presets after up to eight transport targets. Configure a destination and UDP port; sends /vehka/fader1–8 with one float 0–1.
+- Remember independent OSC values and restore the shared motor target on selection. Keep existing fader action and variable IDs. No page placement changes.
+- Include Yamaha 0.5.1-beta.2 support patch to separate motor travel from physical fader input.
+
+## 0.2.0-beta.76
+
+- Existing zoom encoder controls both the local viewer and Designer timeline using enabled native zoom levels. Coalesce fast turns and retain VIEW protection; no button-placement changes are needed.

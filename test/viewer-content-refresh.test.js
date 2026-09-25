@@ -15,7 +15,7 @@ async function setup() {
  const connection=new Connection(client,()=>{})
  connection.connected=true;connection.enableLiveUpdate=false;host.connection=connection
  const src=fs.readFileSync(require.resolve('../src/main'),'utf8').replaceAll('\r','')
- const from=src.indexOf('          (state) => {',src.indexOf('const connection = new Connection('))
+ const from=src.indexOf('          (state, update) => {',src.indexOf('const connection = new Connection('))
  const end=src.indexOf('\n          },\n          {',from)
  connection.onState=vm.runInNewContext('(function(){return '+src.slice(from,end)+'}}).call(host)',{host,connection})
  return {host,editor,connection,client}

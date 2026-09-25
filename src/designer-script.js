@@ -1,5 +1,6 @@
 'use strict'
 const viewerScript = require('./viewer-script')
+const { makeZoomScript } = require('./designer-zoom')
 const gridScript = require('./viewer-grid-script')
 const layerGroupsScript = require('./designer-layer-groups')
 const waveformScript = require('./viewer-waveform-script')
@@ -12,6 +13,7 @@ const waveformScript = require('./viewer-waveform-script')
 // seconds-to-beats ratio incorrect. Native player.tCurrent is in beats,
 // while all Companion/viewer timestamps and makeJumpToTime inputs are seconds. Do not write native GUI selection widgets.
 function makeScript(command, args = {}) {
+  if (command === 'timeline_zoom') return makeZoomScript(args.steps)
   const payload = Buffer.from(JSON.stringify({ command, ...args }), 'utf8').toString('base64')
   const body = `import json
 import base64

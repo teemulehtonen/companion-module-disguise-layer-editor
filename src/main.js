@@ -95,7 +95,8 @@ class DisguiseLayerControl extends InstanceBase {
           connection_status: 'Connection status',
           timecode: 'Playhead HH:MM:SS:FR',
           live_timecode: 'Live playhead HH:MM:SS:FR',
-          master_transport: 'Selected transport for the CC1 master fader',
+          ...Object.fromEntries(Array.from({length:8},(_,i)=>['osc_fader_'+(i+1), 'Stored OSC fader '+(i+1)+' value (0–1)'])),
+          master_transport: 'Selected transport or OSC channel for the CC1 master fader',
           master_transport_position: 'Selected master transport position',
           ...Object.fromEntries(Array.from({ length: 42 }, (_, i) => [`master_transport_${i + 1}`, `Master transport slot ${i + 1}`])),
           transport_master_level: 'Selected transport master level, 0–100',
@@ -103,6 +104,7 @@ class DisguiseLayerControl extends InstanceBase {
           transport_master_volume: 'Selected transport volume, 0–100',
           transport_master_detail: 'Selected transport brightness and volume',
           transport_master_mismatch: 'Brightness and volume differ',
+          navigation_mode: 'Track / section navigation mode',
           jog_locked: 'Jog wheel locked',
           jog_lock_label: 'Jog wheel lock label',
         }).map(([id, name]) => [id, { name }]),
@@ -110,9 +112,10 @@ class DisguiseLayerControl extends InstanceBase {
     )
     this.setActionDefinitions(actions(this))
     this.setFeedbackDefinitions({
+      navigation_track: {type:'boolean',name:'Track navigation enabled',options:[],defaultStyle:{bgcolor:theme.active},callback:()=>Boolean(this.trackNavigation)},
       link_time:{type:'boolean',name:'Time linked',options:[],defaultStyle:{bgcolor:theme.active},callback:()=>Boolean(this.editor?.linkTime)},
       jog_locked:{type:'boolean',name:'Jog wheel locked',options:[],defaultStyle:{bgcolor:theme.active},callback:()=>Boolean(this.jogLocked)},
-      transport_master_selected:{type:'boolean',name:'Master transport slot selected',options:[{type:'number',id:'slot',label:'Transport slot (1–42)',default:1,min:1,max:42}],defaultStyle:{bgcolor:theme.active},callback:f=>this.masterTransports?.[Number(f.options.slot)-1]?.uid===this.masterTransportUid},
+      transport_master_selected:{type:'boolean',name:'Master transport slot selected',options:[{type:'number',id:'slot',label:'Transport slot (1–42)',default:1,min:1,max:42}],defaultStyle:{bgcolor:theme.active},callback:f=>Boolean(this.masterTargetSlots()[Number(f.options.slot)-1]?.uid) && this.masterTargetSlots()[Number(f.options.slot)-1]?.uid===this.masterTransportUid},
       timing_step_selected:{type:'boolean',name:'Timing step selected',options:[{type:'number',id:'slot',label:'Slot',default:0,min:0,max:9}],defaultStyle:{bgcolor:theme.active},callback:f=>Boolean(this.editor?.timeStepChoices[Number(f.options.slot)]?.selected)},
       timing_step_unavailable:{type:'boolean',name:'Timing step unavailable',options:[{type:'number',id:'slot',label:'Slot',default:0,min:0,max:9}],defaultStyle:{bgcolor:0,color:theme.secondary},callback:f=>!this.editor?.timeStepChoices[Number(f.options.slot)]},
       transport_state:{type:'boolean',name:'Transport mode',options:[{type:'dropdown',id:'operation',label:'Mode',default:'play',choices:[{id:'play',label:'Play'},{id:'playsection',label:'Play to section end'},{id:'playloopsection',label:'Play loop section'},{id:'stop',label:'Stop'}]}],defaultStyle:{bgcolor:theme.active},callback:f=>f.options.operation==='stop' ? !this.editor?.playing : Boolean(this.editor?.playing && this.editor.lastPlaybackMode===f.options.operation)},
@@ -153,6 +156,8 @@ class DisguiseLayerControl extends InstanceBase {
         value:
           'VALUE rotation edits the selected key or constant; press VALUE to add a key at the playhead. LAYER EDIT opens IN / POSITION (centre time) / OUT / FIT (length). Press a timing dial to change its step. Time presses cycle 1 frame / 0.5 / 1 / 2 / 5 / 10 / 30 seconds / 1 / 2 / 5 minutes, including while SELECT KEY is active. Press SELECT KEY again to unlock. Layers at the playhead update automatically. Float steps: 0.1 / 0.01 / 0.001.',
       },
+      {type:'textinput',id:'oscHost',label:'OSC destination IP / hostname',width:8,default:'',tooltip:'Empty disables OSC output. Faders send float values 0–1 to /vehka/fader1 through /vehka/fader8.'},
+      {type:'number',id:'oscPort',label:'OSC destination UDP port',width:4,default:9000,min:1,max:65535},
       { type: 'textinput', id: 'host', label: 'Designer IP / hostname', width: 8, default: '127.0.0.1' },
       {
         type: 'number',
@@ -231,6 +236,12 @@ class DisguiseLayerControl extends InstanceBase {
     ]
   }
   async configUpdated(config, secrets = {}) {
+    if (this.oscValuesDirty) {
+      this.flushOscFaderValues()
+      config = {...config, oscFaderValues: [...this.oscFaderValues]}
+    }
+    clearTimeout(this.oscSaveTimer)
+    clearTimeout(this.masterPublishTimer)
     this.client?.close()
     await Promise.allSettled([...(this.client?.thumbnailTasks || [])])
     const oldWaveforms = this.viewer?.waveforms
@@ -270,6 +281,12 @@ class DisguiseLayerControl extends InstanceBase {
     this.lastProbeRevision = undefined
     this.masterTransportUid = String(config.masterTransportUid || '')
     this.masterTransports = []
+    this.oscFaderValues = Array.from({length:8},(_,i)=> {
+      const value = config.oscFaderValues?.[i]
+      return typeof value === 'number' && Number.isFinite(value) ? Math.max(0,Math.min(1,value)) : 0
+    })
+    this.oscValuesDirty = false
+    this.trackNavigation = config.trackNavigation === true
     this.jogLocked = config.jogLocked === true
     this.masterLevelPending = null
     this.masterLevelPromise = null
@@ -284,8 +301,13 @@ class DisguiseLayerControl extends InstanceBase {
       if (!config.demo) {
         const connection = new Connection(
           this.client,
-          (state) => {
+          (state, update) => {
             if (this.connection !== connection) return
+            if (update?.master && update.full === false) {
+              this.acceptMasterTransports(state.masterTransports)
+              this.publishMaster({ names: update.names === true })
+              return
+            }
             if (state.contextChanged && this.editor) this.editor.stale = this.editor.contextStale = true
             if (!state.connected && this.editor?.snapshot) this.editor.stale = this.editor.contextStale = true
             if (state.trackUid && this.editor?.snapshot && state.trackUid !== this.editor.snapshot.trackUid)
@@ -343,7 +365,8 @@ class DisguiseLayerControl extends InstanceBase {
                 e.field ? { layerUid: e.layer.uid, name: e.field.name } : null,
               )
             this.connectionStatus()
-            this.publish()
+            if (update?.full === false && update.field) this.publishField()
+            else this.publish()
             if (state.connected && (!this.editor?.snapshot || this.editor.stale)) this.requestSync()
           },
           {
@@ -351,8 +374,8 @@ class DisguiseLayerControl extends InstanceBase {
             onHeartbeat: () => {
               if (this.connection === connection) this.publish()
             },
-            onClock: (state) => {
-              const e=this.editor, sample=state.fastClock
+            onClock: (state, clockSample) => {
+              const e=this.editor, sample=clockSample || state.fastClock
               if(this.connection!==connection || !e?.snapshot || e.stale || sample?.trackUid!==e.snapshot.trackUid)return
               e.receiveTransportTime(sample.time)
               e.playing=sample.playing===true
@@ -584,9 +607,41 @@ class DisguiseLayerControl extends InstanceBase {
     this.pendingDetents=batch
     return run
   }
+  zoomDesignerTimeline(steps) {
+    if (!Number.isInteger(steps) || !steps || this.config?.demo || this.client?.viewOnly || this.config?.viewOnly || !this.client)
+      return Promise.resolve()
+    const client = this.client
+    let queue = this.designerZoomQueue
+    if (queue?.client === client) {
+      queue.steps = Math.max(-8, Math.min(8, queue.steps + steps))
+      return queue.promise
+    }
+    queue = {client, steps: Math.max(-8, Math.min(8, steps))}
+    this.designerZoomQueue = queue
+    queue.promise = Promise.resolve().then(async () => {
+      try {
+        while (queue.steps && this.client === client) {
+          const steps = queue.steps
+          queue.steps = 0
+          await client.execute('timeline_zoom', {steps})
+        }
+      } catch (error) {
+        // Relative UI commands must not be retried after an uncertain response.
+        queue.steps = 0
+        if (this.client === client) {
+          this.lastError = error.message
+          this.log('warn', error.message)
+          this.setVariableValues({last_error: error.message})
+        }
+      } finally {
+        if (this.designerZoomQueue === queue) this.designerZoomQueue = null
+      }
+    })
+    return queue.promise
+  }
   acceptMasterTransports(transports) {
-    this.masterTransports = (transports || []).map((transport) => ({ ...transport }))
-    if (!this.masterTransports.some((transport) => transport.uid === this.masterTransportUid)) {
+    this.masterTransports = (transports || []).slice(0,8).map((transport) => ({ ...transport }))
+    if (!this.masterTargetSlots().some((transport) => transport?.uid === this.masterTransportUid)) {
       const activeUid = String(this.editor?.snapshot?.transportUid || '')
       this.masterTransportUid =
         this.masterTransports.find((transport) => transport.uid === activeUid)?.uid ||
@@ -594,30 +649,118 @@ class DisguiseLayerControl extends InstanceBase {
         ''
     }
   }
+  masterTargetSlots() {
+    return [
+      ...Array.from({length:8},(_,i)=>this.masterTransports?.[i]),
+      ...Array.from({length:8},(_,i)=>({uid:'osc:fader'+(i+1),name:'OSC FADER '+(i+1),oscIndex:i,
+        brightness:this.oscFaderValues?.[i] ?? 0,volume:this.oscFaderValues?.[i] ?? 0})),
+    ]
+  }
   masterTransport() {
-    return this.masterTransports?.find((transport) => transport.uid === this.masterTransportUid)
+    return this.masterTargetSlots().find(target => target?.uid === this.masterTransportUid)
+  }
+  flushOscFaderValues() {
+    clearTimeout(this.oscSaveTimer)
+    this.oscSaveTimer = null
+    if (!this.oscValuesDirty) return
+    this.config.oscFaderValues = [...this.oscFaderValues]
+    this.oscValuesDirty = false
+    this.saveConfig(this.config)
+  }
+  setOscFaderLevel(index, percent) {
+    const host = String(this.config.oscHost || '').trim()
+    const port = Number(this.config.oscPort ?? 9000)
+    if (!host || /[\s/]/.test(host) || !Number.isInteger(port) || port < 1 || port > 65535) {
+      this.lastError = 'Configure a valid OSC destination and UDP port in module settings'
+      this.log('warn', this.lastError)
+      this.setVariableValues({last_error:this.lastError})
+      return Promise.resolve()
+    }
+    const value = Math.round(percent * 10) / 1000
+    try {
+      this.oscSend(host, port, '/vehka/fader'+(index+1), [{type:'f',value}])
+      this.oscFaderValues ||= Array(8).fill(0)
+      this.oscFaderValues[index] = value
+      this.oscValuesDirty = true
+      if (!this.oscSaveTimer) {
+        this.oscSaveTimer = setTimeout(()=>this.flushOscFaderValues(),250)
+        this.oscSaveTimer.unref?.()
+      }
+      this.publishMaster()
+    } catch(error) {
+      this.lastError = error.message
+      this.log('warn', error.message)
+      this.setVariableValues({last_error:this.lastError})
+    }
+    return Promise.resolve()
+  }
+  masterVariableValues(names = false) {
+    const master = this.masterTransport()
+    const targets = this.masterTargetSlots().filter(Boolean)
+    const index = targets.findIndex(target => target.uid === master?.uid)
+    const brightness = Number(master?.brightness), volume = Number(master?.volume)
+    const brightnessPercent = Number.isFinite(brightness) ? Math.round(brightness * 1000) / 10 : ''
+    const volumePercent = Number.isFinite(volume) ? Math.round(volume * 1000) / 10 : ''
+    const level = Number.isFinite(brightness) && Number.isFinite(volume)
+      ? Math.round(Math.min(brightness, volume) * 1000) / 10
+      : Number.isFinite(brightness) ? brightnessPercent : volumePercent
+    return {
+      ...(names ? Object.fromEntries(Array.from({length:42},(_,i)=>['master_transport_'+(i+1),this.masterTargetSlots()[i]?.name || ''])) : {}),
+      ...Object.fromEntries(Array.from({length:8},(_,i)=>['osc_fader_'+(i+1),this.oscFaderValues?.[i] ?? 0])),
+      master_transport: master?.name || 'NO TRANSPORT',
+      master_transport_position: master ? `${index + 1}/${targets.length}` : '0/0',
+      transport_master_level: level,
+      transport_master_brightness: brightnessPercent,
+      transport_master_volume: volumePercent,
+      transport_master_detail: master?.oscIndex !== undefined ? '/vehka/fader'+(master.oscIndex+1)+' = '+(this.oscFaderValues?.[master.oscIndex] ?? 0) : master ? `B ${brightnessPercent}% / V ${volumePercent}%` : 'NO TRANSPORT',
+      transport_master_mismatch: Number.isFinite(brightness) && Number.isFinite(volume) && Math.abs(brightness-volume)>0.0005,
+    }
+  }
+  publishMaster({ names = false } = {}) {
+    this.setVariableValues(this.masterVariableValues(names))
+    this.checkFeedbacks('transport_master_selected')
+  }
+  scheduleMasterPublish() {
+    clearTimeout(this.masterPublishTimer)
+    this.masterPublishTimer=setTimeout(()=>{this.masterPublishTimer=null;this.publishMaster()},0)
+    this.masterPublishTimer.unref?.()
+  }
+  publishField() {
+    const e=this.editor
+    if(!e?.field)return
+    this.setVariableValues({value:e.value,value_label:e.valueLabel,dirty:Boolean(e.dirty),dial_value_2:String(e.valueLabel).toUpperCase()})
+    this.checkFeedbacks('dirty')
   }
   selectMasterTransport(direction) {
-    const transports = this.masterTransports || []
+    const transports = this.masterTargetSlots().filter(Boolean)
     if (!transports.length || (direction !== -1 && direction !== 1)) return
     const current = Math.max(0, transports.findIndex((transport) => transport.uid === this.masterTransportUid))
     const index = Math.max(0, Math.min(transports.length - 1, current + direction))
+    if (transports[index].uid === this.masterTransportUid) return
     this.masterTransportUid = transports[index].uid
     // A pending physical value belongs to the transport selected when it was
     // received. Never replay it onto a newly selected transport.
     this.masterLevelPending = null
     this.config.masterTransportUid = this.masterTransportUid
     this.saveConfig(this.config)
-    this.publish()
+    this.scheduleMasterPublish()
   }
   selectMasterTransportSlot(index) {
-    const transport = this.masterTransports?.[Number(index)]
+    const transport = Number.isInteger(index) ? this.masterTargetSlots()[index] : undefined
     if (!transport) return
+    if (transport.uid === this.masterTransportUid) return
     this.masterTransportUid = transport.uid
     this.masterLevelPending = null
     this.config.masterTransportUid = this.masterTransportUid
     this.saveConfig(this.config)
-    this.publish()
+    this.scheduleMasterPublish()
+  }
+  toggleTrackNavigation() {
+    this.trackNavigation = !this.trackNavigation
+    this.config.trackNavigation = this.trackNavigation
+    this.saveConfig(this.config)
+    this.setVariableValues({ navigation_mode: this.trackNavigation ? 'TRACK' : 'SECTION' })
+    this.checkFeedbacks('navigation_track')
   }
   toggleJogLock() {
     this.jogLocked = !this.jogLocked
@@ -626,11 +769,23 @@ class DisguiseLayerControl extends InstanceBase {
     this.saveConfig(this.config)
     this.publish()
   }
+  async refreshMasterTransports() {
+    try {
+      await this.connection?.refreshMasterTransports()
+    } catch (error) {
+      this.lastError = error.message
+      this.log('warn', error.message)
+      this.connectionStatus()
+      this.setVariableValues({ last_error: this.lastError })
+    }
+  }
   setTransportMasterLevel(percent) {
     percent = Number(percent)
     if (!Number.isFinite(percent) || percent < 0 || percent > 100)
       return Promise.reject(new Error('Master level must be 0–100'))
-    if (this.client?.viewOnly) return Promise.resolve()
+    if (this.client?.viewOnly || this.config?.viewOnly) return Promise.resolve()
+    const target = this.masterTransport()
+    if (target?.oscIndex !== undefined) return this.setOscFaderLevel(target.oscIndex, percent)
     const uid = this.masterTransportUid
     if (!this.masterTransports?.some((transport) => transport.uid === uid))
       return Promise.reject(new Error('Select a transport for the master fader'))
@@ -652,7 +807,7 @@ class DisguiseLayerControl extends InstanceBase {
           if (cached) cached.brightness = cached.volume = request.percent / 100
           this.lastError = ''
           this.connectionStatus()
-          this.publish()
+          this.publishMaster()
         }
       } catch (error) {
         this.masterLevelPending = null
@@ -810,18 +965,7 @@ class DisguiseLayerControl extends InstanceBase {
     const layerMode =
       { edit: 'LAYER EDIT', move: 'MOVE LAYER', in: 'IN POINT', out: 'OUT POINT' }[e?.layerEdit] || ''
     const playbackLabel = e?.playing ? 'STOP' : 'PLAY\nSECTION'
-    const master = this.masterTransport()
-    const masterIndex = this.masterTransports?.findIndex((transport) => transport.uid === master?.uid) ?? -1
-    const brightness = Number(master?.brightness)
-    const volume = Number(master?.volume)
-    const brightnessPercent = Number.isFinite(brightness) ? Math.round(brightness * 1000) / 10 : ''
-    const volumePercent = Number.isFinite(volume) ? Math.round(volume * 1000) / 10 : ''
-    const masterMismatch = Number.isFinite(brightness) && Number.isFinite(volume) && Math.abs(brightness - volume) > 0.0005
-    // One physical fader cannot represent two unequal levels. Use the lower
-    // current level so selecting a transport never raises either output.
-    const masterLevel = Number.isFinite(brightness) && Number.isFinite(volume)
-      ? Math.round(Math.min(brightness, volume) * 1000) / 10
-      : Number.isFinite(brightness) ? brightnessPercent : volumePercent
+    const masterVars=this.masterVariableValues(true)
     clearTimeout(this.deleteHoldTimer)
     const deletePress = !mediaMode && !e?.clearKeysBrowser && e?.deletePress
     const deleteReady = Boolean(deletePress && Date.now() - deletePress.time >= 1000)
@@ -1021,7 +1165,7 @@ class DisguiseLayerControl extends InstanceBase {
     }
     this.setVariableValues({
       ...padVars,
-      ...Object.fromEntries(Array.from({length:42},(_,i)=>['master_transport_'+(i+1),this.masterTransports?.[i]?.name || ''])),
+      ...masterVars,
       ui_mode: clearBrowser ? 'CLEAR_KEYS' : mediaMode ? 'MEDIA' : 'PARAMS',
       folder: e?.mediaFolder || '',
       media_name: e?.currentMedia?.name || '',
@@ -1079,17 +1223,11 @@ class DisguiseLayerControl extends InstanceBase {
               ? 'HTTP + SYNC'
               : 'HTTP'
           : 'DISCONNECTED',
-      master_transport: master?.name || 'NO TRANSPORT',
-      master_transport_position: master ? `${masterIndex + 1}/${this.masterTransports.length}` : '0/0',
-      transport_master_level: masterLevel,
-      transport_master_brightness: brightnessPercent,
-      transport_master_volume: volumePercent,
-      transport_master_detail: master ? `B ${brightnessPercent}% / V ${volumePercent}%` : 'NO TRANSPORT',
-      transport_master_mismatch: masterMismatch,
+      navigation_mode: this.trackNavigation ? 'TRACK' : 'SECTION',
       jog_locked: Boolean(this.jogLocked),
       jog_lock_label: this.jogLocked ? 'LOCKED' : 'ACTIVE',
     })
-    this.checkFeedbacks('fine', 'dirty', 'connected', 'link_time', 'jog_locked', 'transport_master_selected', 'timing_step_selected', 'timing_step_unavailable', 'transport_state')
+    this.checkFeedbacks('navigation_track', 'fine', 'dirty', 'connected', 'link_time', 'jog_locked', 'transport_master_selected', 'timing_step_selected', 'timing_step_unavailable', 'transport_state')
     void this.loadThumbnails()
   }
   publishClock() {
@@ -1135,10 +1273,12 @@ class DisguiseLayerControl extends InstanceBase {
     }
   }
   async destroy() {
+    this.flushOscFaderValues()
     await this.viewer?.close()
     clearTimeout(this.deleteHoldTimer)
     clearInterval(this.autoSyncTimer)
     clearInterval(this.clockDisplayTimer)
+    clearTimeout(this.masterPublishTimer)
     this.connection?.close()
     this.connection = null
     this.client?.close()

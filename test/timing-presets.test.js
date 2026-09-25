@@ -83,7 +83,7 @@ test('all ten musical timing buttons share steps across time, layer and key mode
 test('linked playback crossing BPM regions updates Companion timing choices without a refresh',async()=>{
  const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path')
  const source=fs.readFileSync(path.join(__dirname,'../src/main.js'),'utf8').replaceAll(String.fromCharCode(13),'')
- const from=source.indexOf('          (state) => {',source.indexOf('const connection = new Connection('))
+ const from=source.indexOf('          (state, update) => {',source.indexOf('const connection = new Connection('))
  const end=source.indexOf(String.fromCharCode(10)+'          },'+String.fromCharCode(10)+'          {',from)
  assert.ok(from>=0 && end>from)
  const e=new Editor(new DemoClient());await e.refresh()

@@ -12,6 +12,17 @@ function sameMasterTransports(a, b) {
   })
 }
 
+function sameTimelineUi(a, b) {
+  if (!a || !b || a.trackUid !== b.trackUid) return false
+  const selectedA = a.selectedLayerUids || [], selectedB = b.selectedLayerUids || []
+  const layersA = a.layers || [], layersB = b.layers || []
+  return selectedA.length === selectedB.length && selectedA.every((uid, index) => uid === selectedB[index]) &&
+    layersA.length === layersB.length && layersA.every((layer, index) => {
+      const next = layersB[index]
+      return next && layer.uid === next.uid && layer.start === next.start && layer.end === next.end
+    })
+}
+
 // REST health checks never execute Python. A successful probe identifies Designer,
 // rather than treating any open TCP port as a valid connection.
 class Connection {
@@ -72,15 +83,44 @@ class Connection {
     this.masterPollTimer = setTimeout(() => this.pollMasters(), this.connected ? this.masterInterval : 1000)
     this.masterPollTimer.unref?.()
   }
+  refreshMasterTransports() {
+    if (this.masterRefreshPromise) return this.masterRefreshPromise
+    this.invalidateMasterFeedback()
+    const revision = this.masterFeedbackRevision
+    this.masterRefreshPromise = (async () => {
+      try {
+        const transports = await this.client.listTransports()
+        if (this.closed) return
+        // A fader write during this read owns the newer level feedback.
+        const previous = new Map((this.masterTransports || []).map(t => [t.uid, t]))
+        this.masterTransports = transports.slice(0,8).map(t => {
+          const old = previous.get(t.uid)
+          return revision !== this.masterFeedbackRevision && old
+            ? { ...t, brightness: old.brightness, volume: old.volume } : { ...t }
+        })
+        this.invalidateMasterFeedback()
+        this.onState(this, { master: true, full: false, names: true })
+      } finally {
+        this.masterRefreshPromise = null
+      }
+    })()
+    return this.masterRefreshPromise
+  }
   async pollMasters() {
     const revision = this.masterFeedbackRevision
     try {
-      if (this.connected && !this.closed) {
-        const transports = await this.client.listTransports()
+      if (this.connected && !this.closed && !this.masterRefreshPromise) {
+        const latest = await this.client.listTransports()
+        // Keep names, order and membership fixed until the explicit refresh.
+        const byUid = new Map(latest.map(t => [t.uid, t]))
+        const transports = (this.masterTransports || []).map(t => {
+          const live = byUid.get(t.uid)
+          return live ? { ...live, uid: t.uid, name: t.name } : t
+        })
         if (this.closed || revision !== this.masterFeedbackRevision) return
         if (!sameMasterTransports(this.masterTransports, transports)) {
           this.masterTransports = transports
-          this.onState(this)
+          this.onState(this, { master: true, full: false })
         }
       }
     } catch {
@@ -173,16 +213,16 @@ class Connection {
     if (this.closed) return
     const feedbackRevision = this.feedbackRevision
     try {
-      const [transports, masterTransports] = await Promise.all([
+      const [transports] = await Promise.all([
         this.client.probe(),
-        typeof this.client.listTransports === 'function' ? this.client.listTransports() : undefined,
+        typeof this.client.listTransports === 'function' && !this.masterTransports
+          ? this.refreshMasterTransports() : undefined,
       ])
       if (this.closed) return
       this.connected = true
       this.pulseHeartbeat()
       this.error = ''
       this.transports = transports
-      if (masterTransports) this.masterTransports = masterTransports
       this.probeFeedbackRevision = feedbackRevision
       this.probeRevision = (this.probeRevision || 0) + 1
       if (this.transportUid && !this.socket && !this.contextChanged) this.watch(this.transportUid, this.fieldTarget)
@@ -295,7 +335,7 @@ class Connection {
           this.liveRevision++
           this.pulseHeartbeat()
         }
-        let stateChanged=false, clockChanged=false
+        let stateChanged=false, fieldChanged=false, clockSample=null
         for (const change of data.valuesChanged || []) {
           const property = this.ids.get(change.id)
           if (property === contentProperty && typeof change.value === 'string') {
@@ -307,13 +347,24 @@ class Connection {
             Number.isFinite(change.value?.time) &&
             Array.isArray(change.value.layers)
           ) {
+            const uiChanged = !sameTimelineUi(this.timeline, change.value)
             this.timeline = change.value
             this.time = change.value.time
             this.trackUid = change.value.trackUid
             this.live = true
             this.liveError = ''
             clearTimeout(this.socketTimer)
-            stateChanged=true
+            // The 100 ms timeline subscription is only a clock fallback. Once
+            // the 40 ms subscription is live, publishing both can present an
+            // older sample after a newer one and make the display stutter.
+            if (!this.fastClock || this.fastClock.trackUid !== change.value.trackUid)
+              clockSample = {
+                time: change.value.time,
+                timecodeSample: change.value.timecodeSample,
+                playing: change.value.playing === true,
+                trackUid: change.value.trackUid,
+              }
+            if (uiChanged) stateChanged=true
           }
           if (property === 'object.track.beatToTime(object.player.tCurrent)' && Number.isFinite(change.value)) {
             this.time = change.value
@@ -328,7 +379,7 @@ class Connection {
           }
           if (property === this.valueProperty && Number.isFinite(change.value?.value)) {
             this.fieldValue = change.value
-            stateChanged=true
+            fieldChanged=true
           }
           if (property === this.clockProperty && Number.isFinite(change.value?.fps)) { this.clock = change.value; stateChanged=true }
           if (property === this.fastClockProperty && Number.isFinite(change.value?.time) && typeof change.value.trackUid === 'string') {
@@ -338,11 +389,11 @@ class Connection {
             this.live=true
             this.liveError=''
             clearTimeout(this.socketTimer)
-            clockChanged=true
+            clockSample=change.value
           }
         }
-        if(clockChanged)this.onClock(this)
-        if(stateChanged)this.onState(this)
+        if(clockSample)this.onClock(this,clockSample)
+        if(stateChanged || fieldChanged)this.onState(this,{full:stateChanged,field:fieldChanged})
       } catch (error) {
         this.liveError = error.message
         this.retryAt = Date.now() + 30000

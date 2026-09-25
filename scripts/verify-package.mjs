@@ -5,14 +5,16 @@ import ModuleClass, { UpgradeScripts } from '../pkg/disguise-layer-control/main.
 assert.equal(typeof ModuleClass, 'function', 'Companion requires a default constructor export')
 assert.ok(Array.isArray(UpgradeScripts))
 const values = {}
-let actions, presets
+const oscMessages = []
+let actions, presets, feedbacks, savedConfig
 const context = {
   _isInstanceContext: true,
   id: 'package-test',
   label: 'package-test',
   upgradeScripts: [],
   sharedUdpSocketHandlers: new Map(),
-  saveConfig() {},
+  oscSend(...args) { oscMessages.push(args) },
+  saveConfig(config) { savedConfig = {...config} },
   updateStatus() {},
   checkFeedbacks() {},
   setVariableDefinitions() {},
@@ -22,13 +24,35 @@ const context = {
   setActionDefinitions(a) {
     actions = a
   },
-  setFeedbackDefinitions() {},
+  setFeedbackDefinitions(definitions) { feedbacks = definitions },
   setPresetDefinitions(structure, definitions) {
     presets = { structure, definitions }
   },
 }
 const instance = new ModuleClass(context)
 await instance.init({ demo: true })
+assert.equal(values.navigation_mode, 'SECTION')
+assert.equal(feedbacks.navigation_track.callback(), false)
+await actions.navigation_toggle.callback({ options: {} })
+assert.equal(values.navigation_mode, 'TRACK')
+assert.equal(feedbacks.navigation_track.callback(), true)
+assert.equal(savedConfig.trackNavigation, true)
+await instance.configUpdated({...savedConfig})
+assert.equal(values.navigation_mode, 'TRACK', 'Navigation mode survives configuration reload')
+await actions.navigation_toggle.callback({ options: {} })
+assert.equal(values.navigation_mode, 'SECTION')
+assert.equal(feedbacks.navigation_track.callback(), false)
+assert.equal(presets.definitions.navigation_next.steps[0].down[0].actionId, 'internal:logicIf')
+assert.deepEqual(presets.definitions.navigation_next.steps[0].down[0].children.elseActions, [{actionId:'transport',options:{operation:'gotonextsection'}}])
+await instance.configUpdated({...instance.config, oscHost:'127.0.0.1', oscPort:9000})
+await actions.transport_master_select_slot.callback({options:{slot:9}})
+await actions.transport_master_level.callback({options:{level:23.4}})
+assert.deepEqual(oscMessages,[['127.0.0.1',9000,'/vehka/fader1',[{type:'f',value:0.234}]]])
+await instance.configUpdated({...instance.config})
+assert.equal(values.transport_master_level,23.4,'Motor target restores saved OSC value after reload')
+assert.equal(values.osc_fader_1,0.234)
+assert.equal(oscMessages.length,1,'Configuration reload must not send OSC')
+assert.equal(savedConfig.oscFaderValues[0],0.234)
 await actions.refresh.callback({ options: {} })
 assert.equal(values.layer, 'Background')
 assert.equal(presets.structure[0].definitions.length, 4)

@@ -35,6 +35,28 @@ test('all normal dials collapse bursts and opposite turns into one trailing acti
  releaseTime();await h.actionTail
  assert.deepEqual(calls,[['time',1,7]])
 })
+test('Yamaha encoder sensitivity turns two physical detents into one isolated editor step',async()=>{
+ const h=host(),calls=[]
+ Object.assign(h.editor,{viewOnly:false,mediaMode:false,clearKeysBrowser:null,moveKey:null,layerEdit:'',
+  selectLive:(kind,direction,detents)=>calls.push([kind,direction,detents]),
+  adjustLiveTime:(direction,step,pointer)=>calls.push(['time',direction,pointer.detents])})
+ const a=actions(h),event=(direction,group)=>({options:{direction,detent_divisor:2,detent_group:group,step:0}})
+ a.layer.callback(event(1,1));await h.actionTail;assert.deepEqual(calls,[])
+ a.layer.callback(event(1,1));await h.actionTail;assert.deepEqual(calls,[['layer',1,1]])
+ a.layer.callback(event(1,1));a.layer.callback(event(-1,1));await h.actionTail
+ assert.deepEqual(calls,[['layer',1,1]],'Opposite half-steps cancel')
+ a.time.callback(event(1,4));a.time.callback(event(1,6));await h.actionTail
+ assert.equal(calls.length,1,'Separate Yamaha encoders do not share half-steps')
+ a.time.callback(event(1,4));a.time.callback(event(1,6));await h.actionTail
+ assert.deepEqual(calls.slice(1),[['time',1,1],['time',1,1]])
+})
+test('Yamaha zoom encoder uses the same half sensitivity',()=>{
+ const seen=[],instance={viewer:{rotateZoomDirect:value=>seen.push(value)},publish(){}}
+ const zoom=actions(instance).viewer_zoom
+ const event={options:{direction:1,detent_divisor:2,detent_group:5}}
+ zoom.callback(event);assert.deepEqual(seen,[])
+ zoom.callback(event);assert.deepEqual(seen,[1])
+})
 test('ordinary VALUE edits publish confirmed geometry even without SELECT KEY or LAYER EDIT',async()=>{
  const body=source.slice(source.indexOf('  async performNow('),source.indexOf('  connectionStatus()'))
  const C=vm.runInNewContext('(class Host {'+body+'})',{structuredClone,Date})

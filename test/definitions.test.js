@@ -9,15 +9,27 @@ test('every button/dial preset references an implemented action and required opt
   const definitions = actions({ perform() {} })
   const [sections, p] = presets()
   assert.equal(sections[0].definitions.length, 4)
+  function checkEntry(entry) {
+    if (entry.actionId === 'internal:logicIf') {
+      assert.deepEqual(entry.options, {})
+      assert.ok(entry.children.condition.length)
+      for (const condition of entry.children.condition) {
+        assert.equal(condition.feedbackId, 'navigation_track')
+        assert.deepEqual(condition.options, {})
+      }
+      entry.children.actions.forEach(checkEntry)
+      entry.children.elseActions.forEach(checkEntry)
+      return
+    }
+    const action = definitions[entry.actionId]
+    assert.ok(action, entry.actionId)
+    for (const option of action.options) assert.notEqual(entry.options[option.id], undefined)
+  }
   for (const preset of Object.values(p)) {
     assert.equal(preset.type, 'simple')
     for (const step of preset.steps) {
       for (const entries of Object.values(step)) {
-        for (const entry of entries) {
-          const action = definitions[entry.actionId]
-          assert.ok(action, entry.actionId)
-          for (const option of action.options) assert.notEqual(entry.options[option.id], undefined)
-        }
+        entries.forEach(checkEntry)
       }
     }
   }

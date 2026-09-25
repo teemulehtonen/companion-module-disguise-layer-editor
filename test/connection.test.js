@@ -83,6 +83,30 @@ test('transport master feedback publishes changed external values without waitin
     c.close()
   }
 })
+test('transport names and slots stay cached until explicit refresh while levels remain live', async () => {
+  let result = [{ uid: '1', name: 'Music', brightness: 0.2, volume: 0.2 }]
+  let reads = 0
+  const updates = []
+  const c = new Connection({ probe: async () => [], listTransports: async () => { reads++; return structuredClone(result) } }, (_, update) => updates.push(update))
+  c.scheduleMasterPoll = () => {}
+  try {
+    await c.check()
+    clearTimeout(c.timer)
+    result = [{ uid: '2', name: 'New', brightness: 1, volume: 1 }, { uid: '1', name: 'Renamed', brightness: 0.7, volume: 0.7 }]
+    await c.pollMasters()
+    assert.deepEqual(c.masterTransports, [{ uid: '1', name: 'Music', brightness: 0.7, volume: 0.7 }])
+    const before = reads
+    await c.check()
+    clearTimeout(c.timer)
+    assert.equal(reads, before, 'health checks must not reread the inventory')
+    await c.refreshMasterTransports()
+    assert.deepEqual(c.masterTransports, result)
+    assert.equal(updates.at(-1).names, true)
+    c.client.listTransports = async () => { throw Error('offline') }
+    await assert.rejects(c.refreshMasterTransports(), /offline/)
+    assert.deepEqual(c.masterTransports, result, 'failed refresh retains the previous list')
+  } finally { c.close() }
+})
 test('production feedback never opens faulting LiveUpdate subscriptions and retains polling targets', async () => {
   const c = new Connection({ probe: async () => [] }, () => {}, {
     WebSocketImpl: class {
@@ -156,6 +180,25 @@ test('fast clock publishes at frame cadence without running the full state callb
   socket.message({valuesChanged:[{id:7,value:{time:12.04,timecodeSample:{seconds:12.04,label:'00:00:12.01'},playing:true,trackUid:'55'}}]})
   assert.equal(fast,1);assert.equal(full,0)
   assert.equal(c.time,12.04);assert.equal(c.trackUid,'55');assert.equal(c.fastClock.playing,true)
+ }finally{c.close()}
+})
+test('timeline clock movement bypasses full state publication until UI geometry changes',async()=>{
+ const updates=[],samples=[]
+ const c=new Connection({baseUrl:'http://localhost',probe:async()=>[]},(_state,update)=>updates.push(update),{enableLiveUpdate:true,WebSocketImpl:Socket,onClock:(_state,sample)=>samples.push(sample)})
+ await c.start();updates.length=0
+ try{
+  c.watch('123');const socket=c.socket;socket.dispatchEvent(new Event('open'))
+  socket.message({subscriptions:[{id:8,propertyPath:c.timelineProperty}]})
+  const base={trackUid:'55',time:1,playing:true,selectedLayerUids:['7'],layers:[{uid:'7',start:0,end:10}]}
+  socket.message({valuesChanged:[{id:8,value:base}]})
+  assert.equal(updates.length,1);assert.equal(samples.length,1)
+  socket.message({valuesChanged:[{id:8,value:{...base,time:1.1}}]})
+  assert.equal(updates.length,1);assert.equal(samples.length,2)
+  c.fastClock={...base,time:1.15}
+  socket.message({valuesChanged:[{id:8,value:{...base,time:1.16}}]})
+  assert.equal(updates.length,1);assert.equal(samples.length,2)
+  socket.message({valuesChanged:[{id:8,value:{...base,time:1.2,layers:[{uid:'7',start:0,end:11}]}}]})
+  assert.equal(updates.length,2);assert.equal(samples.length,2)
  }finally{c.close()}
 })
 test('HTTP failure disconnects and subsequent health check recovers without Python calls', async () => {
@@ -470,4 +513,30 @@ test('startup without a selected transport keeps light polling until a track bec
   available=true;await c.poll()
   assert.equal(c.contextAvailable,true);assert.equal(c.trackUid,'22');assert.equal(notified,2)
  }finally{c.close()}
+})
+
+test('manual transport refresh coalesces reads and protects newer fader levels and closed connections', async () => {
+  let release, reads = 0, publishes = 0
+  const c = new Connection({ listTransports: () => { reads++; return new Promise(resolve => { release = resolve }) } }, () => publishes++)
+  c.masterTransports = [{ uid: '1', name: 'Old', brightness: 0.2, volume: 0.2 }]
+  const first = c.refreshMasterTransports()
+  assert.equal(c.refreshMasterTransports(), first)
+  assert.equal(reads, 1)
+  c.invalidateMasterFeedback()
+  c.masterTransports[0].brightness = c.masterTransports[0].volume = 0.8
+  release([{ uid: '1', name: 'New', brightness: 0.1, volume: 0.1 }])
+  await first
+  assert.deepEqual(c.masterTransports, [{ uid: '1', name: 'New', brightness: 0.8, volume: 0.8 }])
+  const pending = c.refreshMasterTransports()
+  c.close()
+  release([])
+  await pending
+  assert.equal(c.masterTransports.length, 1)
+  assert.equal(publishes, 1)
+})
+test('master inventory caches only the first eight Designer transports',async()=>{
+ const c=new Connection({async listTransports(){return Array.from({length:12},(_,i)=>({uid:String(i+1),name:'T'+(i+1),brightness:1,volume:1}))}},()=>{})
+ await c.refreshMasterTransports()
+ assert.deepEqual(c.masterTransports.map(t=>t.uid),['1','2','3','4','5','6','7','8'])
+ c.close()
 })

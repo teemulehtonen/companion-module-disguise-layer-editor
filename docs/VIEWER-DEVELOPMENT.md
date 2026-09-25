@@ -189,3 +189,21 @@ Viewer transport actions use controlTransport and DesignerClient.transport. Vali
 SMALL/MEDIUM/LARGE apply browser-local 100/120/140 percent CSS zoom. viewer-ui-scale.js normalizes pointer and DOMRect coordinates to layout pixels, including popup placement. Track metadata always shows @ native FPS, then duration. TC IN: is a separate raw TransportManager.timecode readout, hidden when no source is assigned. Designer 32.4 exposes TimecodeTransport.current; newer timecode is a fallback. ViewerClock subscribes separately from the timeline clock and expires samples after two seconds; full snapshots provide a guarded fallback. Never substitute the timeline's TC-marker time for incoming TC. statusString remains the readout tooltip, including No clock.
 
 Verification: native read-only inspection confirmed no assigned source on the current transport and current as a Timecode on an isolated LTC object. Actual incoming LTC/MTC signal has not been tested. Unit coverage includes removal, stale input and independence from timeline TC.
+
+## Designer timeline zoom (beta.76)
+
+The existing viewer_zoom action now also drives Designer's native timeline zoom.
+Existing encoder assignments remain compatible. Positive motion zooms in through
+the enabled Designer zoom levels; negative motion zooms out. Commands read the
+current level in Designer, skip disabled levels and clamp at the ends. There is
+one in-flight request and at most eight pending relative steps; uncertain failures
+are not retried. This independent UI queue does not refresh layers or keyframes.
+VIEW and demo retain local viewer zoom without native writes.
+
+Designer uses PrivateState.privateState().guiTimeStep and enabledZoomLevels:
+https://developer.disguise.one/python-api/docs/privatestate/
+A read-only probe on the installed Designer confirmed both properties and enabled
+levels [0,4,5,6,7]. No native zoom mutation test was performed. The Python zoom
+script is exercised offline with simulated PrivateState, including direction,
+disabled steps, limits and empty levels. Encoder scaling, burst handling, failure,
+disconnection and VIEW protection are covered in designer-zoom.test.js.

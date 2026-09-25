@@ -4783,6 +4783,14 @@
                     "direction": {
                       "value": -1,
                       "isExpression": false
+                    },
+                    "detent_divisor": {
+                      "value": 2,
+                      "isExpression": false
+                    },
+                    "detent_group": {
+                      "value": 1,
+                      "isExpression": false
                     }
                   },
                   "upgradeIndex": -1
@@ -4796,6 +4804,14 @@
                   "definitionId": "layer",
                   "options": {
                     "direction": {
+                      "value": 1,
+                      "isExpression": false
+                    },
+                    "detent_divisor": {
+                      "value": 2,
+                      "isExpression": false
+                    },
+                    "detent_group": {
                       "value": 1,
                       "isExpression": false
                     }
@@ -5029,6 +5045,14 @@
                     "direction": {
                       "value": -1,
                       "isExpression": false
+                    },
+                    "detent_divisor": {
+                      "value": 2,
+                      "isExpression": false
+                    },
+                    "detent_group": {
+                      "value": 2,
+                      "isExpression": false
                     }
                   },
                   "upgradeIndex": -1
@@ -5043,6 +5067,14 @@
                   "options": {
                     "direction": {
                       "value": 1,
+                      "isExpression": false
+                    },
+                    "detent_divisor": {
+                      "value": 2,
+                      "isExpression": false
+                    },
+                    "detent_group": {
+                      "value": 2,
                       "isExpression": false
                     }
                   },
@@ -5303,6 +5335,14 @@
                     "step": {
                       "value": 0,
                       "isExpression": false
+                    },
+                    "detent_divisor": {
+                      "value": 2,
+                      "isExpression": false
+                    },
+                    "detent_group": {
+                      "value": 3,
+                      "isExpression": false
                     }
                   },
                   "upgradeIndex": -1
@@ -5321,6 +5361,14 @@
                     },
                     "step": {
                       "value": 0,
+                      "isExpression": false
+                    },
+                    "detent_divisor": {
+                      "value": 2,
+                      "isExpression": false
+                    },
+                    "detent_group": {
+                      "value": 3,
                       "isExpression": false
                     }
                   },
@@ -5557,6 +5605,14 @@
                     "step": {
                       "value": 0,
                       "isExpression": false
+                    },
+                    "detent_divisor": {
+                      "value": 2,
+                      "isExpression": false
+                    },
+                    "detent_group": {
+                      "value": 4,
+                      "isExpression": false
                     }
                   },
                   "upgradeIndex": -1
@@ -5575,6 +5631,14 @@
                     },
                     "step": {
                       "value": 0,
+                      "isExpression": false
+                    },
+                    "detent_divisor": {
+                      "value": 2,
+                      "isExpression": false
+                    },
+                    "detent_group": {
+                      "value": 4,
                       "isExpression": false
                     }
                   },
@@ -5798,6 +5862,14 @@
                     "direction": {
                       "value": -1,
                       "isExpression": false
+                    },
+                    "detent_divisor": {
+                      "value": 2,
+                      "isExpression": false
+                    },
+                    "detent_group": {
+                      "value": 5,
+                      "isExpression": false
                     }
                   },
                   "upgradeIndex": -1
@@ -5812,6 +5884,14 @@
                   "options": {
                     "direction": {
                       "value": 1,
+                      "isExpression": false
+                    },
+                    "detent_divisor": {
+                      "value": 2,
+                      "isExpression": false
+                    },
+                    "detent_group": {
+                      "value": 5,
                       "isExpression": false
                     }
                   },
@@ -6048,6 +6128,14 @@
                     "step": {
                       "value": 0,
                       "isExpression": false
+                    },
+                    "detent_divisor": {
+                      "value": 2,
+                      "isExpression": false
+                    },
+                    "detent_group": {
+                      "value": 6,
+                      "isExpression": false
                     }
                   },
                   "upgradeIndex": -1
@@ -6066,6 +6154,14 @@
                     },
                     "step": {
                       "value": 0,
+                      "isExpression": false
+                    },
+                    "detent_divisor": {
+                      "value": 2,
+                      "isExpression": false
+                    },
+                    "detent_group": {
+                      "value": 6,
                       "isExpression": false
                     }
                   },

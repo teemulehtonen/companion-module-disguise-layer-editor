@@ -15,6 +15,11 @@ test('CC1 export reproduces the clean operator page 8 layout',()=>{
  for(let row=0;row<2;row++)for(let column=0;column<4;column++) assert.equal(action(cc1.page.controls[row][column]),'pad_down')
  assert.deepEqual(Array.from({length:6},(_,column)=>action(cc1.page.controls[3][column],'rotate_right')),
   ['layer','field','value','time','viewer_zoom','time'])
+ for(let column=0;column<6;column++) for(const event of ['rotate_left','rotate_right']) {
+  const encoderAction=cc1.page.controls[3][column].steps[0].action_sets[event][0]
+  assert.equal(encoderAction.options.detent_divisor.value,2)
+  assert.equal(encoderAction.options.detent_group.value,column+1)
+ }
  for(const [column,operation] of [[0,'gotoprevtrack'],[1,'gotonexttrack']]) {
   const item=cc1.page.controls[4][column].steps[0].action_sets.down[0]
   assert.equal(item.definitionId,'transport');assert.equal(item.options.operation.value,operation)
@@ -24,6 +29,8 @@ test('CC1 export reproduces the clean operator page 8 layout',()=>{
  assert.equal(action(cc1.page.controls[5][1]),'section_edit')
  assert.equal(action(cc1.page.controls[5][4]),'transport')
  assert.equal(action(cc1.page.controls[5][5]),'transport')
+ assert.deepEqual(cc1.page.controls[5][2].steps[0].action_sets.down,[])
+ assert.equal(cc1.page.controls[5][2].steps[0].action_sets.up.length,1)
  const pageLink=cc1.page.controls[5][2].steps[0].action_sets.up[0]
  assert.equal(pageLink.connectionId,'internal');assert.equal(pageLink.definitionId,'set_page')
  assert.equal(cc1.instances['d3-layer-control'].config.host,'127.0.0.1')

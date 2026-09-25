@@ -21,6 +21,30 @@ const direction = {
     { id: 1, label: 'Next / increase' },
   ],
 }
+const detentSensitivity = [
+  { type: 'number', id: 'detent_divisor', label: 'Physical detents per step', default: 1, min: 1, max: 8, step: 1 },
+  { type: 'number', id: 'detent_group', label: 'Physical encoder group', default: 0, min: 0, max: 64, step: 1 },
+]
+
+function scaleDialInput(instance, name, event) {
+  const direction = Number(event.options.direction)
+  if (direction !== -1 && direction !== 1) return null
+  const divisor = Math.max(1, Math.min(8, Math.round(Number(event.options.detent_divisor) || 1)))
+  if (divisor === 1) return direction
+  const group = Math.max(0, Math.min(64, Math.round(Number(event.options.detent_group) || 0)))
+  const identity = { ...event.options }
+  delete identity.direction
+  delete identity.detent_divisor
+  delete identity.detent_group
+  const key = `${name}:${group}:${JSON.stringify(identity)}`
+  const remainders = instance.dialDetentRemainders || (instance.dialDetentRemainders = new Map())
+  const total = (remainders.get(key) || 0) + direction
+  const steps = total < 0 ? Math.ceil(total / divisor) : Math.floor(total / divisor)
+  const remainder = total - steps * divisor
+  if (remainder) remainders.set(key, remainder)
+  else remainders.delete(key)
+  return steps ? Math.sign(steps) : null
+}
 
 function actions(instance) {
   // These IDs are persisted in Companion exports. Keep legacy actions available
@@ -31,6 +55,8 @@ function actions(instance) {
     callback: (event) => {
       const dial=['Select active layer','Select parameter / media folder','Adjust live value / preview media','Scrub live / move selected key'].includes(name)
       const e=instance.editor
+      const dialDirection = dial ? scaleDialInput(instance, name, event) : null
+      if (dial && dialDirection === null) return
       const batch=dial && !e?.mediaMode && !e?.clearKeysBrowser && !e?.moveKey?.group && instance.performDetents
       const dispatch=(editor,o) => {
         if (editor.viewOnly) {
@@ -59,7 +85,7 @@ function actions(instance) {
       }
       if(batch) {
         const identity={...event.options};delete identity.direction
-        return instance.performDetents(name+JSON.stringify(identity),Number(event.options.direction),
+        return instance.performDetents(name+JSON.stringify(identity),dialDirection,
           (editor,direction,detents)=>dispatch(editor,{...event.options,direction,detents}),queueOptions)
       }
       return instance.perform(editor=>dispatch(editor,{...event.options,detents:1}),queueOptions)
@@ -67,27 +93,37 @@ function actions(instance) {
   })
   return {
     viewer_zoom: {
-      name: 'Zoom timeline viewer',
-      options: [direction],
+      name: 'Zoom Designer timeline and viewer',
+      options: [direction, ...detentSensitivity],
       callback: (event) => {
-        const direction = Number(event.options.direction)
-        if (direction !== -1 && direction !== 1) return
+        const direction = scaleDialInput(instance, 'Zoom timeline viewer', event)
+        if (direction === null) return
         instance.viewer?.rotateZoomDirect(direction * Math.max(1, Number(event.options.detents) || 1))
         instance.publish?.()
+        return instance.zoomDesignerTimeline?.(direction * Math.max(1, Math.round(Number(event.options.detents) || 1)))
       },
     },
+    navigation_toggle: {
+      name: 'Toggle track / section navigation', options: [],
+      callback: () => instance.toggleTrackNavigation(),
+    },
+    transport_master_refresh: {
+      name: 'Refresh transport list and variables',
+      options: [],
+      callback: () => instance.refreshMasterTransports(),
+    },
     transport_master_select: {
-      name: 'Select transport for master fader',
+      name: 'Select transport / OSC target for master fader',
       options: [direction],
       callback: (event) => instance.selectMasterTransport?.(Number(event.options.direction)),
     },
     transport_master_select_slot: {
-      name: 'Select transport slot for master fader',
-      options: [numeric('slot', 'Transport slot (1–42)', 1, 1, 42)],
+      name: 'Select transport / OSC slot for master fader',
+      options: [numeric('slot', 'Target slot (1–16)', 1, 1, 16)],
       callback: (event) => instance.selectMasterTransportSlot?.(Number(event.options.slot) - 1),
     },
     transport_master_level: {
-      name: 'Set selected transport brightness + volume',
+      name: 'Set selected fader target (transport / OSC)',
       options: [{type:'number',id:'level',label:'Master level (0–100)',default:100,min:0,max:100,step:0.1,useVariables:true}],
       callback: (event) => instance.setTransportMasterLevel?.(event.options.level),
     },
@@ -103,7 +139,7 @@ function actions(instance) {
       callback: () => instance.toggleJogLock?.(),
     },
     play_stop: action('Play to end of section / stop', [], (e) => e.togglePlayback()),
-    layer: action('Select active layer', [direction], (e, o) =>
+    layer: action('Select active layer', [direction, ...detentSensitivity], (e, o) =>
       e.layerEdit === 'edit'
         ? e.adjustLayerTiming('in', Number(o.direction),{detents:o.detents})
         : e.mediaMode
@@ -112,7 +148,7 @@ function actions(instance) {
             ? undefined
             : e.selectLive('layer', Number(o.direction), o.detents),
     ),
-    field: action('Select parameter / media folder', [direction], (e, o) =>
+    field: action('Select parameter / media folder', [direction, ...detentSensitivity], (e, o) =>
       e.layerEdit === 'edit'
         ? e.adjustLayerTiming('move', Number(o.direction),{detents:o.detents})
         : e.mediaMode
@@ -121,7 +157,7 @@ function actions(instance) {
     ),
     value: action(
       'Adjust live value / preview media',
-      [direction, numeric('step', 'Step override (0 = 0.1 / 0.01 / 0.001)', 0, 0)],
+      [direction, ...detentSensitivity, numeric('step', 'Step override (0 = 0.1 / 0.01 / 0.001)', 0, 0)],
       (e, o) =>
         e.layerEdit === 'edit'
           ? e.adjustLayerTiming('out', Number(o.direction),{detents:o.detents})
@@ -131,7 +167,7 @@ function actions(instance) {
     ),
     time: action(
       'Scrub live / move selected key',
-      [direction, numeric('step', 'Seconds override (0 = selected time step)', 0, 0)],
+      [direction, ...detentSensitivity, numeric('step', 'Seconds override (0 = selected time step)', 0, 0)],
       (e, o) =>
         instance.jogLocked || e.mediaMode || e.layerEdit === 'edit'
           ? undefined
@@ -179,6 +215,7 @@ function presets(label = 'd3layers') {
   const white = theme.text,
     blue = theme.surface
   const entry = (actionId, options = {}) => ({ actionId, options })
+  const dialEntry = (actionId, direction, options = {}) => entry(actionId, { direction, detent_divisor: 1, detent_group: 0, ...options })
   const button = (name, text, down, rotate_left = [], rotate_right = []) => ({
     type: 'simple',
     name,
@@ -192,36 +229,36 @@ function presets(label = 'd3layers') {
       'Dial 1: layer (automatic sync)',
       'LAYER\n$(this:layer)',
       [entry('layer_press')],
-      [entry('layer', { direction: -1 })],
-      [entry('layer', { direction: 1 })],
+      [dialEntry('layer', -1)],
+      [dialEntry('layer', 1)],
     ),
     dial_field: button(
       'Dial 2: parameter / press for fine mode',
       'PARAM\n$(this:parameter)',
       [entry('fine')],
-      [entry('field', { direction: -1 })],
-      [entry('field', { direction: 1 })],
+      [dialEntry('field', -1)],
+      [dialEntry('field', 1)],
     ),
     dial_value: button(
       'Dial 3: edit selected key / press to add key',
       'VALUE\n$(this:value_label)',
       [entry('value_press')],
-      [entry('value', { direction: -1, step: 0 })],
-      [entry('value', { direction: 1, step: 0 })],
+      [dialEntry('value', -1, { step: 0 })],
+      [dialEntry('value', 1, { step: 0 })],
     ),
     dial_time: button(
       'Dial 4: live time / press for step',
       '$(this:time_step)\n$(this:timecode)',
       [entry('time_step')],
-      [entry('time', { direction: -1, step: 0 })],
-      [entry('time', { direction: 1, step: 0 })],
+      [dialEntry('time', -1, { step: 0 })],
+      [dialEntry('time', 1, { step: 0 })],
     ),
     dial_zoom: button(
-      'Dial 5: timeline viewer zoom',
+      'Dial 5: Designer timeline and viewer zoom',
       'ZOOM\nVIEWER',
       [],
-      [entry('viewer_zoom', { direction: -1 })],
-      [entry('viewer_zoom', { direction: 1 })],
+      [dialEntry('viewer_zoom', -1)],
+      [dialEntry('viewer_zoom', 1)],
     ),
     key_set: button('Save keyframe', 'SAVE\nKEYFRAME', [entry('key_set')]),
     play_stop: button('Play to end of section / stop', '$(this:playback_label)', [entry('play_stop')]),
@@ -241,11 +278,12 @@ function presets(label = 'd3layers') {
     key_type: button('Keyframe interpolation', 'KEYFRAME TYPE\n$(this:key_type)', [entry('key_type')]),
     media: button('Resources and media', 'RESOURCES', [entry('media')]),
     layer_edit: button('Layer move / in / out', 'LAYER\nEDIT', [entry('layer_edit')]),
-    master_prev: button('Previous master-fader transport', 'MASTER ◀\n$(this:master_transport)', [entry('transport_master_select',{direction:-1})]),
-    master_next: button('Next master-fader transport', 'MASTER ▶\n$(this:master_transport)', [entry('transport_master_select',{direction:1})]),
+    master_refresh: button('Refresh transport list and variables', 'REFRESH\nTRANSPORTS', [entry('transport_master_refresh')]),
+    master_prev: button('Previous master-fader target', 'MASTER ◀\n$(this:master_transport)', [entry('transport_master_select',{direction:-1})]),
+    master_next: button('Next master-fader target', 'MASTER ▶\n$(this:master_transport)', [entry('transport_master_select',{direction:1})]),
     master_zero: button('Set selected transport master to zero', 'MASTER\n0%', [entry('transport_master_level',{level:0})]),
     master_full: button('Set selected transport master to full', 'MASTER\n100%', [entry('transport_master_level',{level:100})]),
-    master_status: button('Selected master-fader transport', '$(this:master_transport)\n$(this:transport_master_level)%', []),
+    master_status: button('Selected master-fader target', '$(this:master_transport)\n$(this:transport_master_level)%', []),
     jog_lock: button('Lock or unlock jog wheel', 'JOG\n$(this:jog_lock_label)', [entry('jog_lock')]),
   }
   for (const [group, names] of Object.entries({
@@ -270,9 +308,24 @@ function presets(label = 'd3layers') {
   p.link_time=button('Link editing time to Designer','LINK\nTIME',[entry('link_time')])
   p.link_time.feedbacks=[{feedbackId:'link_time',options:{},style:{bgcolor:theme.active}}]
   p.jog_lock.feedbacks=[{feedbackId:'jog_locked',options:{},style:{bgcolor:theme.danger}}]
-  for(let slot=1;slot<=42;slot++) {
-    p['master_transport_'+slot]=button('Select master-fader transport '+slot,'$(this:master_transport_'+slot+')',[entry('transport_master_select_slot',{slot})])
+  for(let slot=1;slot<=16;slot++) {
+    p['master_transport_'+slot]=button(slot <= 8 ? 'Select transport '+slot : 'Select OSC fader '+(slot-8),'$(this:master_transport_'+slot+')',[entry('transport_master_select_slot',{slot})])
     p['master_transport_'+slot].feedbacks=[{feedbackId:'transport_master_selected',options:{slot},style:{bgcolor:theme.active}}]
+  }
+  p.navigation_toggle = button('Toggle TRACK / SECTION navigation', 'NAV\n$(this:navigation_mode)', [entry('navigation_toggle')])
+  p.navigation_toggle.feedbacks = [{feedbackId:'navigation_track',options:{},style:{bgcolor:theme.active}}]
+  for (const [name, operation, text] of [
+    ['previous', 'gotoprevtrack', 'PREV'], ['next', 'gotonexttrack', 'NEXT'],
+  ]) {
+    p['navigation_' + name] = button(text + ' track / section', text + '\n$(this:navigation_mode)', [{
+      actionId: 'internal:logicIf', options: {},
+      headline: 'TRACK enabled: change track. Otherwise: change section.',
+      children: {
+        condition: [{feedbackId: 'navigation_track', options: {}}],
+        actions: [entry('transport', {operation})],
+        elseActions: [entry('transport', {operation: operation === 'gotoprevtrack' ? 'gotoprevsection' : 'gotonextsection'})],
+      },
+    }])
   }
   p.connection.feedbacks = [{ feedbackId: 'connected', options: {}, style: { bgcolor: theme.active } }]
   p.fine.feedbacks = [{ feedbackId: 'fine', options: {}, style: { bgcolor: theme.active } }]
@@ -313,6 +366,9 @@ function presets(label = 'd3layers') {
         id: 'timing', name: 'Adaptive timing steps', definitions:Array.from({length:10},(_,i)=>'timing_'+i),
       },
       {
+        id: 'navigation', name:'Track / section navigation', definitions:['navigation_toggle','navigation_previous','navigation_next'],
+      },
+      {
         id: 'transport', name:'Transport and time linking', definitions:['transport_gotoprevtrack','transport_gotoprevsection','transport_play','transport_playsection','transport_playloopsection','transport_stop','transport_gotonextsection','transport_gotonexttrack','transport_toggle','link_time','section_cut','section_merge'],
       },
       {
@@ -322,8 +378,8 @@ function presets(label = 'd3layers') {
       },
       {
         id: 'master',
-        name: 'CC1 transport master fader',
-        definitions: ['master_prev','master_next','master_zero','master_full','master_status',...Array.from({length:42},(_,i)=>'master_transport_'+(i+1))],
+        name: 'CC1 master fader: transports / OSC',
+        definitions: ['master_refresh','master_prev','master_next','master_zero','master_full','master_status',...Array.from({length:16},(_,i)=>'master_transport_'+(i+1))],
       },
       {
         id: 'safety',

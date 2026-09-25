@@ -1,0 +1,288 @@
+diff --git a/companion/manifest.json b/companion/manifest.json
+index 6a8fe71..85acba9 100644
+--- a/companion/manifest.json
++++ b/companion/manifest.json
+@@ -4,7 +4,7 @@
+ 	"name": "Yamaha CC121MK2",
+ 	"shortname": "CC1",
+ 	"description": "Yamaha CC121MK2 control surface \u2014 12-key LCD, 6 push-encoders, 17 buttons and a motorised fader, over its USB CDC serial interface. No Yamaha ControlCenter or Stream Deck software required.",
+-	"version": "0.5.0",
++	"version": "0.5.1-beta.2",
+ 	"license": "MIT",
+ 	"repository": "https://github.com/bitfocus/companion-surface-yamaha-cc1",
+ 	"bugs": "https://github.com/bitfocus/companion-surface-yamaha-cc1/issues",
+diff --git a/package.json b/package.json
+index a281116..fdb6b89 100644
+--- a/package.json
++++ b/package.json
+@@ -1,11 +1,11 @@
+ {
+ 	"name": "companion-surface-yamaha-cc1",
+-	"version": "0.5.0",
++	"version": "0.5.1-beta.2",
+ 	"type": "module",
+ 	"license": "MIT",
+ 	"scripts": {
+ 		"build": "tsc",
+-		"test": "tsx src/cc1-proto.test.ts && tsx src/main.test.ts",
++		"test": "tsx src/cc1-proto.test.ts && tsx src/main.test.ts && tsx src/paint-queue.test.ts && tsx src/motor-fader.test.ts",
+ 		"check": "companion-surface-check",
+ 		"package": "companion-surface-build"
+ 	},
+diff --git a/src/main.ts b/src/main.ts
+index 59661e2..d1e1c08 100644
+--- a/src/main.ts
++++ b/src/main.ts
+@@ -5,6 +5,8 @@
+  * path rather than HID. All wire encoding lives in cc1-proto.ts.
+  */
+ import { SerialPort } from 'serialport'
++import { LatestPaintQueue } from './paint-queue.js'
++import { MotorFader } from './motor-fader.js'
+ import {
+ 	createModuleLogger,
+ 	parseColor,
+@@ -150,7 +152,7 @@ class CC1Surface implements SurfaceInstance {
+ 	/** Set while we are deliberately closing, so teardown doesn't re-enter via disconnect(). */
+ 	#closing = false
+ 	/** Last position reported by the fader, so the motor isn't driven against the user's hand. */
+-	#faderTouched = false
++	#faderState = new MotorFader()
+ 	#faderLogAt = 0
+ 	/** Watchdog: when we last parsed anything from the device vs last tile we wrote. */
+ 	#lastRxAt = Date.now()
+@@ -160,6 +162,16 @@ class CC1Surface implements SurfaceInstance {
+ 	#onHandshake: (() => void) | null = null
+ 	/** Serialises and paces every outbound frame — see #write/#send. */
+ 	#txChain: Promise<void> = Promise.resolve()
++  #paints = new LatestPaintQueue<{ image: Buffer; signal: AbortSignal }>(
++    async (key, { image, signal }) => {
++      if (signal.aborted || this.#closing) return
++      this.#paintKey(key, image)
++      this.#write(buildLcdCommit(1, this.#nextSeq()))
++      // Wait for this key's paced tiles before accepting another paint into TX.
++      await this.#txChain
++    },
++    error => this.#logger.warn('LCD paint failed: ' + String(error)),
++  )
+ 	/** 300ms keepalive (op 0x0000 routing=4), as ControlCenter sends — without it the
+ 	 * device times out the host session and goes unresponsive. */
+ 	#keepalive: ReturnType<typeof setInterval> | undefined
+@@ -310,6 +322,7 @@ class CC1Surface implements SurfaceInstance {
+ 
+ 	async close(): Promise<void> {
+ 		openSurfaces.delete(this)
++    this.#paints.close()
+ 		clearInterval(this.#keepalive)
+ 		clearInterval(this.#watchdog)
+ 		const port = this.#port
+@@ -371,8 +384,7 @@ class CC1Surface implements SurfaceInstance {
+ 		if (key !== undefined) {
+ 			const image = drawProps.image
+ 			if (!image || image.length < LCD_KEY_W * LCD_KEY_H * 3) return
+-			this.#paintKey(key, image)
+-			this.#write(buildLcdCommit(1, this.#nextSeq()))
++			this.#paints.enqueue(key, { image: Buffer.from(image), signal })
+ 			return
+ 		}
+ 
+@@ -391,18 +403,15 @@ class CC1Surface implements SurfaceInstance {
+ 
+ 	onVariableValue(name: string, value: any): void {
+ 		if (name !== 'faderMotor') return
+-		// Don't fight the user's hand while they're holding the fader.
+-		if (this.#faderTouched) return
+-		const pct = Number(value)
+-		if (!Number.isFinite(pct)) return
+-		this.#write(buildFaderPosition((Math.max(0, Math.min(100, pct)) / 100) * FADER_MAX, 1, this.#nextSeq()))
++		const pct = this.#faderState.setTarget(value)
++		if (pct === undefined) return
++		this.#write(buildFaderPosition((pct / 100) * FADER_MAX, 1, this.#nextSeq()))
+ 	}
+ 
+ 	async showStatus(signal: AbortSignal, cardGenerator: CardGenerator, _statusMessage: string): Promise<void> {
+ 		const card = await cardGenerator.generateLogoCard(LCD_KEY_W, LCD_KEY_H, 'rgb')
+ 		if (signal.aborted) return
+-		for (let k = 0; k < LCD_KEYS; k++) this.#paintKey(k, card)
+-		this.#write(buildLcdCommit(1, this.#nextSeq()))
++		for (let k = 0; k < LCD_KEYS; k++) this.#paints.enqueue(k, { image: Buffer.from(card), signal })
+ 	}
+ 
+ 	// --- internals ---
+@@ -519,7 +528,7 @@ class CC1Surface implements SurfaceInstance {
+ 		if (event.type === 'switch')
+ 			this.#logger.debug(`input: switch ${event.id}${PANEL_BUTTON_LABELS[event.id] ? ` (btn ${PANEL_BUTTON_LABELS[event.id]})` : ''} ${event.pressed ? 'down' : 'up'} -> ${SWITCH_TO_CONTROL.get(event.id) ?? 'unmapped'}`)
+ 		else if (event.type === 'encoder') this.#logger.debug(`input: encoder ${event.id} delta=${event.delta} -> ${ENC_TO_CONTROL.get(event.id) ?? 'unmapped'}`)
+-		else if (event.touched !== this.#faderTouched || Date.now() - this.#faderLogAt > 500) {
++		else if (event.touched !== this.#faderState.touched || Date.now() - this.#faderLogAt > 500) {
+ 			this.#faderLogAt = Date.now()
+ 			this.#logger.debug(`input: fader pos=${event.position} touched=${event.touched}`)
+ 		}
+@@ -550,16 +559,15 @@ class CC1Surface implements SurfaceInstance {
+ 			return
+ 		}
+ 
+-		// Fader: touch reads as a press, movement reports position to Companion.
+-		if (event.touched !== this.#faderTouched) {
+-			this.#faderTouched = event.touched
++		const wasTouched = this.#faderState.touched
++		const update = this.#faderState.input(event.position, event.touched)
++		if (event.touched !== wasTouched) {
+ 			if (event.touched) this.#context.keyDownById(FADER_CONTROL_ID)
+ 			else this.#context.keyUpById(FADER_CONTROL_ID)
+ 		}
+-		// Report to one decimal place. The fader is 10-bit (1024 positions), so rounding to
+-		// a whole percent would throw away most of it — 101 steps, barely 7 bits. One
+-		// decimal gives 1001 steps, which is the hardware's resolution to within a count.
+-		this.#context.sendVariableValue('faderPosition', Math.round((event.position / FADER_MAX) * 1000) / 10)
++		if (update.value !== undefined) this.#context.sendVariableValue('faderPosition', update.value)
++		if (update.motor !== undefined)
++			this.#write(buildFaderPosition((update.motor / 100) * FADER_MAX, 1, this.#nextSeq()))
+ 	}
+ }
+ 
+diff --git a/src/paint-queue.ts b/src/paint-queue.ts
+new file mode 100644
+--- /dev/null
++++ b/src/paint-queue.ts
+@@ -0,0 +1,34 @@
++/** One in-flight paint and one latest pending paint per LCD key.
++ * Preserve key order for fairness; replacing a pending image never adds backlog.
++ */
++export class LatestPaintQueue<T> {
++  #pending = new Map<number, T>()
++  #running: Promise<void> | undefined
++  #closed = false
++  constructor(
++    private readonly paint: (key: number, value: T) => Promise<void>,
++    private readonly onError: (error: unknown) => void,
++  ) {}
++  enqueue(key: number, value: T): void {
++    if (this.#closed) return
++    this.#pending.set(key, value)
++    if (!this.#running) {
++      this.#running = Promise.resolve().then(() => this.#drain()).finally(() => { this.#running = undefined; if (!this.#closed && this.#pending.size) { const [key, value] = this.#pending.entries().next().value!; this.enqueue(key, value) } })
++    }
++  }
++  async #drain(): Promise<void> {
++    while (!this.#closed && this.#pending.size) {
++      const [key, value] = this.#pending.entries().next().value!
++      this.#pending.delete(key)
++      try { await this.paint(key, value) }
++      catch (error) { this.onError(error) }
++    }
++  }
++  async idle(): Promise<void> {
++    while (this.#running) await this.#running
++  }
++  close(): void {
++    this.#closed = true
++    this.#pending.clear()
++  }
++}
+diff --git a/src/paint-queue.test.ts b/src/paint-queue.test.ts
+new file mode 100644
+--- /dev/null
++++ b/src/paint-queue.test.ts
+@@ -0,0 +1,54 @@
++import assert from 'node:assert/strict'
++import { LatestPaintQueue } from './paint-queue.js'
++
++let release!: () => void
++const gate = new Promise<void>(resolve => { release = resolve })
++const sent: [number, number][] = []
++const queue = new LatestPaintQueue<number>(async (key, value) => {
++  sent.push([key, value])
++  if (sent.length === 1) await gate
++}, error => { throw error })
++queue.enqueue(0, 0)
++await Promise.resolve()
++assert.deepEqual(sent, [[0, 0]])
++for (let value = 1; value <= 500; value++) {
++  queue.enqueue(0, value)
++  queue.enqueue(1, value)
++}
++// A new page replaces every waiting old-page image, including rapidly updated clocks.
++for (let key = 0; key < 12; key++) queue.enqueue(key, 1000 + key)
++assert.equal(sent.length, 1, 'only one paint may be in flight')
++release()
++await queue.idle()
++assert.deepEqual(sent, [[0, 0], ...Array.from({ length: 12 }, (_, key) => [key, 1000 + key])])
++queue.enqueue(2, 2000)
++await queue.idle()
++assert.deepEqual(sent.at(-1), [2, 2000], 'queue restarts after becoming idle')
++
++let releaseClose!: () => void
++const closeGate = new Promise<void>(resolve => { releaseClose = resolve })
++const closedSent: number[] = []
++const closed = new LatestPaintQueue<number>(async (_key, value) => {
++  closedSent.push(value)
++  await closeGate
++}, error => { throw error })
++closed.enqueue(0, 1)
++await Promise.resolve()
++closed.enqueue(1, 2)
++closed.close()
++closed.enqueue(2, 3)
++releaseClose()
++await closed.idle()
++assert.deepEqual(closedSent, [1], 'shutdown discards all pending paints')
++
++const errors: unknown[] = [], recovered: number[] = []
++const recovery = new LatestPaintQueue<number>(async (_key, value) => {
++  if (value === 1) throw Error('failed paint')
++  recovered.push(value)
++}, error => { errors.push(error) })
++recovery.enqueue(0, 1)
++recovery.enqueue(1, 2)
++await recovery.idle()
++assert.equal(errors.length, 1)
++assert.deepEqual(recovered, [2], 'failed paint does not replay or block later keys')
++console.log('paint-queue: OK - bounded backlog, latest page, fairness, idle, close and failure')
+diff --git a/src/motor-fader.ts b/src/motor-fader.ts
+new file mode 100644
+--- /dev/null
++++ b/src/motor-fader.ts
+@@ -0,0 +1,19 @@
++// Separate physical input from motor travel so recalling a channel cannot overwrite it.
++export class MotorFader {
++  touched = false
++  target: number | undefined
++  setTarget(value: unknown): number | undefined {
++    if (typeof value !== 'number' && typeof value !== 'string') return
++    if (value === '') return
++    const number = Number(value)
++    if (!Number.isFinite(number)) return
++    this.target = Math.max(0, Math.min(100, number))
++    return this.touched ? undefined : this.target
++  }
++  input(position: number, touched: boolean): { value?: number; motor?: number } {
++    const released = this.touched && !touched
++    this.touched = touched
++    if (touched) return {value: Math.round(Math.max(0, Math.min(1023, position)) / 1023 * 1000) / 10}
++    return released ? {motor:this.target} : {}
++  }
++}
+diff --git a/src/motor-fader.test.ts b/src/motor-fader.test.ts
+new file mode 100644
+--- /dev/null
++++ b/src/motor-fader.test.ts
+@@ -0,0 +1,18 @@
++import assert from 'node:assert/strict'
++import { MotorFader } from './motor-fader.js'
++const fader = new MotorFader()
++assert.equal(fader.setTarget(75),75)
++for (const position of [0,100,500,767]) assert.deepEqual(fader.input(position,false),{})
++assert.deepEqual(fader.input(512,true),{value:50})
++assert.equal(fader.setTarget(20),undefined)
++assert.equal(fader.setTarget(80),undefined)
++assert.deepEqual(fader.input(512,false),{motor:80})
++assert.deepEqual(fader.input(818,false),{})
++assert.equal(fader.setTarget('bad'),undefined)
++assert.equal(fader.target,80)
++assert.equal(fader.setTarget(''),undefined)
++assert.equal(fader.setTarget(null),undefined)
++assert.equal(fader.setTarget(200),100)
++assert.deepEqual(fader.input(1023,true),{value:100})
++assert.deepEqual(fader.input(0,true),{value:0})
++console.log('motor-fader: OK — recall echoes ignored, touched input preserved, deferred target restored')

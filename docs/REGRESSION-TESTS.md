@@ -102,3 +102,31 @@ Keep this test matrix updated when changing behavior. Do not weaken assertions t
 
 This is a coverage index, not a claim that every combination is proven. Keep missing
 resources visible as SKIP and preserve failure reports when fixing a defect.
+
+## Yamaha surface-driver display queue
+
+The locally installed Yamaha surface 0.5.1-beta.1 fixes display backlog independently
+of this module. See [the patch and repeatable driver tests](../support/yamaha-cc1/README.md).
+Run the driver's existing yarn test command after queue changes; it covers the
+protocol, layout/lifecycle and bounded latest-image queue. The root module's offline
+suite does not test the separate Yamaha serial driver. Hardware page/colour latency
+was accepted by the operator after installation; no numeric latency was measured.
+Navigation presets: test/navigation-presets.test.js covers shared persistent mode,
+native IF/ELSE structure in both directions, matching section actions in ELSE branches,
+VIEW transport guards and unchanged original presets. These are offline tests;
+they do not navigate installed hardware or Designer.
+
+OSC faders: osc-fader-presets.test.js checks eight fixed transport slots plus eight
+OSC slots, exact typed float SDK arguments, channel value isolation, motor-target
+publication, batched persistence, invalid input and VIEW guards, and switching
+while a transport write is pending. Package smoke reloads saved OSC configuration
+without network sends. connection.test.js checks the eight-transport cache cap.
+Yamaha motor-fader.test.ts checks untouched motor echo suppression and deferred
+recall on release; the source/tests are preserved in support/yamaha-cc1/latest-paint.patch.
+These are offline tests with a mocked Companion OSC sender, not receiver or
+physical motor verification.
+
+Designer zoom: designer-zoom.test.js runs the generated Python UI command against
+an offline PrivateState fixture and tests the encoder/queue/VIEW contract. A
+separate installed read-only capability probe confirmed the API exists; this is
+not a physical encoder test or native Designer zoom mutation test.

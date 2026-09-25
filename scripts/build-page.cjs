@@ -352,8 +352,8 @@ const cc1Output=path.join(root,'D3-Yamaha-CC1.companionconfig')
 fs.writeFileSync(cc1Output,JSON.stringify(cc1,null,2)+'\n')
 console.log(`Companion CC1 page: ${cc1Output}`)
 
-// Yamaha CC1 transport selector: page 9. Names and selected-state feedback are
-// live, so the page follows Designer's transport list without regeneration.
+// Yamaha CC1 transport selector: page 9. Names use the cached transport list.
+// The separate REFRESH TRANSPORTS preset reloads names and slots on demand.
 const cc1Transports=structuredClone(page)
 cc1Transports.page.id='d3-yamaha-cc1-transports-page'
 cc1Transports.page.name='Disguise Transports - Yamaha CC1'
@@ -362,7 +362,14 @@ cc1Transports.page.gridSize={minColumn:0,maxColumn:5,minRow:0,maxRow:6}
 cc1Transports.page.controls=Object.fromEntries(Array.from({length:7},(_,row)=>[row,{}]))
 for(let slot=1;slot<=42;slot++) {
   const row=Math.floor((slot-1)/6),column=(slot-1)%6
-  const c=control(definitions['master_transport_'+slot],`Select Designer transport ${slot} for the Yamaha CC1 master fader.`)
+  // Preserve the old export's 42-cell layout without exposing unused presets.
+  const preset = definitions['master_transport_'+slot] || structuredClone(definitions.master_transport_1)
+  if (slot > 16) {
+    preset.style.text = '$(d3layers:master_transport_'+slot+')'
+    preset.steps[0].down[0].options.slot = slot
+    preset.feedbacks[0].options.slot = slot
+  }
+  const c=control(preset,`Select Designer transport ${slot} for the Yamaha CC1 master fader.`)
   c.style.layers=c.style.layers.filter(layer=>layer.type!=='image')
   const text=c.style.layers.find(layer=>layer.type==='text')
   text.fontsize=literal(theme.type.tool)
