@@ -4,7 +4,7 @@ The generated `D3-Yamaha-CC1.companionconfig` page targets Companion page 8 and 
 
 - The first twelve cells are the CC1 LCD keys.
 - RC1-RC4 match the Stream Deck + encoders.
-- RC5 controls timeline viewer zoom.
+- RC5 controls Designer timeline zoom (saved action ID viewer_zoom).
 - RC6 controls timeline time.
 - The lower panel contains keyframe, media, transport-master and time-link controls.
 - Fader target selection spans up to eight Designer transports, followed by eight OSC channels.
@@ -72,3 +72,40 @@ The accompanying Yamaha surface 0.5.1-beta.2 ignores untouched motor travel as
 input. It remembers motor updates while the fader is held and applies the newest
 target on release. This prevents a channel recall from overwriting its saved value.
 Physical recall and the operator's OSC receiver must still be checked on hardware.
+
+## Active layer list (beta.82)
+
+Press the LAYER display to show active layers on all twelve LCD buttons. Turn the
+LAYER encoder to page in groups of twelve, then press a layer to select it and
+return to normal controls. Active layers follow the edit clock, including exact
+OUT and independent LINK TIME-off editing. Empty slots do nothing. Other editing
+encoders and key actions are inert while choosing; transport controls remain available.
+
+The current layer is highlighted. Selection checks fresh Designer feedback and
+cancels if the displayed list or track changes. Opening/paging are local; choosing
+reads the layer's default parameter without seeking or editing Designer. Existing
+layer_press bindings work unchanged. Resource and layer-timing press behavior is
+preserved. Custom buttons can use Select layer list slot (1–12).
+
+## Import into an empty Companion
+
+The page file is not a full Companion backup. Install the Disguise module and the
+Yamaha CC1 surface driver separately (the local 0.5.1-beta.2 includes motor-input
+suppression and display queue fixes). Import the CC1 page at page 8 and the target
+selector page at page 9, keeping the connection label d3layers. Configure the
+Designer address and any OSC destination/names for the new system.
+Create cc1_fader, the change trigger and the surface motor bindings described above;
+page exports do not carry custom variables, triggers or surface configuration.
+Choose the CC1 surface's starting page/group. The page 8 navigation action uses
+self, so it follows the surface that pressed it instead of a specific device ID.
+The parameter-mode preset is included with beta.83; place it manually in an empty
+button. Its existing fader trigger action now reads Set selected fader target
+(transport / OSC / parameter). A fresh-install hardware test is still required.
+
+## Default page layout
+
+The default page is the operator-approved Companion page 8 captured on 2026-09-26.
+Preserve its layout when generating future exports. It includes the FADER toggle
+with red parameter-mode feedback and the NAV toggle with conditional PREV/NEXT.
+The source of truth is templates/yamaha-cc1-page8.json; the build script copies it
+into D3-Yamaha-CC1.companionconfig with clean connection settings.

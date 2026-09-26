@@ -4,8 +4,7 @@ Prefer the reusable local regression runner (`node scripts/regression.cjs`) over
 
 Every new behavior or fixed bug must extend its regression coverage. Focused groups
 use `npm run test:regression -- --group=layers,keyframes --unit-only`; full runs
-discover all test files. Installed mutation tests require authorization and explicit
-`--installed --viewer=... --designer=... --track=...`. Distinguish them from read-only
-probes. Do not silently drop failed/skipped cases or retry uncertain mutations.
+discover all test files. The former web-based installed mutation runner is removed. Native mutation tests
+require explicit operator authorization; distinguish them from read-only probes. Do not silently drop failed/skipped cases or retry uncertain mutations.
 
-Read docs/PROJECT-HANDOFF.md and docs/VIEWER-DEVELOPMENT.md before substantial changes. Keep UI and public documentation in English. Preserve unrelated work and local settings. Prefer concise output and local test batches. Never publish without authorization. Never commit credentials, personal paths, local media/projects or private probes. Use clean generated page exports. Report actual test scope and known limitations.
+Read docs/PROJECT-HANDOFF.md and docs/CC1-DEVELOPMENT.md before substantial changes. Keep UI and public documentation in English. Preserve unrelated work and local settings. Prefer concise output and local test batches. Never publish without authorization. Never commit credentials, personal paths, local media/projects or private probes. Use clean generated page exports. Report actual test scope and known limitations.

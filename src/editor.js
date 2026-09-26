@@ -1,4 +1,5 @@
 'use strict'
+const { supportsParameterFader } = require('./parameter-fader')
 const { parameterDecimals } = require('./parameter-step')
 const { orderLayerParameters } = require('./parameter-order')
 
@@ -142,9 +143,9 @@ class Editor {
     const modes = ['coarse', 'fine', 'ultra']
     this.precision = modes[(modes.indexOf(this.precision) + 1) % modes.length]
   }
-  get viewerTransportTime() {
+  get displayTransportTime() {
     // Linked editing has one clock. Raw transport feedback can lag a confirmed
-    // editor seek; only the unlinked viewer needs that independent clock.
+    // editor seek; unlinked CC1 playback feedback uses the independent transport clock.
     return this.linkTime ? this.time : this.transportTime
   }
   get activeLayers() {
@@ -241,7 +242,6 @@ class Editor {
     const uid = eligible.filter((id) => !previous.includes(id)).at(-1) || eligible.at(-1)
     this.designerLayerUid = uid || null
     if (!uid || uid === this.layer?.uid) return
-    this.viewerPinnedLayerUid = null
     this.layerIndex = this.snapshot.layers.findIndex((l) => l.uid === uid)
     this.layerEdit = ''
     this.mediaMode = false
@@ -251,7 +251,7 @@ class Editor {
   }
   receiveTransportTime(seconds, force = false) {
     if (!Number.isFinite(seconds)) return
-    // A delayed transport sample must not roll back the viewer's confirmed seek
+    // A delayed transport sample must not roll back a confirmed seek
     // while followTime already protects the independent editor state.
     if (!force && this.pendingJump && Date.now() < this.pendingJump.until &&
       Math.abs(seconds-this.pendingJump.time) > 0.51/(this.snapshot?.fps || 25)) return
@@ -333,7 +333,6 @@ class Editor {
       this.timecodeSamples = next.timecodeSamples
       this.liveTimecodeSample = null
       if (!keep) {
-        this.viewerPinnedLayerUid = null
         this.designerSelectionKey = null
         this.designerSelectionIds = []
         this.designerLayerUid = null
@@ -354,7 +353,6 @@ class Editor {
       )
       if (keep && this.layer && this.layer.uid === layerUid && this.field?.name === fieldName) {
         const keys = this.field?.keys || []
-        if(this.moveKey?.group?.some(selected=>!keys.some(k=>Math.abs(k.time-selected.time)<1e-6 && k.value===selected.value && k.resourceUid===selected.resourceUid && k.interpolation===selected.interpolation)))this.moveKey=null
         if (
           this.selectedKeyTime !== null &&
           !keys.some((k) => Math.abs(k.time - this.selectedKeyTime) < 1e-5)
@@ -563,11 +561,10 @@ class Editor {
       await this.remote(async () => this.acceptLive(await this.client.execute('read_field', this.liveArgs())))
     if (this.mediaMode) await this.loadMedia()
   }
-  async seekFromViewer(target) {
-    return this.withEditTime(() => this.seekFromViewerTarget(target))
+  async seekToTime(target) {
+    return this.withEditTime(() => this.seekToTimeTarget(target))
   }
-  async seekFromViewerTarget({ trackUid, time }) {
-    this.viewerPinnedLayerUid = null
+  async seekToTimeTarget({ trackUid, time }) {
     this.local()
     if (!Number.isFinite(time)) return { ok: false, reason: 'Invalid time' }
     if (!this.snapshot || this.stale) await this.refresh({ preserve: true })
@@ -590,122 +587,7 @@ class Editor {
     if (!this.keepEditPlayhead) this.transportTime = result.time
     return { ok: true, time: result.time }
   }
-  async selectFromViewer(target) {
-    const previous=this.viewerKeepPlayhead
-    this.viewerKeepPlayhead=target.keepPlayhead ?? previous ?? !this.linkTime
-    try {return await this.selectFromViewerTarget(target)}
-    finally {this.viewerKeepPlayhead=previous}
-  }
-  async selectFromViewerTarget({ trackUid, layerUid, parameter, point, keyTime }) {
-    this.local()
-    if (this.moveKey) return { ok: false, reason: 'Exit SELECT KEY before changing selection' }
-    if (this.clearKeysBrowser) return { ok: false, reason: 'Close the DELETE menu before changing selection' }
-    // Refresh before accepting a browser click: the layer may have moved or
-    // disappeared since rendering. Layer clicks explicitly request their IN point.
-    this.viewerPinnedLayerUid=this.keepEditPlayhead ? layerUid : null
-    const pendingTime = this.pendingJump && Date.now() < this.pendingJump.until ? this.pendingJump.time : this.time
-    await this.refresh({ preserve: true })
-    if (this.snapshot.trackUid !== trackUid) return { ok: false, reason: 'Track changed; select again' }
-    const layer = this.snapshot.layers.find((item) => item.uid === layerUid)
-    if (!layer) return { ok: false, reason: 'Layer is no longer available' }
-    const selectionTime = pendingTime ?? this.time
-    if (!point && (selectionTime < layer.start-1e-7 || selectionTime > layer.end+1e-7)) return {ok:false,reason:'LAYER IS OUTSIDE THE EDIT TIME'}
-    const numeric = parameter === undefined ? -1 : layer.fields.findIndex((field) => field.name === parameter)
-    const resource =
-      parameter === undefined ? -1 : (layer.mediaFields || []).findIndex((field) => field.name === parameter)
-    if (parameter !== undefined && numeric < 0 && resource < 0)
-      return { ok: false, reason: 'Parameter is no longer available' }
-    let insertTime
-    if (point) {
-      const fps = this.snapshot.fps || 25
-      let target
-      if (point === 'in') target = layer.start
-      else if (point === 'out') target = layer.end
-      else if (point === 'key') {
-        const field = numeric >= 0 ? layer.fields[numeric] : layer.mediaFields?.[resource]
-        const key = field?.sequenced && field.keys?.find(k => Math.abs(k.time-keyTime) < 1e-5)
-        if (!key) return {ok:false,reason:'KEYFRAME CHANGED — VIEW REFRESHING'}
-        if (key.time < layer.start-1e-7 || key.time > layer.end+1e-7) return {ok:false,reason:'KEYFRAME IS OUTSIDE LAYER BOUNDS'}
-        target = key.time
-      } else if (point === 'insert') {
-        const insertField = numeric >= 0 ? layer.fields[numeric] : layer.mediaFields[resource]
-        if (!insertField || insertField.canAnimate === false)
-          return {ok:false,reason:'THIS PARAMETER CANNOT BE KEYFRAMED'}
-        target = Math.round(keyTime*fps)/fps
-        if (!Number.isFinite(target) || target < layer.start || target > layer.end)
-          return {ok:false,reason:'CHOOSE A TIME INSIDE THE LAYER'}
-        insertTime = target
-      } else return {ok:false,reason:'Invalid timeline point'}
-      if (!Number.isFinite(target) || target < 0 || target > this.snapshot.length) return {ok:false,reason:'Layer is outside the track'}
-      const result = await this.remote(() => this.client.execute('seek', {...this.context(),time:target}))
-      this.time = result.time
-      this.pendingJump = this.keepEditPlayhead ? null : {time:result.time,until:Date.now()+1500}
-      this.activeLayerSignature = this.activeLayers.map(l => l.uid).sort().join(',')
-    }
-    this.layerIndex = this.snapshot.layers.indexOf(layer)
-    // Suppress only the already-observed Designer selection; a new mouse
-    // selection in Designer can still take ownership on the next update.
-    this.designerSelectionIds = this.snapshot.selectedLayerUids || []
-    this.designerSelectionKey = JSON.stringify([trackUid, this.designerSelectionIds])
-    this.designerLayerUid = null
-    this.layerEdit = ''
-    this.mediaMode = false
-    this.mediaAll = []
-    this.mediaKeyframe = false
-    this.mediaFieldIndex = 0
-    this.selectDefaultParameter()
-    if (numeric >= 0) {
-      this.selectedKeyTime = point === 'key' ? keyTime : null
-      this.fieldIndex = numeric
-      this.loadValue()
-    }
-    if (resource >= 0 && point !== 'key') {
-      this.mediaFieldIndex = resource
-      this.mediaMode = true
-      await this.loadMedia()
-      if (point === 'insert') {
-        if (!this.mediaCanAnimate) return {ok:false,reason:'THIS RESOURCE CANNOT BE KEYFRAMED'}
-        // Pin the clicked time after catalog reads. Delayed transport feedback
-        // must never turn insertion into replacement of the previous key.
-        this.mediaKeyframe = true
-        this.mediaKeyTime = insertTime
-        this.time = insertTime
-        this.pendingJump = this.keepEditPlayhead ? null : {time:insertTime,until:Date.now()+1500}
-      }
-    }
-    if (point === 'insert' && resource < 0) {
-      await this.writeLive('key_set',insertTime,{evaluateCurrent:true})
-      // Select from the authoritative write response, not a second native read.
-      const inserted=this.field.keys.find(key=>Math.abs(key.time-insertTime)<1e-5)
-      if(!inserted)throw new Error('Inserted keyframe was not returned by Designer')
-      this.moveKey={...inserted}
-      this.selectedKeyTime=inserted.time
-      this.navigationTime=inserted.time
-      this.pendingJump=this.keepEditPlayhead ? null : {time:inserted.time,until:Date.now()+1500}
-      this.loadValue()
-    }
-    return { ok: true, ...(point === 'insert' && this.linkTime ? {time:insertTime} : {}) }
-  }
-  async selectKeyGroup(times) {
-    this.requireField()
-    const keys=times.map(time=>this.field.keys.find(k=>Math.abs(k.time-time)<1e-6))
-    if(keys.some(k=>!k) || new Set(times).size!==times.length)throw new Error('Keyframes changed; select again')
-    const result=await this.remote(()=>this.client.execute('key_group',{...this.liveArgs(),operation:'select',expectedKeys:keys}))
-    this.acceptLive(result)
-    this.moveKey={...result.selectedKeys[0],group:result.selectedKeys}
-    this.selectedKeyTime=this.moveKey.time
-  }
-  async editKeyGroup(operation, options={}) {
-    const keys=this.moveKey?.group
-    if(!keys)return
-    const result=await this.remote(()=>this.client.execute('key_group',{...this.liveArgs(),operation,expectedKeys:keys,...options}))
-    this.acceptLive(result)
-    this.moveKey=result.selectedKeys?.length ? {...result.selectedKeys[0],group:result.selectedKeys} : null
-    this.selectedKeyTime=this.moveKey?.time ?? null
-  }
-  async adjustLiveValue(direction, step = 0, pointer = {}) {
-    if(this.moveKey?.group)return
-    if (this.moveKey && !Number.isFinite(pointer.targetValue)) this.guidesUntil = Date.now()+650
+  async adjustLiveValue(direction, step = 0) {
     if (!this.field) return
     if (this.field.resource) return
     this.requireField()
@@ -718,12 +600,20 @@ class Editor {
           step,
           fine: this.fine,
           precision: this.precision,
-          previewCurve: pointer.previewCurve === true,
-          ...(Number.isFinite(pointer.targetValue) ? {targetValue:pointer.targetValue,expectedValue:pointer.expectedValue} : {}),
         }),
       ),
     )
-    this.valueEditRevision=(this.valueEditRevision || 0)+1
+    if (this.moveKey && this.selectedKey) this.moveKey = { ...this.selectedKey }
+  }
+  async setFaderValue(percent) {
+    if (this.viewOnly) return
+    this.requireField()
+    if (!supportsParameterFader(this.field)) throw Error('Fader requires a numeric parameter with finite minimum and maximum')
+    if (this.mediaMode || this.layerBrowser || this.parameterBrowser || this.clearKeysBrowser || this.layerEdit) return
+    await this.remote(async () => this.acceptLive(await this.client.execute('adjust_value', {
+      ...this.liveArgs(), expectedKey: this.moveKey || undefined, faderPercent: percent,
+      expectedRange: [this.field.min, this.field.max, Boolean(this.field.integer)],
+    })))
     if (this.moveKey && this.selectedKey) this.moveKey = { ...this.selectedKey }
   }
   get viewOnly() { return this.client.viewOnly === true }
@@ -735,14 +625,12 @@ class Editor {
     this.clearKeysPrompt = null
     this.deletePress = null
     this.pendingJump = null
-    this.guidesUntil = 0
   }
   setLinkTime(enabled) {
     if (this.viewOnly) enabled = false
     this.local()
     const changed = this.linkTime !== Boolean(enabled)
     this.linkTime = Boolean(enabled)
-    this.viewerPinnedLayerUid = null
     this.pendingJump = null
     if (changed) {
       this.moveKey = null
@@ -759,30 +647,26 @@ class Editor {
     }
   }
   get keepEditPlayhead() {
-    return this.viewOnly || (this.viewerKeepPlayhead ?? !this.linkTime)
+    return this.viewOnly || (this.scopedKeepPlayhead ?? !this.linkTime)
   }
   async withEditTime(fn) {
-    const previous = this.viewerKeepPlayhead
-    this.viewerKeepPlayhead = previous ?? !this.linkTime
-    if (this.viewerKeepPlayhead && this.layer) this.viewerPinnedLayerUid = this.layer.uid
+    const previous = this.scopedKeepPlayhead
+    this.scopedKeepPlayhead = previous ?? !this.linkTime
     try { return await fn() }
-    finally { this.viewerKeepPlayhead = previous }
+    finally { this.scopedKeepPlayhead = previous }
   }
-  async adjustLiveTime(direction, stepOverride, pointer = {}) {
-    if ((this.moveKey || this.layerEdit) && !Number.isFinite(pointer.targetTime)) this.guidesUntil = Date.now()+650
-    if (this.moveKey || this.layerEdit) return this.withEditTime(() => this.adjustLiveTimeTarget(direction, stepOverride, pointer))
-    return this.withEditTime(() => this.adjustLiveTimeTarget(direction, stepOverride, pointer))
+  async adjustLiveTime(direction, stepOverride, options = {}) {
+    return this.withEditTime(() => this.adjustLiveTimeTarget(direction, stepOverride, options))
   }
-  async adjustLiveTimeTarget(direction, stepOverride, pointer = {}) {
+  async adjustLiveTimeTarget(direction, stepOverride, options = {}) {
     this.requireReady()
     const cursor = this.pendingJump && Date.now() < this.pendingJump.until ? this.pendingJump.time : this.time
     this.navigationTime = null
     this.pendingJump = null
     const beats = !stepOverride && this.usesBeatSteps
     const frames = !beats && !stepOverride && this.timeStep === 'frame'
-    const detents = Math.max(1, Math.min(64, Math.floor(Number(pointer.detents) || 1)))
+    const detents = Math.max(1, Math.min(64, Math.floor(Number(options.detents) || 1)))
     const delta = number(direction) * (stepOverride || this.timeStepAmount) * (this.moveKey ? 1 : detents)
-    if(this.moveKey?.group)return this.editKeyGroup('move',{delta,frames,beats,...pointer})
     if (this.layerEdit) {
       await this.remote(async () => {
         const result = await this.client.execute('layer_edit', {
@@ -811,7 +695,7 @@ class Editor {
         cursor,
         sourceTime: this.moveKey?.time,
         expectedKey: this.moveKey,
-        ...pointer,
+        detents,
       })
       this.pendingJump = this.keepEditPlayhead ? null : { time: result.time, until: Date.now() + 1500 }
       this.acceptLive(result)
@@ -887,7 +771,6 @@ class Editor {
     })
   }
   async cycleKeyType(type) {
-    if(this.moveKey?.group)return
     if (this.field?.resource) return // Resource sequences are discrete HOLD keys.
     if (type !== undefined && ![0, 1, 2].includes(type)) throw new Error('Invalid keyframe type')
     if (!this.canSelectKey) return
@@ -901,7 +784,6 @@ class Editor {
     if (this.moveKey && this.selectedKey) this.moveKey = { ...this.selectedKey }
   }
   async writeLive(command, targetTime, {evaluateCurrent=false}={}) {
-    if(this.moveKey?.group) {if(command==='key_delete')await this.editKeyGroup('delete');return}
     this.requireField()
     // Some Designer settings (for example Web dimensions) are constants by
     // design. Pressing the value dial must not send an impossible key write.
@@ -931,6 +813,68 @@ class Editor {
     this.mediaMode = false
     if (!this.layerEdit) this.followTime(this.time)
   }
+  layerBrowserSignature() {
+    return JSON.stringify([this.snapshot?.transportUid,this.snapshot?.trackUid,
+      this.activeLayers.map(layer=>[layer.uid,layer.name])])
+  }
+  validLayerBrowser() {
+    return Boolean(this.layerBrowser && this.layerBrowser.signature === this.layerBrowserSignature()
+      && !this.stale && !this.mediaMode && !this.layerEdit && !this.clearKeysBrowser && !this.clearKeysPrompt)
+  }
+  toggleLayerBrowser() {
+    if (this.layerBrowser) { this.layerBrowser = null; return }
+    if (!this.activeLayers.length || this.stale || this.mediaMode || this.layerEdit || this.clearKeysBrowser || this.clearKeysPrompt) return
+    this.parameterBrowser = null
+    this.deletePress = null
+    this.moveKey = null
+    this.layerBrowser = {signature:this.layerBrowserSignature(),page:Math.floor(Math.max(0,this.activeLayers.indexOf(this.layer))/12)}
+  }
+  pageLayers(direction) {
+    if (!this.validLayerBrowser()) { this.layerBrowser = null; return }
+    if (direction !== -1 && direction !== 1) return
+    const last = Math.max(0,Math.ceil(this.activeLayers.length/12)-1)
+    this.layerBrowser.page = Math.max(0,Math.min(last,this.layerBrowser.page+direction))
+  }
+  async selectLayerSlot(slot) {
+    if (!this.validLayerBrowser()) { this.layerBrowser = null; this.deletePress = null; return }
+    if (!Number.isInteger(slot) || slot < 0 || slot >= 12) return
+    const browser = this.layerBrowser
+    const target = this.activeLayers[browser.page*12+slot]
+    if (!target) return
+    // Like rotary layer selection, suppress Designer's existing highlight using
+    // a fresh read. Never redirect a slot after the displayed list changes.
+    const state = await this.remote(()=>this.client.execute('live_state',this.context()))
+    if (state.contextChanged || (state.timeline?.transportUid && state.timeline.transportUid !== this.snapshot?.transportUid)) {
+      this.stale = this.contextStale = true
+      this.layerBrowser = null
+      this.deletePress = null
+      return
+    }
+    if (Array.isArray(state.timeline?.selectedLayerUids)) {
+      this.designerSelectionIds = state.timeline.selectedLayerUids
+      this.designerSelectionKey = JSON.stringify([state.timeline.trackUid,this.designerSelectionIds])
+    }
+    this.followTimeline(state.timeline)
+    if (this.layerBrowser !== browser || !this.validLayerBrowser()) {
+      this.layerBrowser = null
+      this.deletePress = null
+      return
+    }
+    this.layerIndex = this.snapshot.layers.findIndex(layer=>layer.uid===target.uid)
+    this.designerLayerUid = null
+    this.layerBrowser = null
+    this.deletePress = null
+    this.moveKey = null
+    this.selectedKeyTime = null
+    this.navigationTime = null
+    this.pendingJump = null
+    this.selectDefaultParameter()
+    this.mediaAll = []
+    this.mediaFieldIndex = 0
+    this.lastMediaField = null
+    this.loadValue()
+    if (this.field) await this.remote(async()=>this.acceptLive(await this.client.execute('read_field',this.liveArgs())))
+  }
   parameterBrowserSignature() {
     return JSON.stringify([this.snapshot?.transportUid,this.snapshot?.trackUid,this.layer?.uid,
       (this.layer?.fields || []).map(f=>[f.uid || '',f.name])])
@@ -944,6 +888,7 @@ class Editor {
     if (!this.layer?.fields?.length || this.mediaMode || this.layerEdit || this.clearKeysBrowser || this.clearKeysPrompt) return
     this.deletePress = null
     this.moveKey = null
+    this.layerBrowser = null
     this.parameterBrowser = {signature:this.parameterBrowserSignature(),page:Math.floor(this.fieldIndex / 12)}
   }
   pageParameters(direction) {
@@ -967,7 +912,6 @@ class Editor {
     await this.remote(async()=>this.acceptLive(await this.client.execute('read_field',this.liveArgs())))
   }
   async pressValue() {
-    if(this.moveKey?.group)return
     if (this.layerEdit === 'edit') return this.cycleLayerStep()
     if (this.mediaMode) {
       if (!this.currentMedia) return
@@ -1013,11 +957,10 @@ class Editor {
     const steps = TIME_STEPS
     this.timeStep = steps[(steps.indexOf(this.timeStep) + 1) % steps.length]
   }
-  async adjustLayerTiming(mode, direction, pointer = {}) {
-    if (!Number.isFinite(pointer.targetTime)) this.guidesUntil = Date.now()+650
-    return this.withEditTime(() => this.adjustLayerTimingTarget(mode, direction, pointer))
+  async adjustLayerTiming(mode, direction, options = {}) {
+    return this.withEditTime(() => this.adjustLayerTimingTarget(mode, direction, options))
   }
-  async adjustLayerTimingTarget(mode, direction, pointer = {}) {
+  async adjustLayerTimingTarget(mode, direction, options = {}) {
     this.requireReady()
     if (!['in', 'move', 'out'].includes(mode) || !this.layer) throw new Error('Select a layer timing control')
     if (direction !== -1 && direction !== 1) throw new Error('Direction must be -1 or 1')
@@ -1028,12 +971,11 @@ class Editor {
         ...this.liveArgs(),
         mode,
         cursor,
-        delta: direction * (pointer.detents || 1) * (this.beatMode ? this.layerBeatStep : TIME_STEP_SECONDS[this.timeStep]),
+        delta: direction * (options.detents || 1) * (this.beatMode ? this.layerBeatStep : TIME_STEP_SECONDS[this.timeStep]),
         beats: this.beatMode,
         frames: !this.beatMode && this.timeStep === 'frame',
         expectedStart: this.layer.start,
         expectedEnd: this.layer.end,
-        ...pointer,
       })
       Object.assign(this.layer, result.layer)
       this.selectedKeyTime = null
@@ -1167,6 +1109,7 @@ class Editor {
     }
   }
   async pressPad(slot) {
+    if (this.layerBrowser) return this.selectLayerSlot(slot)
     if (this.parameterBrowser) return this.selectParameterSlot(slot)
     if (this.viewOnly && (this.mediaMode || ![0,1,7].includes(slot))) return
     if (!Number.isInteger(slot) || slot < 0 || slot > 7) throw new Error('Invalid button')
@@ -1218,6 +1161,7 @@ class Editor {
     await this.refresh({ preserve: true })
   }
   async padDown(slot, now = Date.now()) {
+    if (this.layerBrowser) return this.selectLayerSlot(slot)
     if (this.parameterBrowser) return this.selectParameterSlot(slot)
     if (this.viewOnly && ![0,1,7].includes(slot)) return
     if (slot === 5 && !this.layer) return
@@ -1227,7 +1171,7 @@ class Editor {
     this.deletePress = { time: now, target: this.deletionTarget(), resetDefault: this.canResetDefault }
   }
   async padUp(slot, now = Date.now()) {
-    if (this.parameterBrowser) { this.deletePress = null; return }
+    if (this.layerBrowser || this.parameterBrowser) { this.deletePress = null; return }
     if (this.viewOnly && ![0,1,7].includes(slot)) return
     if (slot !== 5 || !this.deletePress) return
     const press = this.deletePress
@@ -1235,7 +1179,6 @@ class Editor {
     if (this.mediaMode || JSON.stringify(press.target) !== JSON.stringify(this.deletionTarget()))
       throw new Error('Selection changed; deletion cancelled')
     if (now - press.time >= 1000) {
-      if(this.moveKey?.group)return this.writeLive('key_delete')
       return this.openClearKeys()
     }
     if (press.resetDefault) return this.resetDefault()
@@ -1384,7 +1327,7 @@ class Editor {
       this.timeEntryError = 'TIME NOT\nON TRACK'
       return
     }
-    const jump = await this.seekFromViewer({ trackUid, time: result.time })
+    const jump = await this.seekToTime({ trackUid, time: result.time })
     if (jump.ok) this.timeEntryDigits = ''
     else this.timeEntryError = 'TRACK\nCHANGED'
   }
@@ -1433,7 +1376,6 @@ class Editor {
     if (this.moveKey && (kind === 'layer' || kind === 'field')) return
     if (direction !== -1 && direction !== 1) throw new Error('Direction must be -1 or 1')
     if (kind === 'layer') {
-      this.viewerPinnedLayerUid = null
       const list = this.activeLayers
       const current = list.indexOf(this.layer)
       this.designerLayerUid = null

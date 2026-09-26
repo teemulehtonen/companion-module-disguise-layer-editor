@@ -9,7 +9,6 @@ const {DemoClient}=require('../src/demo')
 const {DisguiseLayerControl}=require('../src/main')
 const {makeScript}=require('../src/designer-script')
 const {DesignerClient}=require('../src/client')
-const {browserScript}=require('../src/viewer-page')
 
 test('GUI transport switches resynchronise through the real host queue without native writes',async()=>{
  const data=new DemoClient().data
@@ -59,7 +58,7 @@ test('native read guards signal context changes while mutation guards still reje
  if(!python)return t.skip('Python required for isolated native context fixture')
  const script=makeScript('live_state')
  const block=script.slice(script.indexOf('    manager = guisystem.currentTransportManager'),script.indexOf('    def edit_seconds'))
- const fixture="class Obj: pass\nguisystem=Obj()\nm=Obj(); m.uid=33; m.track=Obj(); m.track.uid=22\nguisystem.currentTransportManager=m\ndef guard(p):\n"+block+"\nfor command in ['live_state','viewer_snapshot','refresh']:\n    result=guard({'command':command,'transportUid':'11','trackUid':'22'})\n    assert result['contextChanged'] and result['transportUid']=='33'\nassert guard({'command':'viewer_snapshot','transportUid':'33','trackUid':'22'}) is None\ntry: guard({'command':'key_move','transportUid':'11','trackUid':'22'})\nexcept ValueError as e: assert 'Transport changed' in str(e)\nelse: raise AssertionError('Mutation guard bypassed')\nm.track=None\nassert guard({'command':'live_state'})['contextAvailable'] is False\nguisystem.currentTransportManager=None\nassert guard({'command':'viewer_snapshot'})['transportUid'] is None\n"
+ const fixture="class Obj: pass\nguisystem=Obj()\nm=Obj(); m.uid=33; m.track=Obj(); m.track.uid=22\nguisystem.currentTransportManager=m\ndef guard(p):\n"+block+"\nfor command in ['live_state','refresh','refresh']:\n    result=guard({'command':command,'transportUid':'11','trackUid':'22'})\n    assert result['contextChanged'] and result['transportUid']=='33'\nassert guard({'command':'refresh','transportUid':'33','trackUid':'22'}) is None\ntry: guard({'command':'key_move','transportUid':'11','trackUid':'22'})\nexcept ValueError as e: assert 'Transport changed' in str(e)\nelse: raise AssertionError('Mutation guard bypassed')\nm.track=None\nassert guard({'command':'live_state'})['contextAvailable'] is False\nguisystem.currentTransportManager=None\nassert guard({'command':'refresh'})['transportUid'] is None\n"
  const run=spawnSync(python,['-c',fixture],{encoding:'utf8',timeout:10000})
  assert.equal(run.status,0,run.stderr||run.error?.message)
 })
@@ -69,24 +68,9 @@ test('client classifies selection changes without retrying a command',async()=>{
  const context={contextChanged:true,contextAvailable:true,transportUid:'33',trackUid:'22'}
  const c=new DesignerClient('localhost',80,async()=>{calls++;return {ok:true,json:async()=>({status:{code:0},returnValue:context})}})
  assert.deepEqual(await c.execute('live_state'),context)
- await assert.rejects(c.execute('viewer_snapshot'),{code:'CONTEXT_CHANGED'})
+ await assert.rejects(c.execute('refresh'),{code:'CONTEXT_CHANGED'})
  await assert.rejects(c.execute('refresh'),{code:'CONTEXT_CHANGED'})
  assert.equal(calls,3)
  const rejected=new DesignerClient('localhost',80,async()=>({ok:false,status:500,json:async()=>({status:{message:'Transport changed. Refresh before editing.'}})}))
  await assert.rejects(rejected.execute('key_move'),{code:'CONTEXT_CHANGED'})
-})
-
-test('browser synchronising state disables stale interaction and keeps transport clocks isolated',()=>{
- const nodes={},state={editEnabled:true,seekEnabled:true,selectionEnabled:true}
- const c={state,latestLive:{},rendered:'old',lastFullRead:100,presentation:{clear(){}},updateEditorControls(){},$:id=>nodes[id]||(nodes[id]={})}
- vm.createContext(c)
- vm.runInContext(browserScript.slice(browserScript.indexOf('  function showSynchronizing('),browserScript.indexOf('  async function pollLive(')),c)
- assert.equal(c.showSynchronizing({connected:true,synchronizing:true}),true)
- assert.equal(nodes.status.textContent,'SYNCHRONISING')
- assert.equal(state.editEnabled,false);assert.equal(state.seekEnabled,false)
- assert.equal(c.latestLive,null)
- vm.runInContext(browserScript.slice(browserScript.indexOf('  function mergeLiveClock('),browserScript.indexOf('  async function poll()')),c)
- const snapshot={transportUid:'1',trackUid:'same',time:1}
- c.mergeLiveClock(snapshot,{transportUid:'2',trackUid:'same',time:99},0)
- assert.equal(snapshot.time,1)
 })

@@ -5,7 +5,7 @@ const fs = require('node:fs/promises')
 const os = require('node:os')
 const path = require('node:path')
 const { DesignerClient } = require('../src/client')
-const { WaveformDiskCache } = require('../src/waveform-disk-cache')
+const { ThumbnailDiskCache } = require('../src/thumbnail-disk-cache')
 
 test('thumbnail persists across clients, revalidates revision and flush forces re-download', async t => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'thumb-disk-test-'))
@@ -17,7 +17,7 @@ test('thumbnail persists across clients, revalidates revision and flush forces r
       downloads++
       return {ok:true,arrayBuffer:async()=>png}
     })
-    client.mediaDisk = new WaveformDiskCache(dir)
+    client.mediaDisk = new ThumbnailDiskCache(dir)
     client.execute = async()=>({revision})
     t.after(()=>client.close())
     return client

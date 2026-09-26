@@ -34,18 +34,24 @@ test('clean fourth button preserves typography and uses literal variable text in
  const reference=require('../templates/yamaha-cc1-page8.json').controls[0][2].style
  const before=structuredClone(reference),actual=cleanContextStyle(reference)
  assert.deepEqual(reference,before)
- assert.deepEqual(actual.layers.slice(0,-1).map(l=>l.id),reference.layers.map(l=>l.id))
+ assert.deepEqual(actual.layers.slice(0,-2).map(l=>l.id),reference.layers.map(l=>l.id))
  for(let i=0;i<reference.layers.length;i++){
   const expected=JSON.parse(JSON.stringify(reference.layers[i]).replace(/:pad(_(?:color|image|kind|folder))?_2\)/g,':pad$1_3)'))
   if(expected.id==='text0')expected.enabled=actual.layers[i].enabled
+  if(expected.id==='box0')expected.color=actual.layers[i].color
   assert.deepEqual(actual.layers[i],expected)
  }
- const text=actual.layers.find(l=>l.id==='text0'),fader=actual.layers.at(-1)
- for(const k of ['fontsize','font','x','y','width','height','color','halign','valign'])assert.deepEqual(fader[k],text[k])
+ const text=actual.layers.find(l=>l.id==='text0'),fader=actual.layers.find(l=>l.id==='fader-display'),hint=actual.layers.at(-1)
+ for(const k of ['fontsize','font','x','width','color','halign','valign'])assert.deepEqual(fader[k],text[k])
+ assert.equal(hint.text.value,'LOCK TIME')
+ assert.equal(hint.fontsize.value,66)
+ assert.equal(fader.y.value+fader.height.value/2,50)
+ assert.equal(fader.height.value,80)
+ assert.deepEqual(hint.enabled,fader.enabled)
  assert.equal(fader.text.isExpression,false);assert.equal(text.text.isExpression,false)
- assert.equal(fader.text.value,'$(d3layers:master_transport)\n$(d3layers:transport_master_level)%')
- for(const [mode,pad,expected]of [['PARAMS','LINK\nTIME','Smoke\n37.5%'],['MEDIA','Clip','Clip'],['PARAMETER_LIST','Opacity','Opacity'],['CLEAR_KEYS','','']]){
-  const vars={ui_mode:mode,pad_3:pad,master_transport:'Smoke',transport_master_level:37.5}
+ assert.equal(fader.text.value,'$(d3layers:master_transport)\n$(d3layers:fader_value_label)')
+ for(const [mode,pad,expected]of [['PARAMS','LINK\nTIME','Smoke\n37.5%'],['MEDIA','Clip','Clip'],['PARAMETER_LIST','Opacity','Opacity'],['LAYER_LIST','Layer 4','Layer 4'],['CLEAR_KEYS','','']]){
+  const vars={ui_mode:mode,pad_3:pad,master_transport:'Smoke',transport_master_level:37.5,fader_value_label:'37.5%'}
   const visible=[text,fader].filter(l=>Function('return '+l.enabled.value.replace(/\$\(d3layers:([^)]*)\)/g,(_,k)=>JSON.stringify(vars[k])))())
   assert.equal(visible.length,1)
   assert.equal(visible[0].text.value.replace(/\$\(d3layers:([^)]*)\)/g,(_,k)=>String(vars[k])),expected)

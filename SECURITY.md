@@ -1,11 +1,14 @@
-# Security and deployment
+# Security
 
-ALLOW VIEWER EDIT defaults to off. When enabled, browser users can modify Designer through the shared Companion editor, including confirmed bulk deletion. ALLOW LAN ACCESS exposes these controls to the local network without user authentication. Request tokens and origin checks are not a login mechanism.
+This CC1 module connects to Designer's HTTP/Python API and optionally sends OSC
+UDP messages. It opens no web server. Use a trusted control network and protect
+Companion and Designer access using their own administration controls.
 
-This beta has not undergone an independent security audit. There is no guaranteed security support period or response time.
+VIEW ONLY blocks module writes, including transport and OSC. It does not protect
+against other controllers or recall an already dispatched command. Native writes
+validate current context, key identity, locks and bounds and are never retried
+automatically after uncertain results.
 
-Use the module on a trusted control network. The module sends powerful Python commands through Designer's HTTP interface. Do not expose that interface directly to the public internet. Limit access using network controls appropriate to your installation; the module does not add authentication or encryption to Designer's HTTP endpoint.
-
-Never commit credentials, local addresses, project backups, media, or raw session logs. Sanitize issue attachments. Report suspected security vulnerabilities through an agreed private channel with the repository maintainer; do not include credentials or exploitable installation details in public issues. Once a repository owner is established, enable GitHub private vulnerability reporting where available and document its reporting link here.
-
-Offline builds and tests must not contact live show-control systems. Live tests require operator authorization and project backups. See [CONTRIBUTING.md](CONTRIBUTING.md) and [DISCLAIMER.md](DISCLAIMER.md).
+Only validated PNG thumbnails are cached locally. The module does not read SMB
+shares or copy source media. Do not commit credentials, local configuration,
+private probes or test reports. Report security issues privately to the maintainer.

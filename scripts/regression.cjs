@@ -27,8 +27,7 @@ async function main() {
     console.log('Groups: all, ' + Object.keys(groups).join(', '))
     return
   }
-  if (args.includes('--installed') && (!option('viewer') || !option('designer') || !option('track')))
-    throw Error('Installed tests require explicit --viewer, --designer and --track')
+  if (args.includes('--installed')) throw Error('The removed web-editor integration is unavailable in the CC1 build; use offline Companion actions or authorized --native tests')
   const selectedTests = selectTests(await fs.readdir(path.join(root, 'test')), option('group') || 'all')
   await fs.mkdir(path.join(root, '.tools'), { recursive: true })
   await run('unit', process.execPath, ['--test', ...selectedTests.map((f) => path.join('test', f))])
@@ -43,13 +42,6 @@ async function main() {
       path.join(__dirname, 'native-regression.cjs'),
       '--run',
       ...args.filter((a) => /^--(?:host|port)=/.test(a)),
-    ])
-  }
-  if (args.includes('--installed')) {
-    await run('installed', process.execPath, [
-      path.join(__dirname, 'installed-regression.cjs'),
-      '--run',
-      ...args.filter((a) => /^--(?:viewer|designer|track)=/.test(a)),
     ])
   }
   if (option('companion')) {

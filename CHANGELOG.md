@@ -1,3 +1,33 @@
+# 0.2.0-beta.84 — parameter fader feedback
+
+- Added Fader controls selected parameter boolean feedback with red default background.
+- FADER toggle preset includes the feedback automatically.
+- Clean CC1 page navigation targets the pressing surface instead of a device ID.
+
+# 0.2.0-beta.83 — parameter fader
+
+- Added a FADER mode toggle preset; no existing button assignment is replaced.
+- Selected numeric parameter min/max span full motor-fader travel.
+- Existing master/OSC readout remains visible, with red background in parameter mode.
+- Includes the operator-approved LOCK TIME label sizing.
+
+# 0.2.0-beta.82 — active layer list (installed locally)
+
+Press LAYER for a twelve-LCD active-layer chooser and page with the layer encoder.
+Keep existing layer_press bindings and resource/timing press behavior. Fresh
+feedback protects slot identity; VIEW and unlinked edit time are supported.
+
+# 0.2.0-beta.81 — CC1-only extraction
+
+Remove the web timeline/server, browser editing commands, waveform decoding and SMB
+dependency/settings. Preserve CC1 actions, parameter/key/resource controls, fader
+targets, OSC, display clock and thumbnail caching. Existing viewer_zoom bindings
+now control Designer only. Expose the retained VIEW lock in connection settings.
+Retain shared regression coverage and remove tests only for removed web features.
+Validation: 199 offline tests and package checks. Installed read-only verification
+confirmed HTTP + LIVE, no errors and unchanged connection/surface settings. No
+native mutation, physical hardware or OSC receiver test; no GitHub publication.
+
 # Changelog
 
 ## 0.2.0-beta.71 (local Companion update)

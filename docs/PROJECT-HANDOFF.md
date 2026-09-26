@@ -1,3 +1,161 @@
+# CC1 controller edition source branch
+
+Delivery branch: codex/cc1-controller-edition, based on 53054b8 from main.
+This branch is the CC1-focused variant of the existing project, including the
+web-editor removal, active-layer chooser, parameter fader and approved page 8.
+The previous web-editor source remains in main and Git history until reviewed.
+No source release tag or binary release is created by this delivery.
+
+Clean dependency installation was repaired by regenerating stale synckit and
+@pkgr/core lock entries from npm metadata: synckit 0.11.13 requires ^0.3.6,
+not the unavailable ^0.3.8 recorded previously. Clean npm ci now passes.
+Final Node 22.22.0 validation: 216 offline tests, zero failures/skips; package
+smoke and clean page generation passed. New files and the newly affected native
+script wrapper were formatted. format:check still reports 39 existing files;
+pre-existing formatting was deliberately not rewritten across the repository.
+Private publication audit found no personal paths, private endpoints, literal
+credentials or access-token patterns in the changed source. .tools, generated
+packages, live configuration exports and local install receipts remain ignored.
+
+# Current Companion page 8 is the default layout
+
+At the operator's request, read the installed page 8 and adopted its current
+30-control layout as templates/yamaha-cc1-page8.json. Treat this captured layout
+as the default for future exports; do not restore earlier button positions.
+It includes the FADER toggle with fader_parameter feedback at row 5 / column 3,
+NAV at row 6 / column 4, conditional PREV/NEXT at row 6 / columns 5-6, and the
+extra NEXT SECTION at row 7 / column 5 (coordinates are one-based).
+Preserved all actions, colors, feedback overrides, typography and encoder settings,
+including RC5 divisor 1 / group 0. The page-9 link runs on press as currently set.
+Only connection identity and the page-link surface identity were normalized for
+portability; no live Companion controls were modified. The original export remains
+private in .tools. There are no external image-library dependencies.
+Regenerated D3-Yamaha-CC1.companionconfig for beta.84. All 167 focused offline
+Companion tests passed with zero failures/skips, including nested navigation IDs,
+fader feedback, page-link portability and exact template/export equality.
+
+# Fader feedback beta.84 installed
+
+Added Fader controls selected parameter boolean feedback, red by default, to the
+FADER toggle preset. Mode changes and full publications re-evaluate it. Existing
+placed presets remain user-owned; add the new feedback to an existing toggle or
+place a fresh preset. No existing button was replaced or assigned.
+All 216 offline tests and package smoke passed on Node 22.22.0. Packaged tests
+verify both feedback states and the preset inclusion. Installed read-only checks
+confirmed beta.84 enabled/connected with empty last_error and unchanged connection
+configuration. No native parameter writes or physical hardware tests were run.
+
+# Parameter fader beta.83 installed
+
+The operator requested a master/parameter fader toggle as an additive preset only;
+no existing button binding was replaced and no toggle button was placed.
+Preset: Toggle fader: master / selected parameter, in the CC1 fader category.
+Numeric finite min/max map to full travel. Integer values round; resource/enum or
+unbounded fields are unavailable. Existing VALUE key/constant behavior and guards
+are retained. Coalescing retains one trailing absolute request and cancels stale
+target/mode input. Motor feedback follows the selected parameter in PARAMETER mode.
+The fader LCD still displays the saved transport/OSC name and level; red indicates
+PARAMETER mode. Existing LOCK TIME text and approved sizes remain unchanged.
+
+Validation: 216 offline tests passed with no failures/skips on Node 22.22.0; package
+smoke and clean page generation passed. Installed read-only verification found
+beta.83 enabled, connected, HTTP + SYNC and empty last_error, unchanged connection
+configuration and Yamaha surface/group settings. The preset catalog contains the
+new toggle. Two installed LCD style properties were updated and read back; all
+other button configuration, including actions and typography, matched the backup.
+No parameter writes, motor movement tests or physical button tests were performed.
+No Git publication. Private backups/receipts remain in .tools.
+
+# CC1 fader display LOCK TIME label
+
+Added a LOCK TIME footer with font size 66 (three times the previous 22) to page 8 row 0 column 3. The fader target
+and level are centered vertically with their original text area restored (y=10, height=80); the footer occupies y=70, height=30 and shares their normal-mode visibility.
+Context lists and media mode retain their existing display. Updated the clean
+page template and style helper. 167 offline Companion regression tests passed,
+with no failures or skips after updating the old one-extra-layer assertion.
+Applied the style-only change to the installed Companion button and verified
+readback: actions and all unrelated button settings unchanged. No module update,
+Designer command or physical button test was performed. Private receipt is in .tools.
+
+# Active layer list — beta.82 installed
+
+The operator requested the same twelve-LCD chooser as PARAMETER for LAYER and
+explicitly chose active layers only. LAYER display opens the list, LAYER encoder
+pages, and any populated LCD selects that exact layer and returns to normal.
+Existing layer_press bindings are reused; media/timing press modes remain intact.
+Opening/paging are local. Selection uses live_state plus read_field; stale order,
+active membership, transport or track cancels the slot instead of redirecting it.
+Fast field and clock publications preserve list labels.
+
+Validation: 208 offline tests passed with zero failures/skips on Node 22.22.0. Package smoke verifies LAYER list actions and clean page bindings. The unlinked-time test fixture was corrected to match native read_field edit-time semantics. No test was skipped or removed for this feature. git diff --check passed.
+
+Beta.82 was installed into the existing Companion connection with operator authorization. Read-only checks confirmed it enabled and connected, HTTP + LIVE, with an empty last_error. Connection configuration and Yamaha surface/group settings matched their pre-install hashes. No pages were imported and no surface driver was changed. Private receipts remain in .tools. This version is not published. Physical Yamaha checks and native Designer mutations have not been performed for this feature.
+
+# CC1-only beta.81 installed
+
+The user authorized Companion installation after the CC1 extraction. Module
+0.2.0-beta.81 was built and installed on the existing connection using a controlled
+disable/version-switch/enable sequence. Beta.80 remains the previous version.
+199 offline tests passed with no failures/skips; package smoke and clean page
+generation passed on Node 22.22.0 before installation.
+
+Installed read-only checks confirmed beta.81 enabled, HTTP + LIVE, connected and
+empty last_error. Connection configuration matched the pre-install hash. The
+existing Yamaha surface 0.5.1-beta.2 remained enabled and connected, with unchanged
+surface and page-group settings. No page import, action/binding change, surface
+driver update, Git publication or Designer mutation test was performed.
+Physical buttons, encoders, motor travel and OSC receiver output await operator
+testing. Private configuration backups and the install receipt remain in .tools.
+The previous extraction notes below describe the pre-install state.
+
+# CC1-only extraction — local, unpublished
+
+The user requested removing everything used only by the web editor. This checkout
+now contains the CC1 Companion runtime: saved actions, twelve LCD parameter slots,
+numeric/resource keys, independent edit time, Designer zoom, transport and OSC faders.
+The web server/UI, waveform/SMB path, browser mouse editing, grouping and annotation
+commands are removed. The native fixture harness creates its own layers directly.
+
+Playback interpolation and thumbnail caching remain as CC1 modules. Thumbnails use
+a separate cache directory; existing waveform caches are left untouched. Native
+context/lock/bounds guards remain. viewer_zoom is retained solely as a saved action
+ID for RC5; it controls Designer only. Legacy web settings cannot start a listener.
+VIEW ONLY is now editable in connection settings so existing locked configurations
+can be used without the removed web UI.
+
+Removed browser-only tests together with their features; preserved CC1 clock,
+transport, LINK TIME, refresh and thumbnail safety regressions under CC1 names.
+The web-based --installed integration runner now fails explicitly as unsupported.
+Use node scripts/regression.cjs; native mutations still require separate permission.
+
+Source baseline: commit 53054b8 / beta.80. Previous 353-test results apply to that
+baseline, not this extraction. No installed Companion, native mutation, hardware
+or OSC receiver test was performed for this change. No installation or publication
+is authorized by this task. Read CC1-DEVELOPMENT.md before further changes.
+
+## Extraction validation
+
+199 offline tests passed with zero failures/skips on Node 22.22.0. Packaged module
+constructor/actions, OSC persistence, legacy-viewer-settings rejection and clean
+page generation passed. Generated native Python compiles and an offline key-move
+fixture checks time, value and interpolation preservation. The generated package
+has no SMB dependency, viewer server or waveform implementation.
+
+The first validation attempt lacked the Companion SDK in this new worktree.
+Offline npm installation could not find the locked @pkgr/core tarball. Tests and
+packaging used the original checkout's already installed dependencies copied into
+ignored node_modules, with the existing Node 22 runtime. A clean npm ci from the
+registry was not verified. An added test initially needed its synthetic host label
+initialized; the corrected full run passed without dropping that test.
+
+Native integration harness syntax was checked offline; no native mutation suite,
+installed Companion probe, physical Yamaha test or OSC receiver test was run.
+The local package retains baseline beta.80; assign a new version before deployment.
+
+## Historical handoff before extraction
+
+The following entries describe previous builds, including the removed web editor.
+
 # Timeline event-filter icons - 0.2.0-beta.59
 
 The TIME-row filters use the same compact outlined SVG treatment as the other

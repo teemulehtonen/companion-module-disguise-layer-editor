@@ -16,15 +16,15 @@ test('native zoom script uses enabled steps in the correct direction and clamps 
  assert.equal(result.status,0,result.stdout+result.stderr)
  for(const steps of [0,9,-9,1.5,NaN,'1'])assert.throws(()=>makeScript('timeline_zoom',{steps}))
 })
-test('existing zoom action sends the same scaled detents to viewer and Designer',async()=>{
+test('existing zoom action keeps its saved action ID and sends scaled detents to Designer',async()=>{
  const viewer=[],native=[]
  const item={viewer:{rotateZoomDirect:n=>viewer.push(n)},zoomDesignerTimeline:n=>native.push(n),publish(){}}
  const zoom=actions(item).viewer_zoom
  const event={options:{direction:1,detent_divisor:2,detent_group:5}}
  await zoom.callback(event);assert.deepEqual(native,[])
- await zoom.callback(event);assert.deepEqual(native,[1]);assert.deepEqual(viewer,[1])
+ await zoom.callback(event);assert.deepEqual(native,[1]);assert.deepEqual(viewer,[])
  await zoom.callback({options:{direction:-1}})
- assert.deepEqual(native,[1,-1]);assert.deepEqual(viewer,[1,-1])
+ assert.deepEqual(native,[1,-1]);assert.deepEqual(viewer,[])
 })
 function instance(client){return Object.assign(Object.create(DisguiseLayerControl.prototype),{client,config:{},log(){},setVariableValues(){}})}
 test('Designer zoom batches bursts behind one in-flight command',async()=>{
