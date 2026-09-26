@@ -57,12 +57,19 @@ function actions(instance) {
       const e=instance.editor
       const dialDirection = dial ? scaleDialInput(instance, name, event) : null
       if (dial && dialDirection === null) return
-      const batch=dial && !e?.mediaMode && !e?.clearKeysBrowser && !e?.moveKey?.group && instance.performDetents
+      const batch=dial && !e?.parameterBrowser && !e?.mediaMode && !e?.clearKeysBrowser && !e?.moveKey?.group && instance.performDetents
       const dispatch=(editor,o) => {
+        if (editor.parameterBrowser) {
+          const slot = {'Layer timing step / resource write mode':8,'Open parameter list / select parameter':9,
+            'Value press: precision / context':10,'Cycle time step / fit layer to content':11}[name]
+          if (slot !== undefined) return editor.selectParameterSlot(slot)
+          if (name === 'Select parameter / media folder') return editor.pageParameters(dialDirection)
+          if (dial) return
+        }
         if (editor.viewOnly) {
           const browsing = ['Time keypad','Select adaptive timing step','Read layers and values from Designer',
             'Select active layer','Select parameter / media folder','Scrub live / move selected key',
-            'Cycle COARSE / FINE / ULTRA','Jump Designer playhead to staged time',
+            'Cycle COARSE / FINE / ULTRA','Open parameter list / select parameter','Select parameter list slot','Value press: precision / context','Jump Designer playhead to staged time',
             'Layer timing step / resource write mode','Jump to previous / next keyframe',
             'Cycle time step / fit layer to content','Toggle resource browser']
           const preview = name === 'Adjust live value / preview media' && editor.mediaMode
@@ -72,6 +79,8 @@ function actions(instance) {
           const id = {
             'Select parameter / media folder': 'field',
             'Cycle COARSE / FINE / ULTRA': 'fine',
+            'Open parameter list / select parameter': 'fine',
+            'Value press: precision / context': 'value_press',
             'Add numeric keyframe / confirm media and return': 'value_press',
             'Cycle time step / fit layer to content': 'time_step',
             'Toggle resource browser': 'media',
@@ -157,7 +166,7 @@ function actions(instance) {
     ),
     value: action(
       'Adjust live value / preview media',
-      [direction, ...detentSensitivity, numeric('step', 'Step override (0 = 0.1 / 0.01 / 0.001)', 0, 0)],
+      [direction, ...detentSensitivity, numeric('step', 'Step override (0 = 10% / 1% / 0.1% of range)', 0, 0)],
       (e, o) =>
         e.layerEdit === 'edit'
           ? e.adjustLayerTiming('out', Number(o.direction),{detents:o.detents})
@@ -179,7 +188,11 @@ function actions(instance) {
     ),
     seek: action('Jump Designer playhead to staged time', [], (e) => e.seek()),
     key_set: action('Add keyframe at playhead', [], (e) => e.writeLive('key_set')),
-    value_press: action('Add numeric keyframe / confirm media and return', [], (e) => e.pressValue()),
+    parameter_slot: action('Select parameter list slot', [numeric('slot','Parameter slot (1–12)',1,1,12)], (e,o) => e.parameterBrowser ? e.selectParameterSlot(Number(o.slot)-1) : undefined),
+    parameter_press: action('Open parameter list / select parameter', [], (e) =>
+      e.layerEdit === 'edit' ? e.cycleLayerStep() : e.toggleParameterBrowser()),
+    value_press: action('Value press: precision / context', [], (e) =>
+      e.viewOnly && e.mediaMode ? undefined : e.layerEdit || e.mediaMode || e.field?.resource ? e.pressValue() : e.cyclePrecision()),
     layer_edit: action('Open layer timing editor / return', [], (e) => e.toggleLayerEditor()),
     layer_press: action('Layer timing step / resource write mode', [], (e) =>
       e.layerEdit === 'edit' ? e.cycleLayerStep() : e.mediaMode ? e.toggleMediaKeyframe() : !e.moveKey && !e.layerEdit ? instance.viewer?.toggleZoom() : undefined,
@@ -233,14 +246,14 @@ function presets(label = 'd3layers') {
       [dialEntry('layer', 1)],
     ),
     dial_field: button(
-      'Dial 2: parameter / press for fine mode',
+      'Dial 2: parameter / press for parameter list',
       'PARAM\n$(this:parameter)',
-      [entry('fine')],
+      [entry('parameter_press')],
       [dialEntry('field', -1)],
       [dialEntry('field', 1)],
     ),
     dial_value: button(
-      'Dial 3: edit selected key / press to add key',
+      'Dial 3: edit selected key / press for precision',
       'VALUE\n$(this:value_label)',
       [entry('value_press')],
       [dialEntry('value', -1, { step: 0 })],

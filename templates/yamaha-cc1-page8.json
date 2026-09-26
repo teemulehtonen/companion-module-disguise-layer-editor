@@ -3823,7 +3823,7 @@
                   "type": "action",
                   "id": "YmsI9wBusRjOVSwVZeR2a",
                   "connectionId": "d3-layer-control",
-                  "definitionId": "fine",
+                  "definitionId": "parameter_press",
                   "options": {},
                   "upgradeIndex": -1
                 }
@@ -5029,7 +5029,7 @@
                   "type": "action",
                   "id": "wARjG4Hcjwn23Acpqp6yZ",
                   "connectionId": "d3-layer-control",
-                  "definitionId": "fine",
+                  "definitionId": "parameter_press",
                   "options": {},
                   "upgradeIndex": -1
                 }
@@ -5315,7 +5315,7 @@
                   "type": "action",
                   "id": "HKXqj3_cX4lFyVWWnqZ3p",
                   "connectionId": "d3-layer-control",
-                  "definitionId": "value_press",
+                  "definitionId": "key_set",
                   "options": {},
                   "upgradeIndex": -1
                 }

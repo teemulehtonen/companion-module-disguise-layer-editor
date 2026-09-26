@@ -1,4 +1,5 @@
 'use strict'
+const { parameterStep } = require('./parameter-step')
 
 const sample = () => ({
   trackUid: 'demo-track',
@@ -267,9 +268,7 @@ class DemoClient {
         const i = field.choices.findIndex((c) => c.value === selected.value)
         args.value = field.choices[Math.max(0, Math.min(field.choices.length - 1, i + args.direction))].value
       } else {
-        const step =
-          (args.step || (field.integer ? field.step || 1 : 0.1)) /
-          (field.integer ? 1 : args.precision === 'ultra' ? 100 : args.fine ? 10 : 1)
+        const step = parameterStep(field, args)
         args.value = Number(
           Math.max(
             field.min ?? -Infinity,

@@ -42,8 +42,8 @@ Transport presets provide PLAY, PLAY TO END, PLAY LOOP, STOP, PLAY / STOP (last 
 | Encoder | Turn | Press |
 | --- | --- | --- |
 | LAYER | Select an active layer | — |
-| PARAMETER | Select a parameter | Coarse / fine / ultra |
-| VALUE | Edit the selected key or constant | Add a key at the playhead |
+| PARAMETER | Select a parameter / page through the list | Open the parameter list |
+| VALUE | Edit the selected key or constant | Cycle COARSE / FINE / ULTRA |
 | TIME | Seek, or move the locked key | Frame / 0.5 / 1 / 2 / 5 / 10 / 30 seconds / 1 / 2 / 5 minutes |
 
 - **SELECT KEYFRAME** locks the nearest in-range key; press again to unlock. TIME step changes keep it locked. **PREV/NEXT KEYFRAME** follow the selected parameter and stop at exact IN / OUT. OUT is the end of the final displayed frame; a key may remain selected there although playback has ended.
@@ -87,3 +87,9 @@ Anyone may fork, modify and redistribute this project under the MIT license; con
 [Resume development](docs/PROJECT-HANDOFF.md) · [Viewer architecture](docs/VIEWER-DEVELOPMENT.md)
 
 [Repeatable local and native regression tests](docs/REGRESSION-TESTS.md): run `node scripts/regression.cjs` without AI calls; native tests are opt-in.
+
+### Yamaha parameter list (beta.78)
+
+Press the parameter-name display to replace all three LCD rows with 12 parameters. Turn the parameter encoder to move one page at a time; press a parameter to select it and restore the normal controls. Empty slots do nothing. The current parameter is highlighted. The list uses cached fields; the normal stale-context check still refreshes when necessary. The value display now cycles COARSE / FINE / ULTRA; use the explicit Add keyframe action to insert a key. Resource and layer-timing contexts retain their existing press functions. Existing PARAMETER buttons must use the new Open parameter list / select parameter action.
+
+On Yamaha CC1, pressing the third physical encoder adds a keyframe at the playhead. The value LCD button separately cycles COARSE / FINE / ULTRA (or selects a parameter while the list is open).

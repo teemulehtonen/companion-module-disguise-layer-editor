@@ -945,3 +945,27 @@ action detent scaling, burst limits, disconnect/error behavior and VIEW protecti
 covered. Clean installation confirmed beta.76 enabled, unchanged configuration
 and empty last_error. No native zoom mutation or physical encoder test was run.
 No publication or page-layout mutation was performed.
+
+## Beta.77 installed - parameter precision follows min/max range
+
+The operator reported angle ranges such as -180..180. Default COARSE/FINE/ULTRA
+now use 10%/1%/0.1% of max-minus-min, computed from native metadata at each write.
+Explicit step overrides keep prior behavior; invalid/missing bounds fall back to
+prior steps; integer resolution is at least one and choices remain discrete.
+Value labels increase decimal precision for small ranges. Native and demo
+implementations share the documented policy in src/parameter-step.js.
+
+Validation: 340 offline tests and package smoke passed, including Python/JS step
+parity, signed/offset/tiny ranges, bounds, keys/constants, integer and enum behavior.
+Read-only installation checks confirmed beta.77 enabled with unchanged config
+hash and empty last_error. No native Designer parameter mutation tests were run.
+No page layouts changed; these changes have not been committed or published.
+
+## Yamaha parameter list — beta.78
+
+The parameter-name action is now parameter_press. Normal numeric value_press cycles precision. Twelve fields are shown per page: pad_down/up 0–7, then layer_press / parameter_press / value_press / time_step select 8–11. The field encoder pages locally without detent batching; other edit encoders are inert while browsing. List selection issues read_field only, validates transport/track/layer/field identities, and clears key-selection state. Background publishField/publishClock must not overwrite dial list labels. parameter_slot (1–12) is a list-only action for custom display buttons.
+
+Validation: 346 offline tests passed, including all twelve actions in LIVE and VIEW, empty slots, stale contexts, precision cycling and background display updates. Package smoke and clean page generation passed. Installed beta.78 read-only verification confirmed enabled, unchanged connection settings and empty last_error. Existing PARAMETER display and physical encoder bindings were migrated; the custom fader display conditionally shows list slot 4 and retains its original display outside the list. No native Designer mutation tests or physical Yamaha interaction tests were run. Private backups and installation receipts remain in ignored .tools. Not pushed to Git.
+
+### Beta.78 CC1 encoder press correction
+The third physical encoder (CC1 row 3, column 2) now uses the existing key_set action. The value LCD (row 2, column 2) keeps value_press for precision/list selection. Clean page template and the installed single binding were updated; rotation, styles and the value LCD were verified unchanged. No module restart was required. All 347 offline tests and package smoke passed, including distinct key insertion versus precision and VIEW blocking. No native Designer mutation or physical Yamaha test was performed.

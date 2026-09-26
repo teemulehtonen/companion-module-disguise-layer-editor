@@ -33,6 +33,10 @@ test('CC1 export reproduces the clean operator page 8 layout',()=>{
  assert.equal(cc1.page.controls[5][2].steps[0].action_sets.up.length,1)
  const pageLink=cc1.page.controls[5][2].steps[0].action_sets.up[0]
  assert.equal(pageLink.connectionId,'internal');assert.equal(pageLink.definitionId,'set_page')
+ assert.equal(action(cc1.page.controls[2][1]),'parameter_press')
+ assert.equal(action(cc1.page.controls[3][1]),'parameter_press')
+ assert.equal(action(cc1.page.controls[2][2]),'value_press')
+ assert.equal(action(cc1.page.controls[3][2]),'key_set')
  assert.equal(cc1.instances['d3-layer-control'].config.host,'127.0.0.1')
  const serialized=JSON.stringify(cc1)
  assert.doesNotMatch(serialized,/10\.12\.61\.|Bgg4tTxHnReQQ-wiHU7ka|resourcePassword|masterTransportUid/)

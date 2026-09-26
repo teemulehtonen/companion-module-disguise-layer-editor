@@ -6,7 +6,7 @@ const groups = {
   timing: /clock|time|transport|seek|snap|zoom|pin-time|out-boundary/,
   resources: /resource|audio|waveform|thumbnail|discrete|parameter/,
   viewer: /viewer|view-mode/,
-  companion: /definitions|presets|page|encoder|editor|connection/,
+  companion: /definitions|presets|page|encoder|editor|connection|parameter-browser/,
 }
 const shared =
   /^(client|connection|editor|live-editor|definitions|view-mode|viewer-editor|viewer-server|viewer-edit-model|viewer-presentation|regression-plan)\.test\.js$/

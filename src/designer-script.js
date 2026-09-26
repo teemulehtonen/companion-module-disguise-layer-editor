@@ -1,6 +1,7 @@
 'use strict'
 const viewerScript = require('./viewer-script')
 const { makeZoomScript } = require('./designer-zoom')
+const { pythonParameterStep } = require('./parameter-step')
 const gridScript = require('./viewer-grid-script')
 const layerGroupsScript = require('./designer-layer-groups')
 const waveformScript = require('./viewer-waveform-script')
@@ -269,6 +270,7 @@ def media_snapshot(layer, field):
     return {'media': resources, 'selectedUid': str(resource.uid) if resource else '', 'field': field.name,
             'canAnimate': not field.notSequencable, 'sequenced': not field.disableSequencing}
 
+${pythonParameterStep}
 def metadata(layer, field):
     result = {'name': field.name, 'uid': str(field.uid), 'label': friendly_label(field),
               'min': None, 'max': None, 'step': None, 'choices': [],
@@ -1050,13 +1052,7 @@ if command == 'adjust_value':
             raise ValueError('Current option is unknown; refresh before changing it')
         value = values[max(0, min(len(values)-1, values.index(value) + int(p['direction'])))]
     else:
-        # Encoder precision is predictable across float parameters; Designer's
-        # mouse-editor step can be much too small for a physical dial.
-        step = float(p.get('step') or (meta['step'] or 1 if meta['integer'] else 0.1))
-        if not meta['integer']:
-            step /= 100 if p.get('precision') == 'ultra' else 10 if p.get('fine') else 1
-        if meta['integer']:
-            step = max(1, round(step))
+        step = parameter_step(meta, p)
         value += step * float(p['direction'])
         if meta['min'] is not None:
             value = max(meta['min'], value)

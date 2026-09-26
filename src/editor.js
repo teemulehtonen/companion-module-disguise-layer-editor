@@ -1,4 +1,5 @@
 'use strict'
+const { parameterDecimals } = require('./parameter-step')
 const { orderLayerParameters } = require('./parameter-order')
 
 // Shared order for the time encoder and layer timing controls. Frame uses the
@@ -423,7 +424,7 @@ class Editor {
     const choice = this.field?.choices?.find((c) => c.value === this.value)
     if (choice) return choice.label
     if (this.field?.integer) return String(Math.round(this.value))
-    const decimals = { coarse: 1, fine: 2, ultra: 3 }[this.precision] ?? 1
+    const decimals = parameterDecimals(this.field, this.precision)
     return Number(this.value.toFixed(decimals)).toFixed(decimals)
   }
   get beatMode() {
@@ -930,6 +931,41 @@ class Editor {
     this.mediaMode = false
     if (!this.layerEdit) this.followTime(this.time)
   }
+  parameterBrowserSignature() {
+    return JSON.stringify([this.snapshot?.transportUid,this.snapshot?.trackUid,this.layer?.uid,
+      (this.layer?.fields || []).map(f=>[f.uid || '',f.name])])
+  }
+  validParameterBrowser() {
+    return Boolean(this.parameterBrowser && this.parameterBrowser.signature === this.parameterBrowserSignature()
+      && !this.mediaMode && !this.layerEdit && !this.clearKeysBrowser && !this.clearKeysPrompt)
+  }
+  toggleParameterBrowser() {
+    if (this.parameterBrowser) { this.parameterBrowser = null; return }
+    if (!this.layer?.fields?.length || this.mediaMode || this.layerEdit || this.clearKeysBrowser || this.clearKeysPrompt) return
+    this.deletePress = null
+    this.moveKey = null
+    this.parameterBrowser = {signature:this.parameterBrowserSignature(),page:Math.floor(this.fieldIndex / 12)}
+  }
+  pageParameters(direction) {
+    if (!this.validParameterBrowser()) { this.parameterBrowser = null; return }
+    const last = Math.max(0,Math.ceil(this.layer.fields.length / 12)-1)
+    this.parameterBrowser.page = Math.max(0,Math.min(last,this.parameterBrowser.page + Math.sign(direction)))
+  }
+  async selectParameterSlot(slot) {
+    if (!this.validParameterBrowser()) { this.parameterBrowser = null; this.deletePress = null; return }
+    if (!Number.isInteger(slot) || slot < 0 || slot >= 12) return
+    const index = this.parameterBrowser.page * 12 + slot
+    if (!this.layer.fields[index]) return
+    this.fieldIndex = index
+    this.parameterBrowser = null
+    this.deletePress = null
+    this.moveKey = null
+    this.selectedKeyTime = null
+    this.navigationTime = null
+    this.pendingJump = null
+    this.loadValue()
+    await this.remote(async()=>this.acceptLive(await this.client.execute('read_field',this.liveArgs())))
+  }
   async pressValue() {
     if(this.moveKey?.group)return
     if (this.layerEdit === 'edit') return this.cycleLayerStep()
@@ -1131,6 +1167,7 @@ class Editor {
     }
   }
   async pressPad(slot) {
+    if (this.parameterBrowser) return this.selectParameterSlot(slot)
     if (this.viewOnly && (this.mediaMode || ![0,1,7].includes(slot))) return
     if (!Number.isInteger(slot) || slot < 0 || slot > 7) throw new Error('Invalid button')
     if (this.clearKeysPrompt) {
@@ -1181,6 +1218,7 @@ class Editor {
     await this.refresh({ preserve: true })
   }
   async padDown(slot, now = Date.now()) {
+    if (this.parameterBrowser) return this.selectParameterSlot(slot)
     if (this.viewOnly && ![0,1,7].includes(slot)) return
     if (slot === 5 && !this.layer) return
     if (slot !== 5 || this.mediaMode || this.clearKeysPrompt || this.clearKeysBrowser)
@@ -1189,6 +1227,7 @@ class Editor {
     this.deletePress = { time: now, target: this.deletionTarget(), resetDefault: this.canResetDefault }
   }
   async padUp(slot, now = Date.now()) {
+    if (this.parameterBrowser) { this.deletePress = null; return }
     if (this.viewOnly && ![0,1,7].includes(slot)) return
     if (slot !== 5 || !this.deletePress) return
     const press = this.deletePress

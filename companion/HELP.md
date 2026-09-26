@@ -18,8 +18,8 @@ Tested with Designer 32.4.17 and Companion 5.0.5.
 | Encoder | Turn | Press |
 | --- | --- | --- |
 | LAYER | Select an active layer | — |
-| PARAMETER | Select a parameter | Coarse / fine / ultra |
-| VALUE | Edit the selected key or constant | Add a key at the playhead |
+| PARAMETER | Select a parameter / page through the list | Open the parameter list |
+| VALUE | Edit the selected key or constant | Cycle COARSE / FINE / ULTRA |
 | TIME | Seek, or move the locked key | Frame / 1 / 2 / 5 / 10 seconds / minute |
 
 - **SELECT KEYFRAME** locks the nearest in-range key; press again to unlock. TIME step changes keep it locked. **PREV/NEXT KEYFRAME** follow the selected parameter and stop at IN / OUT minus one frame.
@@ -54,3 +54,9 @@ Click the connected viewer status to switch the module to VIEW. VIEW disables al
 In LIVE, Shift-click or Shift-drag layer rows to select siblings. Right-click the selection, enter a name and choose GROUP. Right-click a group for UNGROUP. Groups occupy the highest selected row; layer order and timing are preserved. Collapse/expand and hover time/value readouts are also available in VIEW.
 
 Viewer size: SMALL 100%, MEDIUM 110%, LARGE 120%, saved per browser. Track heading always shows @ FPS, then duration. TC IN: appears only when a transport timecode source is configured; hover for source status.
+
+### Yamaha parameter list (beta.78)
+
+Press the parameter-name display to replace all three LCD rows with 12 parameters. Turn the parameter encoder to move one page at a time; press a parameter to select it and restore the normal controls. Empty slots do nothing. The current parameter is highlighted. The list uses cached fields; the normal stale-context check still refreshes when necessary. The value display now cycles COARSE / FINE / ULTRA; use the explicit Add keyframe action to insert a key. Resource and layer-timing contexts retain their existing press functions. Existing PARAMETER buttons must use the new Open parameter list / select parameter action.
+
+On Yamaha CC1, pressing the third physical encoder adds a keyframe at the playhead. The value LCD button separately cycles COARSE / FINE / ULTRA (or selects a parameter while the list is open).

@@ -130,3 +130,10 @@ Designer zoom: designer-zoom.test.js runs the generated Python UI command agains
 an offline PrivateState fixture and tests the encoder/queue/VIEW contract. A
 separate installed read-only capability probe confirmed the API exists; this is
 not a physical encoder test or native Designer zoom mutation test.
+
+Parameter precision: parameter-step.test.js validates range scaling and fallback
+rules in both JavaScript and an offline Python fixture; checks signed ranges,
+integer steps, enum choices, bounds, key/constant targets and small-value labels.
+It performs no native Designer writes.
+
+parameter-browser.test.js covers 12-slot paging and all display selections in LIVE/VIEW, inert empty slots, stale-context cancellation, precision presses and field/clock feedback. It runs in keyframes, resources and companion groups. These are offline actions against DemoClient, not installed button presses or native Designer mutations.

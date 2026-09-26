@@ -423,3 +423,14 @@
 ## 0.2.0-beta.76
 
 - Existing zoom encoder controls both the local viewer and Designer timeline using enabled native zoom levels. Coalesce fast turns and retain VIEW protection; no button-placement changes are needed.
+
+## 0.2.0-beta.77
+
+- Scale default COARSE/FINE/ULTRA parameter steps to 10%/1%/0.1% of the parameter range, including signed ranges. Keep explicit overrides and discrete choices compatible.
+- Show additional decimals when small parameter ranges require them.
+
+## 0.2.0-beta.78
+- PARAMETER opens a 12-slot list across all three Yamaha LCD rows; its encoder pages through the list. Selection restores the normal controls.
+- VALUE now cycles COARSE / FINE / ULTRA for numeric parameters. Explicit Add keyframe remains available. Resource and layer timing contexts keep their existing functions.
+- Clock/field feedback preserves the list labels, empty slots are inert, and context changes invalidate stale selections.
+- CC1 follow-up: the third physical encoder press adds a keyframe; the separate value LCD press cycles precision. Rotation is unchanged.

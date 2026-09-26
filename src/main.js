@@ -154,7 +154,7 @@ class DisguiseLayerControl extends InstanceBase {
         id: 'info',
         label: 'Designer 32.4.17 / Companion 5.0.5',
         value:
-          'VALUE rotation edits the selected key or constant; press VALUE to add a key at the playhead. LAYER EDIT opens IN / POSITION (centre time) / OUT / FIT (length). Press a timing dial to change its step. Time presses cycle 1 frame / 0.5 / 1 / 2 / 5 / 10 / 30 seconds / 1 / 2 / 5 minutes, including while SELECT KEY is active. Press SELECT KEY again to unlock. Layers at the playhead update automatically. Float steps: 0.1 / 0.01 / 0.001.',
+          'VALUE rotation edits the selected key or constant; press VALUE to cycle COARSE / FINE / ULTRA. Press PARAMETER to open the 12-slot list, then turn PARAMETER to page and press a displayed parameter to select it. Use Add keyframe to insert a key. LAYER EDIT opens IN / POSITION (centre time) / OUT / FIT (length). Press a timing dial to change its step. Time presses cycle 1 frame / 0.5 / 1 / 2 / 5 / 10 / 30 seconds / 1 / 2 / 5 minutes, including while SELECT KEY is active. Press SELECT KEY again to unlock. Layers at the playhead update automatically. Numeric steps: 10% / 1% / 0.1% of the parameter range; integers use at least one.',
       },
       {type:'textinput',id:'oscHost',label:'OSC destination IP / hostname',width:8,default:'',tooltip:'Empty disables OSC output. Faders send float values 0–1 to /vehka/fader1 through /vehka/fader8.'},
       {type:'number',id:'oscPort',label:'OSC destination UDP port',width:4,default:9000,min:1,max:65535},
@@ -728,7 +728,7 @@ class DisguiseLayerControl extends InstanceBase {
   publishField() {
     const e=this.editor
     if(!e?.field)return
-    this.setVariableValues({value:e.value,value_label:e.valueLabel,dirty:Boolean(e.dirty),dial_value_2:String(e.valueLabel).toUpperCase()})
+    this.setVariableValues({value:e.value,value_label:e.valueLabel,dirty:Boolean(e.dirty),...(!e.parameterBrowser ? {dial_value_2:String(e.valueLabel).toUpperCase()} : {})})
     this.checkFeedbacks('dirty')
   }
   selectMasterTransport(direction) {
@@ -999,6 +999,8 @@ class DisguiseLayerControl extends InstanceBase {
     // so the completed hold is visible on existing pages and physical surfaces.
     if (deleteReady) padColors[5] = 0xb02028
     if (e?.clearKeysBrowser && !e.clearKeysTargetValid()) e.closeClearKeys()
+    if (e?.parameterBrowser && !e.validParameterBrowser()) e.parameterBrowser = null
+    const parameterBrowser = e?.parameterBrowser
     const clearBrowser = e?.clearKeysBrowser
     const clearItem = clearBrowser?.items[clearBrowser.index]
     if (clearBrowser) {
@@ -1012,6 +1014,13 @@ class DisguiseLayerControl extends InstanceBase {
       padColors[5] = theme.groups.keyEdit
       padColors[6] = theme.groups.keyEdit
       padColors[7] = 0x000000
+    }
+    if (parameterBrowser) {
+      for (let i=0;i<8;i++) {
+        const index=parameterBrowser.page*12+i, field=e.layer.fields[index]
+        padLabels[i]=field?.label || field?.name || ''
+        padColors[i]=field ? index===e.fieldIndex ? theme.active : theme.surface : theme.background
+      }
     }
     const padVars = {}
     padVars.delete_hint = 'LONG PRESS\nDELETE ALL'
@@ -1156,6 +1165,17 @@ class DisguiseLayerControl extends InstanceBase {
       padVars.dial_value_0 = 'VIEWER'
       padVars.dial_info_0 = '− / +'
     }
+    if (parameterBrowser) {
+      const pages=Math.max(1,Math.ceil(e.layer.fields.length/12))
+      padVars.delete_hint=''
+      padVars.delete_ready=false
+      for(let i=0;i<4;i++) {
+        const field=e.layer.fields[parameterBrowser.page*12+8+i]
+        padVars['dial_title_'+i]='PARAMETERS '+(parameterBrowser.page+1)+'/'+pages
+        padVars['dial_value_'+i]=field?.label || field?.name || ''
+        padVars['dial_info_'+i]=field && field.name===e.field?.name ? 'SELECTED' : ''
+      }
+    }
     if(e?.moveKey?.group){padVars.dial_value_2=e.moveKey.group.length+' KEYFRAMES';padVars.dial_info_2='MOVE / DELETE';padVars.dial_title_2='GROUP'}
     // Capitalise display text only. Resource paths, parameter IDs, image data
     // and public raw-value variables must retain their original case.
@@ -1166,7 +1186,7 @@ class DisguiseLayerControl extends InstanceBase {
     this.setVariableValues({
       ...padVars,
       ...masterVars,
-      ui_mode: clearBrowser ? 'CLEAR_KEYS' : mediaMode ? 'MEDIA' : 'PARAMS',
+      ui_mode: parameterBrowser ? 'PARAMETER_LIST' : clearBrowser ? 'CLEAR_KEYS' : mediaMode ? 'MEDIA' : 'PARAMS',
       folder: e?.mediaFolder || '',
       media_name: e?.currentMedia?.name || '',
       media_field: e?.mediaField?.label || '',
@@ -1175,7 +1195,7 @@ class DisguiseLayerControl extends InstanceBase {
       time_entry: e?.timeEntryDigits ? e.timeEntryLabel : clockTc(presented.edit),
       time_entry_active: Boolean(e?.timeEntryDigits),
       playback_label: playbackLabel,
-      parameter_animated: Boolean(!clearBrowser && !e?.layerEdit && e?.field?.sequenced && keys.length > 1),
+      parameter_animated: Boolean(!parameterBrowser && !clearBrowser && !e?.layerEdit && e?.field?.sequenced && keys.length > 1),
       track: e?.snapshot?.trackName || '',
       layer: e?.layer?.name || 'No active layer',
       layer_type: layerTypeLabel(e?.layer?.moduleType).toUpperCase(),
@@ -1249,7 +1269,7 @@ class DisguiseLayerControl extends InstanceBase {
       layer_remaining:e.layer && Number.isFinite(edit) ? String(Number((e.layer.end-edit).toFixed(3))) : '-',
     }
     if(!e.timeEntryDigits)values.time_entry=values.timecode
-    if(!e.mediaMode && !e.layerEdit && !e.clearKeysBrowser)values.dial_value_3=values.timecode.toUpperCase()
+    if(!e.parameterBrowser && !e.mediaMode && !e.layerEdit && !e.clearKeysBrowser)values.dial_value_3=values.timecode.toUpperCase()
     this.setVariableValues(values)
     this.checkFeedbacks('transport_state')
   }

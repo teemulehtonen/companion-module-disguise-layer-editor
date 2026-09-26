@@ -207,3 +207,24 @@ levels [0,4,5,6,7]. No native zoom mutation test was performed. The Python zoom
 script is exercised offline with simulated PrivateState, including direction,
 disabled steps, limits and empty levels. Encoder scaling, burst handling, failure,
 disconnection and VIEW protection are covered in designer-zoom.test.js.
+
+## Range-relative parameter precision (beta.77)
+
+Default numeric encoder steps now use 10%, 1% and 0.1% of the finite positive
+parameter span for COARSE, FINE and ULTRA. Signed ranges use max minus min:
+-180..180 gives 36 / 3.6 / 0.36; 0..1 retains 0.1 / 0.01 / 0.001. Native code
+computes the step from fresh metadata at write time. Seven significant digits
+remove float32 metadata noise from the span. Explicit action step overrides keep
+their previous precision scaling. Unbounded/invalid ranges retain the previous
+fallback. Integers use at least one, rounded half up; enum/bool choices remain
+one option per step. Existing bounds and selected-key safeguards remain in place.
+
+The value label adds decimal places for small ranges so ULTRA changes stay
+visible. parameter-step.test.js compares the JavaScript demo and native Python
+helper offline, exercises positive/signed/offset/tiny ranges, integer limits,
+explicit steps, selected keys/constants, bounds and discrete choices. Native
+Designer parameter mutation tests were not run.
+
+## Yamaha parameter list (beta.78)
+
+This is Companion LCD navigation, not a browser viewer change. parameterBrowser stores page and a transport/track/layer/field signature. All twelve LCDs are selectors while open. Keep lightweight field/time publications from replacing the bottom-row parameter names. Value presses cycle numeric precision; the explicit key_set action retains insertion.
