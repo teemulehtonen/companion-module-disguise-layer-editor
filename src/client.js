@@ -1,8 +1,7 @@
 'use strict'
 const { makeScript } = require('./designer-script')
-const { orderLayerParameters } = require('./parameter-order')
 const { paths, requireSuccess, decodeExecution } = require('./designer-api')
-const { WaveformDiskCache } = require('./waveform-disk-cache')
+const { ThumbnailDiskCache } = require('./thumbnail-disk-cache')
 
 /** HTTP boundary: validate responses and enforce the shared VIEW write lock.
  * A shared abort signal cancels in-flight work when Companion replaces the
@@ -17,7 +16,7 @@ class DesignerClient {
     this.url = this.baseUrl + paths.execute
     this.fetch = fetchImpl
     this.controller = new AbortController()
-    this.mediaDisk = new WaveformDiskCache()
+    this.mediaDisk = new ThumbnailDiskCache()
     this.thumbnailTasks = new Set()
   }
   close() {
@@ -111,7 +110,7 @@ class DesignerClient {
   async execute(command, args = {}) {
     // Fail closed: new native operations must explicitly be audited as reads.
     const reads = ['refresh','resolve_timecode','live_state','playback_state','read_field',
-      'media_list','key_clear_list','viewer_snapshot','viewer_audio_source','thumbnail_identity']
+      'media_list','key_clear_list','thumbnail_identity']
     const localSeek = ['seek','nudge_time','jump_key'].includes(command) && args.keepPlayhead === true
     if (!reads.includes(command) && !localSeek) this.assertWritable()
     // makeScript merges args into its command payload; never allow an override.
@@ -147,17 +146,7 @@ class DesignerClient {
       error.context = result
       throw error
     }
-    if (command === 'viewer_snapshot') result.layers.forEach(orderLayerParameters)
     return result
-  }
-  async annotations(uid) {
-    const response = await this.fetch(this.baseUrl + paths.annotations(uid), {
-      signal: AbortSignal.any([this.controller.signal, AbortSignal.timeout(5000)]),
-    })
-    if (!response.ok) throw new Error('Annotations unavailable')
-    const body = requireSuccess(await response.json())
-    if (String(body.result?.uid) !== uid) throw new Error('Annotation track mismatch')
-    return body.result.annotations
   }
   async transport(context, operation, lastMode = 'playsection') {
     if (!['play','playsection','playloopsection','stop','toggle','gotonextsection','gotoprevsection','gotonexttrack','gotoprevtrack'].includes(operation)) throw new Error('Invalid transport operation')

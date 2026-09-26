@@ -201,7 +201,7 @@ test('fast clock publication updates only playback-facing variables',()=>{
 
 test('Companion display interpolates confirmed playback without extra Designer reads',()=>{
  const instance=Object.create(DisguiseLayerControl.prototype),values={},actualNow=Date.now
- Object.assign(instance,{editor:{snapshot:{fps:25,customFps:false,tcMode:'25',trackUid:'1',length:20},time:2,viewerTransportTime:2,playing:true,linkTime:true,layer:{start:1,end:5},timecodeSamples:[],liveTimecodeSample:null},connection:{time:2,connected:true},setVariableValues:v=>Object.assign(values,v),checkFeedbacks(){},clockPresentation:{trackUid:'1',time:2,playing:true,received:1000}})
+ Object.assign(instance,{editor:{snapshot:{fps:25,customFps:false,tcMode:'25',trackUid:'1',length:20},time:2,displayTransportTime:2,playing:true,linkTime:true,layer:{start:1,end:5},timecodeSamples:[],liveTimecodeSample:null},connection:{time:2,connected:true},setVariableValues:v=>Object.assign(values,v),checkFeedbacks(){},clockPresentation:{trackUid:'1',time:2,playing:true,received:1000}})
  try{Date.now=()=>1040;instance.publishClock()}finally{Date.now=actualNow}
  assert.equal(values.time,2.04)
  assert.equal(values.live_time,2.04)

@@ -46,12 +46,23 @@ function cleanContextStyle(referenceStyle, label = 'd3layers') {
  const normal=v('ui_mode')+" == 'PARAMS' && "+v('pad_3')+" == 'LINK\\nTIME'"
  text.text={isExpression:false,value:v('pad_3')}
  text.enabled={isExpression:true,value:'!('+normal+')'}
+ const background=style.layers.find(l=>l.id==='box0')
+ if(background)background.color={isExpression:true,value:'('+normal+') && '+v('fader_mode')+" == 'PARAMETER' ? 12582912 : "+v('pad_color_3')}
  const fader=structuredClone(text)
  fader.id='fader-display'
  fader.name='Selected fader'
  fader.enabled={isExpression:true,value:normal}
- fader.text={isExpression:false,value:v('master_transport')+'\n'+v('transport_master_level')+'%'}
- style.layers.push(fader)
+ fader.text={isExpression:false,value:v('master_transport')+'\n'+v('fader_value_label')}
+ fader.y={value:10,isExpression:false}
+ fader.height={value:80,isExpression:false}
+ const hint=structuredClone(fader)
+ hint.id='lock-time-label'
+ hint.name='Lock time hint'
+ hint.text={value:'LOCK TIME',isExpression:false}
+ hint.y={value:70,isExpression:false}
+ hint.height={value:30,isExpression:false}
+ hint.fontsize={value:66,isExpression:false}
+ style.layers.push(fader,hint)
  return style
 }
 module.exports.cleanContextStyle=cleanContextStyle

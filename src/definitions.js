@@ -1,6 +1,5 @@
 'use strict'
 const theme = require('./theme')
-const { curvePreviewDue } = require('./viewer-curve-preview')
 
 const numeric = (id, label, value, min = -100000, max = 100000) => ({
   type: 'number',
@@ -57,10 +56,21 @@ function actions(instance) {
       const e=instance.editor
       const dialDirection = dial ? scaleDialInput(instance, name, event) : null
       if (dial && dialDirection === null) return
-      const batch=dial && !e?.parameterBrowser && !e?.mediaMode && !e?.clearKeysBrowser && !e?.moveKey?.group && instance.performDetents
+      const batch=dial && !e?.parameterBrowser && !e?.layerBrowser && !e?.mediaMode && !e?.clearKeysBrowser && instance.performDetents
       const dispatch=(editor,o) => {
+        if (editor.layerBrowser) {
+          const slot = {'Open layer list / timing step / resource write mode':8,'Open parameter list / select parameter':9,
+            'Value press: precision / context':10,'Cycle time step / fit layer to content':11}[name]
+          if (slot !== undefined) return editor.selectLayerSlot(slot)
+          if (name === 'Select active layer') return editor.pageLayers(dialDirection)
+          if (name === 'Select layer list slot') return editor.selectLayerSlot(Number(o.slot)-1)
+          if (name.startsWith('Context button')) return fn(editor,o)
+          // All twelve displays are selectors. Other editing controls are inert
+          // until a layer is chosen; transport controls remain available.
+          if (name !== 'Transport control') return
+        }
         if (editor.parameterBrowser) {
-          const slot = {'Layer timing step / resource write mode':8,'Open parameter list / select parameter':9,
+          const slot = {'Open layer list / timing step / resource write mode':8,'Open parameter list / select parameter':9,
             'Value press: precision / context':10,'Cycle time step / fit layer to content':11}[name]
           if (slot !== undefined) return editor.selectParameterSlot(slot)
           if (name === 'Select parameter / media folder') return editor.pageParameters(dialDirection)
@@ -70,7 +80,7 @@ function actions(instance) {
           const browsing = ['Time keypad','Select adaptive timing step','Read layers and values from Designer',
             'Select active layer','Select parameter / media folder','Scrub live / move selected key',
             'Cycle COARSE / FINE / ULTRA','Open parameter list / select parameter','Select parameter list slot','Value press: precision / context','Jump Designer playhead to staged time',
-            'Layer timing step / resource write mode','Jump to previous / next keyframe',
+            'Open layer list / timing step / resource write mode','Jump to previous / next keyframe',
             'Cycle time step / fit layer to content','Toggle resource browser']
           const preview = name === 'Adjust live value / preview media' && editor.mediaMode
           if (!browsing.includes(name) && !preview && !name.startsWith('Context button')) return
@@ -101,13 +111,14 @@ function actions(instance) {
     },
   })
   return {
+    // Keep this persisted ID for existing CC1 pages; no web viewer is included.
     viewer_zoom: {
-      name: 'Zoom Designer timeline and viewer',
+      name: 'Zoom Designer timeline',
       options: [direction, ...detentSensitivity],
       callback: (event) => {
-        const direction = scaleDialInput(instance, 'Zoom timeline viewer', event)
+        if (instance.editor?.layerBrowser) return
+        const direction = scaleDialInput(instance, 'Zoom Designer timeline', event)
         if (direction === null) return
-        instance.viewer?.rotateZoomDirect(direction * Math.max(1, Number(event.options.detents) || 1))
         instance.publish?.()
         return instance.zoomDesignerTimeline?.(direction * Math.max(1, Math.round(Number(event.options.detents) || 1)))
       },
@@ -131,8 +142,12 @@ function actions(instance) {
       options: [numeric('slot', 'Target slot (1–16)', 1, 1, 16)],
       callback: (event) => instance.selectMasterTransportSlot?.(Number(event.options.slot) - 1),
     },
+    fader_mode_toggle: {
+      name: 'Toggle fader: master / selected parameter', options: [],
+      callback: () => instance.toggleParameterFader?.(),
+    },
     transport_master_level: {
-      name: 'Set selected fader target (transport / OSC)',
+      name: 'Set selected fader target (transport / OSC / parameter)',
       options: [{type:'number',id:'level',label:'Master level (0–100)',default:100,min:0,max:100,step:0.1,useVariables:true}],
       callback: (event) => instance.setTransportMasterLevel?.(event.options.level),
     },
@@ -153,8 +168,6 @@ function actions(instance) {
         ? e.adjustLayerTiming('in', Number(o.direction),{detents:o.detents})
         : e.mediaMode
           ? e.selectMediaField(Number(o.direction))
-            : !e.moveKey && !e.layerEdit && instance.viewer?.rotateZoom(Number(o.direction) * (o.detents || 1))
-            ? undefined
             : e.selectLive('layer', Number(o.direction), o.detents),
     ),
     field: action('Select parameter / media folder', [direction, ...detentSensitivity], (e, o) =>
@@ -172,7 +185,7 @@ function actions(instance) {
           ? e.adjustLayerTiming('out', Number(o.direction),{detents:o.detents})
           : e.mediaMode
             ? e.browseMedia(Number(o.direction))
-            : e.adjustLiveValue(Number(o.direction)*(o.detents || 1), Number(o.step),{previewCurve:Boolean(e.field?.sequenced)&&curvePreviewDue(e)}),
+            : e.adjustLiveValue(Number(o.direction)*(o.detents || 1), Number(o.step)),
     ),
     time: action(
       'Scrub live / move selected key',
@@ -180,7 +193,7 @@ function actions(instance) {
       (e, o) =>
         instance.jogLocked || e.mediaMode || e.layerEdit === 'edit'
           ? undefined
-          : e.adjustLiveTime(Number(o.direction), Number(o.step),{detents:o.detents,previewCurve:Boolean(e.moveKey)&&curvePreviewDue(e)}),
+          : e.adjustLiveTime(Number(o.direction), Number(o.step),{detents:o.detents}),
       { scrub: true },
     ),
     fine: action('Cycle COARSE / FINE / ULTRA', [], (e) =>
@@ -188,14 +201,15 @@ function actions(instance) {
     ),
     seek: action('Jump Designer playhead to staged time', [], (e) => e.seek()),
     key_set: action('Add keyframe at playhead', [], (e) => e.writeLive('key_set')),
+    layer_slot: action('Select layer list slot', [numeric('slot','Layer slot (1–12)',1,1,12)], (e,o) => e.layerBrowser ? e.selectLayerSlot(Number(o.slot)-1) : undefined),
     parameter_slot: action('Select parameter list slot', [numeric('slot','Parameter slot (1–12)',1,1,12)], (e,o) => e.parameterBrowser ? e.selectParameterSlot(Number(o.slot)-1) : undefined),
     parameter_press: action('Open parameter list / select parameter', [], (e) =>
       e.layerEdit === 'edit' ? e.cycleLayerStep() : e.toggleParameterBrowser()),
     value_press: action('Value press: precision / context', [], (e) =>
       e.viewOnly && e.mediaMode ? undefined : e.layerEdit || e.mediaMode || e.field?.resource ? e.pressValue() : e.cyclePrecision()),
     layer_edit: action('Open layer timing editor / return', [], (e) => e.toggleLayerEditor()),
-    layer_press: action('Layer timing step / resource write mode', [], (e) =>
-      e.layerEdit === 'edit' ? e.cycleLayerStep() : e.mediaMode ? e.toggleMediaKeyframe() : !e.moveKey && !e.layerEdit ? instance.viewer?.toggleZoom() : undefined,
+    layer_press: action('Open layer list / timing step / resource write mode', [], (e) =>
+      e.layerEdit === 'edit' ? e.cycleLayerStep() : e.mediaMode ? e.toggleMediaKeyframe() : e.toggleLayerBrowser(),
     ),
     constant_set: action('Apply constant value (unsequenced parameter only)', [], (e) =>
       e.write('constant_set'),
@@ -267,7 +281,7 @@ function presets(label = 'd3layers') {
       [dialEntry('time', 1, { step: 0 })],
     ),
     dial_zoom: button(
-      'Dial 5: Designer timeline and viewer zoom',
+      'Dial 5: Designer timeline zoom',
       'ZOOM\nVIEWER',
       [],
       [dialEntry('viewer_zoom', -1)],
@@ -296,7 +310,8 @@ function presets(label = 'd3layers') {
     master_next: button('Next master-fader target', 'MASTER ▶\n$(this:master_transport)', [entry('transport_master_select',{direction:1})]),
     master_zero: button('Set selected transport master to zero', 'MASTER\n0%', [entry('transport_master_level',{level:0})]),
     master_full: button('Set selected transport master to full', 'MASTER\n100%', [entry('transport_master_level',{level:100})]),
-    master_status: button('Selected master-fader target', '$(this:master_transport)\n$(this:transport_master_level)%', []),
+    fader_mode: button('Toggle fader: master / selected parameter', 'FADER\n$(this:fader_mode)', [entry('fader_mode_toggle')]),
+    master_status: button('Selected master-fader target', '$(this:master_transport)\n$(this:fader_value_label)', []),
     jog_lock: button('Lock or unlock jog wheel', 'JOG\n$(this:jog_lock_label)', [entry('jog_lock')]),
   }
   for (const [group, names] of Object.entries({
@@ -326,6 +341,7 @@ function presets(label = 'd3layers') {
     p['master_transport_'+slot].feedbacks=[{feedbackId:'transport_master_selected',options:{slot},style:{bgcolor:theme.active}}]
   }
   p.navigation_toggle = button('Toggle TRACK / SECTION navigation', 'NAV\n$(this:navigation_mode)', [entry('navigation_toggle')])
+  p.fader_mode.feedbacks = [{feedbackId:'fader_parameter',options:{},style:{bgcolor:0xc00000}}]
   p.navigation_toggle.feedbacks = [{feedbackId:'navigation_track',options:{},style:{bgcolor:theme.active}}]
   for (const [name, operation, text] of [
     ['previous', 'gotoprevtrack', 'PREV'], ['next', 'gotonexttrack', 'NEXT'],
@@ -391,8 +407,8 @@ function presets(label = 'd3layers') {
       },
       {
         id: 'master',
-        name: 'CC1 master fader: transports / OSC',
-        definitions: ['master_refresh','master_prev','master_next','master_zero','master_full','master_status',...Array.from({length:16},(_,i)=>'master_transport_'+(i+1))],
+        name: 'CC1 fader: transports / OSC / parameter',
+        definitions: ['fader_mode','master_refresh','master_prev','master_next','master_zero','master_full','master_status',...Array.from({length:16},(_,i)=>'master_transport_'+(i+1))],
       },
       {
         id: 'safety',

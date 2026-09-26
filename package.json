@@ -1,8 +1,8 @@
 {
   "name": "companion-module-disguise-layer-control",
-  "version": "0.2.0-beta.80",
+  "version": "0.2.0-beta.84",
   "private": true,
-  "description": "Disguise Designer layer and keyframe programming for Companion and Stream Deck +",
+  "description": "Disguise Designer layer and keyframe control for Yamaha CC1 through Companion",
   "main": "src/entry.mjs",
   "license": "MIT",
   "engines": {
@@ -17,8 +17,7 @@
     "format:check": "prettier --check \"src/**/*.{js,mjs}\" \"test/**/*.js\""
   },
   "dependencies": {
-    "@companion-module/base": "2.1.3",
-    "smb3-client": "0.2.0"
+    "@companion-module/base": "2.1.3"
   },
   "devDependencies": {
     "@companion-module/tools": "3.1.0",

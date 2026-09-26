@@ -19,7 +19,7 @@ Commit only intended source/documentation changes, push your branch and open a p
 
 ## Continue with another developer or coding assistant
 
-Share the repository URL, branch and commit, not a configured Companion backup. Start with `AGENTS.md`, `docs/PROJECT-HANDOFF.md` and `docs/VIEWER-DEVELOPMENT.md`. The developer manual maps the code. Supply a sanitized reproduction and the affected Designer/Companion versions. Keep credentials and machine-specific configuration local. Historical test reports apply only to their named builds.
+Share the repository URL, branch and commit, not a configured Companion backup. Start with `AGENTS.md`, `docs/PROJECT-HANDOFF.md` and `docs/CC1-DEVELOPMENT.md`. The developer manual maps the code. Supply a sanitized reproduction and the affected Designer/Companion versions. Keep credentials and machine-specific configuration local. Historical test reports apply only to their named builds.
 
 ## Publish a release
 

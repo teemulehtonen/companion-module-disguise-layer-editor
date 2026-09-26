@@ -2,29 +2,23 @@
 const { InstanceBase, InstanceStatus, combineRgb } = require('./companion-api')
 const { DesignerClient } = require('./client')
 const { DemoClient } = require('./demo')
+const { supportsParameterFader, parameterFaderPercent } = require('./parameter-fader')
 const { Editor } = require('./editor')
 const { Connection } = require('./connection')
 const { actions, presets } = require('./definitions')
 const { timecode, absoluteTimecode, anchoredTimecode } = require('./timecode')
 const theme = require('./theme')
 const { layerTypeLabel } = require('./layer-types')
-const { ViewerServer } = require('./viewer-server')
-const { WaveformDiskCache } = require('./waveform-disk-cache')
-const { describeEditor, editFromViewer, resourceList } = require('./viewer-editor')
-const { acceptPlaybackSample, extrapolatedPlayback } = require('./viewer-playback-clock')
+const { ThumbnailDiskCache } = require('./thumbnail-disk-cache')
+const { acceptPlaybackSample, extrapolatedPlayback } = require('./playback-clock')
 
 class DisguiseLayerControl extends InstanceBase {
-  async init(config, isFirstInit, secrets = {}) {
-    try {
-      const cleaned = await require('./audio-temp-cleanup').cleanupLegacyAudioTemp()
-      this.log('info', 'Legacy waveform cleanup: ' + cleaned.files + ' files, ' + cleaned.bytes + ' bytes removed')
-    } catch { this.log('warn', 'Legacy waveform temporary-file cleanup failed') }
+  async init(config, isFirstInit) {
     this.setVariableDefinitions(
       Object.fromEntries(
         Object.entries({
           track: 'Snapshot track',
           layer_uid: 'Selected layer UID',
-          viewer_status: 'Timeline viewer status',
           layer: 'Selected layer',
           layer_type: 'Friendly layer type',
           parameter: 'Selected numeric parameter',
@@ -96,10 +90,12 @@ class DisguiseLayerControl extends InstanceBase {
           timecode: 'Playhead HH:MM:SS:FR',
           live_timecode: 'Live playhead HH:MM:SS:FR',
           ...Object.fromEntries(Array.from({length:8},(_,i)=>['osc_fader_'+(i+1), 'Stored OSC fader '+(i+1)+' value (0–1)'])),
+          fader_mode: 'Fader mode: MASTER or PARAMETER',
+          fader_value_label: 'Fader target value for display',
           master_transport: 'Selected transport or OSC channel for the CC1 master fader',
           master_transport_position: 'Selected master transport position',
           ...Object.fromEntries(Array.from({ length: 42 }, (_, i) => [`master_transport_${i + 1}`, `Master transport slot ${i + 1}`])),
-          transport_master_level: 'Selected transport master level, 0–100',
+          transport_master_level: 'Physical fader motor target, 0–100 (master or selected parameter)',
           transport_master_brightness: 'Selected transport brightness, 0–100',
           transport_master_volume: 'Selected transport volume, 0–100',
           transport_master_detail: 'Selected transport brightness and volume',
@@ -112,6 +108,7 @@ class DisguiseLayerControl extends InstanceBase {
     )
     this.setActionDefinitions(actions(this))
     this.setFeedbackDefinitions({
+      fader_parameter: {type:'boolean',name:'Fader controls selected parameter',options:[],defaultStyle:{bgcolor:0xc00000},callback:()=>Boolean(this.parameterFaderMode)},
       navigation_track: {type:'boolean',name:'Track navigation enabled',options:[],defaultStyle:{bgcolor:theme.active},callback:()=>Boolean(this.trackNavigation)},
       link_time:{type:'boolean',name:'Time linked',options:[],defaultStyle:{bgcolor:theme.active},callback:()=>Boolean(this.editor?.linkTime)},
       jog_locked:{type:'boolean',name:'Jog wheel locked',options:[],defaultStyle:{bgcolor:theme.active},callback:()=>Boolean(this.jogLocked)},
@@ -141,24 +138,25 @@ class DisguiseLayerControl extends InstanceBase {
         callback: () => Boolean(this.connection?.connected),
       },
     })
-    await this.configUpdated(config, secrets)
+    await this.configUpdated(config)
   }
   getConfigFields() {
     return [
       {
-        type: 'checkbox', id: 'clearMediaCache', label: 'CLEAR MEDIA CACHE', width: 12, default: false,
-        tooltip: 'Select and save once to clear this connection\'s waveform/thumbnail memory and the shared local media disk cache. Media and Designer projects are unchanged. Reload open viewers afterwards.',
+        type: 'checkbox', id: 'clearMediaCache', label: 'CLEAR THUMBNAIL CACHE', width: 12, default: false,
+        tooltip: 'Select and save once to clear cached CC1 resource thumbnails. Media and Designer projects are unchanged.',
       },
       {
         type: 'static-text',
         id: 'info',
         label: 'Designer 32.4.17 / Companion 5.0.5',
         value:
-          'VALUE rotation edits the selected key or constant; press VALUE to cycle COARSE / FINE / ULTRA. Press PARAMETER to open the 12-slot list, then turn PARAMETER to page and press a displayed parameter to select it. Use Add keyframe to insert a key. LAYER EDIT opens IN / POSITION (centre time) / OUT / FIT (length). Press a timing dial to change its step. Time presses cycle 1 frame / 0.5 / 1 / 2 / 5 / 10 / 30 seconds / 1 / 2 / 5 minutes, including while SELECT KEY is active. Press SELECT KEY again to unlock. Layers at the playhead update automatically. Numeric steps: 1% / 0.1% / 0.01% of the parameter range; integers use at least one.',
+          'VALUE rotation edits the selected key or constant; press VALUE to cycle COARSE / FINE / ULTRA. Press LAYER to open the 12-slot active-layer list and turn LAYER to page. Press PARAMETER to open the 12-slot list, then turn PARAMETER to page and press a displayed parameter to select it. Use Add keyframe to insert a key. LAYER EDIT opens IN / POSITION (centre time) / OUT / FIT (length). Press a timing dial to change its step. Time presses cycle 1 frame / 0.5 / 1 / 2 / 5 / 10 / 30 seconds / 1 / 2 / 5 minutes, including while SELECT KEY is active. Press SELECT KEY again to unlock. Layers at the playhead update automatically. Numeric steps: 1% / 0.1% / 0.01% of the parameter range; integers use at least one.',
       },
       {type:'textinput',id:'oscHost',label:'OSC destination IP / hostname',width:8,default:'',tooltip:'Empty disables OSC output. Faders send float values 0–1 to /vehka/fader1 through /vehka/fader8.'},
       {type:'number',id:'oscPort',label:'OSC destination UDP port',width:4,default:9000,min:1,max:65535},
       ...Array.from({length:8},(_,i)=>({type:'textinput',id:'oscFaderName'+(i+1),label:'OSC fader '+(i+1)+' display name',width:6,default:'',tooltip:'Optional display name. Empty uses OSC FADER '+(i+1)+'. The OSC address stays /vehka/fader'+(i+1)+'.'})),
+      {type:'checkbox',id:'viewOnly',label:'VIEW ONLY',width:12,default:false,tooltip:'Browse without writing to Designer or sending OSC. Disable to edit from CC1.'},
       { type: 'textinput', id: 'host', label: 'Designer IP / hostname', width: 8, default: '127.0.0.1' },
       {
         type: 'number',
@@ -169,74 +167,9 @@ class DisguiseLayerControl extends InstanceBase {
         min: 1,
         max: 65535,
       },
-      {
-        type: 'checkbox',
-        id: 'viewerEnabled',
-        label: 'ENABLE TIMELINE VIEWER',
-        width: 8,
-        default: false,
-      },
-      {
-        type: 'checkbox',
-        id: 'viewerLan',
-        label: 'ALLOW LAN ACCESS',
-        tooltip:
-          'Allow devices on the local network to view this track without authentication. Keep disabled for this computer only.',
-        width: 8,
-        default: false,
-      },
-      {
-        type: 'checkbox',
-        id: 'viewerEditEnabled',
-        label: 'ALLOW VIEWER EDIT',
-        tooltip: 'Allow browser controls to use the shared Companion editor. LAN viewers can also edit when LAN access is enabled.',
-        width: 8,
-        default: false,
-      },
-      {
-        type: 'number',
-        id: 'viewerPort',
-        label: 'VIEWER PORT',
-        width: 4,
-        default: 8765,
-        min: 1024,
-        max: 65535,
-      },
-      {
-        type: 'checkbox',
-        id: 'viewerShowAllParameters',
-        label: 'SHOW ALL PARAMETERS',
-        tooltip: 'Show constant parameters as well as animated parameters in the focused viewer layer.',
-        width: 8,
-        default: false,
-      },
-      {
-        type: 'textinput',
-        id: 'resourceShareRoot',
-        label: 'RESOURCES: SMB D3 PROJECTS SHARE',
-        width: 12,
-        default: '',
-        tooltip: 'UNC or smb://server/share path to D3 Projects. Empty uses local audio files.',
-      },
-      {
-        type: 'textinput',
-        id: 'resourceUsername',
-        label: 'RESOURCES: SMB USERNAME',
-        width: 6,
-        default: '',
-        tooltip: 'Leave empty only when the share permits guest access.',
-      },
-      { type: 'secret-text', id: 'resourcePassword', label: 'RESOURCES: SMB PASSWORD', width: 6 },
-      {
-        type: 'textinput',
-        id: 'resourceDomain',
-        label: 'RESOURCES: SMB DOMAIN (OPTIONAL)',
-        width: 6,
-        default: '',
-      },
     ]
   }
-  async configUpdated(config, secrets = {}) {
+  async configUpdated(config) {
     if (this.oscValuesDirty) {
       this.flushOscFaderValues()
       config = {...config, oscFaderValues: [...this.oscFaderValues]}
@@ -245,22 +178,16 @@ class DisguiseLayerControl extends InstanceBase {
     clearTimeout(this.masterPublishTimer)
     this.client?.close()
     await Promise.allSettled([...(this.client?.thumbnailTasks || [])])
-    const oldWaveforms = this.viewer?.waveforms
-    await this.viewer?.close()
-    // Finish cancelled reads/writes before clearing, so they cannot restore old peaks.
-    await oldWaveforms?.tail?.catch(() => {})
     if (config.clearMediaCache) {
       config = { ...config, clearMediaCache: false }
       this.saveConfig(config)
       try {
-        await new WaveformDiskCache().clear()
-        this.log('info', 'Media cache cleared. Reload open viewers to refresh displayed thumbnails.')
+        await new ThumbnailDiskCache().clear()
+        this.log('info', 'CC1 thumbnail cache cleared.')
       } catch {
-        this.log('warn', 'Media disk cache could not be cleared (busy or inaccessible). Memory caches were reset; retry after other instances finish.')
+        this.log('warn', 'Thumbnail disk cache could not be cleared (busy or inaccessible). Memory caches were reset; retry after other instances finish.')
       }
     }
-    this.viewer = null
-    this.viewerStatus = 'DISABLED'
     clearInterval(this.autoSyncTimer)
     clearInterval(this.clockDisplayTimer)
     this.clockDisplayTimer = null
@@ -280,6 +207,10 @@ class DisguiseLayerControl extends InstanceBase {
     this.thumbnailCache = new Map()
     this.thumbnailBatch = ''
     this.lastProbeRevision = undefined
+    this.parameterFaderMode = config.parameterFaderMode === true
+    this.parameterFaderPending = null
+    this.parameterFaderPromise = null
+    this.faderModeGeneration = 0
     this.masterTransportUid = String(config.masterTransportUid || '')
     this.masterTransports = []
     this.oscFaderValues = Array.from({length:8},(_,i)=> {
@@ -347,7 +278,7 @@ class DisguiseLayerControl extends InstanceBase {
             }
             if(e?.snapshot)this.acceptClockPresentation({
               trackUid:e.snapshot.trackUid,
-              time:state.fastClock?.time ?? state.timeline?.time ?? state.time ?? e.viewerTransportTime,
+              time:state.fastClock?.time ?? state.timeline?.time ?? state.time ?? e.displayTransportTime,
               playing:Boolean(state.connected && !state.contextChanged && !e.stale && e.playing),
             })
             if (
@@ -395,147 +326,7 @@ class DisguiseLayerControl extends InstanceBase {
       this.lastError = error.message
       this.updateStatus(InstanceStatus.BadConfig, error.message)
     }
-    if (config.viewerEnabled && this.editor) {
-      try {
-        this.viewer = new ViewerServer(
-          this.client,
-          () => ({
-            trackUid: this.editor?.snapshot?.trackUid,
-            transportUid: this.editor?.snapshot?.transportUid,
-            contentRevision: String(this.connection?.contentRevision || '') + ':' + (this.viewerEditRevision || 0),
-            editRevision: this.viewerEditRevision || 0,
-            focusUid: this.editor?.layer?.uid,
-            parameter: this.editor?.mediaMode ? this.editor?.mediaField?.name : this.editor?.field?.name,
-            layerEdit: Boolean(this.editor?.layerEdit) && Date.now() < (this.editor?.guidesUntil || 0),
-            moveKey: Boolean(this.editor?.moveKey) && Date.now() < (this.editor?.guidesUntil || 0),
-            keyTime: this.editor?.moveKey?.time ?? this.editor?.selectedKeyTime,
-            liveValue: this.editor?.value,
-            editPatch: Date.now()-(this.viewerLivePatchAt || 0)<500 ? this.viewerLivePatch : undefined,
-            clockSeek: this.editor?.pendingJump,
-            clockFps: this.editor?.snapshot?.fps || 25,
-            time: this.editor?.viewerTransportTime,
-            timecode: absoluteTimecode(
-              this.editor?.viewerTransportTime,
-              this.editor?.snapshot?.fps || 25,
-              false,
-              this.editor?.timecodeSamples,
-              this.editor?.liveTimecodeSample,
-            ),
-            playing: Boolean(this.editor?.playing),
-            connected: Boolean(this.connection?.connected) && !this.lastError,
-            synchronizing: this.viewerSynchronizing(),
-            viewOnly: this.client.viewOnly === true,
-            editEnabled: config.viewerEditEnabled === true && !this.client.viewOnly && !this.viewerSynchronizing(),
-            editor: describeEditor(this.editor),
-          }),
-          {
-            contextChanged: (expected, next) => {
-              if (this.editor?.snapshot?.transportUid !== expected.transportUid || this.editor?.snapshot?.trackUid !== expected.trackUid) return
-              this.connection?.noteContextChange(next)
-            },
-            viewMode: async enabled => {
-              if (!this.connection?.connected || this.lastError) return {ok:false,reason:'CONNECTION UNAVAILABLE'}
-              // Lock synchronously before waiting for an existing action. Commands
-              // already sent cannot be recalled; queued actions are discarded.
-              if (enabled) this.client.viewOnly = true
-              this.queueGeneration++
-              await this.actionTail
-              this.client.viewOnly = enabled
-              if (enabled) { this.editor.setLinkTime(false); this.editor.clearViewEditing() }
-              this.config.viewOnly = enabled
-              this.saveConfig(this.config)
-              this.viewerEditRevision = (this.viewerEditRevision || 0) + 1
-              this.publish()
-              return {ok:true,viewOnly:enabled,editor:describeEditor(this.editor)}
-            },
-            showAll: config.viewerShowAllParameters === true,
-            resources: config.viewerEditEnabled === true ? async offset => {
-              if (this.editor?.mediaMode && Date.now() - (this.lastViewerResourceRead || 0) > 2500) {
-                this.lastViewerResourceRead = Date.now()
-                let failed = false
-                await this.perform(async editor => {
-                  if (!editor.mediaMode) return
-                  try { await editor.loadMedia({preserve:true,preservePreview:true}) }
-                  catch { failed = true }
-                })
-                if (failed) throw new Error('Resource listing unavailable')
-              }
-              return resourceList(this.editor, offset)
-            } : undefined,
-            edit: config.viewerEditEnabled === true ? async (target) => {
-              if (this.client.viewOnly) return {ok:false,reason:'VIEW ONLY'}
-              let result = { ok: false, reason: 'EDITOR CHANGED — TRY AGAIN' }
-              await this.perform(async editor => {
-                if (!this.connection?.connected) {
-                  result = { ok: false, reason: 'DESIGNER IS NOT CONNECTED' }
-                  return
-                }
-                try {
-                  if (this.client.viewOnly) { result = {ok:false,reason:'VIEW ONLY'}; return }
-                  result = await editFromViewer(editor, target)
-                  if (result.ok && editor.layer) result.patch = {trackUid:editor.snapshot.trackUid,layer:structuredClone(editor.layer)}
-                }
-                catch {
-                  editor.stale = true
-                  result = { ok: false, reason: 'EDIT NOT CONFIRMED — REFRESHING DESIGNER STATE' }
-                }
-              })
-              result.editRevision = this.viewerEditRevision || 0
-              return result
-            } : undefined,
-            resourceDesignerRoot: config.resourceDesignerRoot || '',
-            resourceShareRoot: config.resourceShareRoot || '',
-            resourceUsername: config.resourceUsername || '',
-            resourceDomain: config.resourceDomain || '',
-            resourcePassword: secrets.resourcePassword || '',
-            seek: async (target) => {
-              let result = { ok: false, reason: 'Seek unavailable' }
-              await this.perform(
-                async (editor) => {
-                  try {
-                    result = await editor.seekFromViewer(target)
-                    if (result.ok) result.editor = describeEditor(editor)
-                  } catch {
-                    result = { ok: false, reason: 'Designer seek could not be completed' }
-                  }
-                },
-                { synchronise: false },
-              )
-              if (result.ok) result.editRevision = this.viewerEditRevision || 0
-              return result
-            },
-            select: async (target) => {
-              let result = { ok: false, reason: 'Selection is unavailable; retry after synchronisation' }
-              await this.perform(
-                async (editor) => {
-                  try {
-                    result = await editor.selectFromViewer(target)
-                    if (result.ok && config.viewerEditEnabled === true) result.editor = describeEditor(editor)
-                  } catch {
-                    result = { ok: false, reason: 'Designer selection could not be refreshed' }
-                  }
-                },
-                { synchronise: false },
-              )
-              return result
-            },
-          },
-        )
-        const port = await this.viewer.start(Number(config.viewerPort ?? 8765), config.viewerLan === true)
-        this.viewerStatus = `LISTENING ON ${port}`
-      } catch (error) {
-        await this.viewer?.close()
-        this.viewer = null
-        this.viewerStatus = error.code === 'EADDRINUSE' ? 'VIEWER PORT IN USE' : 'VIEWER UNAVAILABLE'
-        this.log('warn', this.viewerStatus)
-      }
-    }
     this.publish()
-  }
-  viewerSynchronizing() {
-    // Content refreshes keep the same transport usable. Only identity changes,
-    // reconnects and initial loading invalidate the entire viewer and its clock.
-    return !this.editor?.snapshot || Boolean(this.editor.contextStale || this.connection?.contextChanged)
   }
   requestSync() {
     if (
@@ -708,9 +499,11 @@ class DisguiseLayerControl extends InstanceBase {
     return {
       ...(names ? Object.fromEntries(Array.from({length:42},(_,i)=>['master_transport_'+(i+1),this.masterTargetSlots()[i]?.name || ''])) : {}),
       ...Object.fromEntries(Array.from({length:8},(_,i)=>['osc_fader_'+(i+1),this.oscFaderValues?.[i] ?? 0])),
+      fader_mode: this.parameterFaderMode ? 'PARAMETER' : 'MASTER',
+      fader_value_label: String(level)+'%',
       master_transport: master?.name || 'NO TRANSPORT',
       master_transport_position: master ? `${index + 1}/${targets.length}` : '0/0',
-      transport_master_level: level,
+      transport_master_level: this.parameterFaderMode ? parameterFaderPercent(this.editor?.field, this.editor?.value) : level,
       transport_master_brightness: brightnessPercent,
       transport_master_volume: volumePercent,
       transport_master_detail: master?.oscIndex !== undefined ? '/vehka/fader'+(master.oscIndex+1)+' = '+(this.oscFaderValues?.[master.oscIndex] ?? 0) : master ? `B ${brightnessPercent}% / V ${volumePercent}%` : 'NO TRANSPORT',
@@ -719,7 +512,7 @@ class DisguiseLayerControl extends InstanceBase {
   }
   publishMaster({ names = false } = {}) {
     this.setVariableValues(this.masterVariableValues(names))
-    this.checkFeedbacks('transport_master_selected')
+    this.checkFeedbacks('transport_master_selected', 'fader_parameter')
   }
   scheduleMasterPublish() {
     clearTimeout(this.masterPublishTimer)
@@ -729,8 +522,9 @@ class DisguiseLayerControl extends InstanceBase {
   publishField() {
     const e=this.editor
     if(!e?.field)return
-    this.setVariableValues({value:e.value,value_label:e.valueLabel,dirty:Boolean(e.dirty),...(!e.parameterBrowser ? {dial_value_2:String(e.valueLabel).toUpperCase()} : {})})
+    this.setVariableValues({value:e.value,value_label:e.valueLabel,dirty:Boolean(e.dirty),...(!e.parameterBrowser && !e.layerBrowser ? {dial_value_2:String(e.valueLabel).toUpperCase()} : {})})
     this.checkFeedbacks('dirty')
+    if (this.parameterFaderMode) this.publishMaster()
   }
   selectMasterTransport(direction) {
     const transports = this.masterTargetSlots().filter(Boolean)
@@ -780,11 +574,49 @@ class DisguiseLayerControl extends InstanceBase {
       this.setVariableValues({ last_error: this.lastError })
     }
   }
+  toggleParameterFader() {
+    this.parameterFaderMode = !this.parameterFaderMode
+    this.faderModeGeneration = (this.faderModeGeneration || 0) + 1
+    this.parameterFaderPending = null
+    this.masterLevelPending = null
+    this.config.parameterFaderMode = this.parameterFaderMode
+    this.saveConfig(this.config)
+    this.publishMaster()
+  }
+  parameterFaderTarget() {
+    const e = this.editor
+    if (!e?.field || e.stale || e.viewOnly || e.mediaMode || e.layerBrowser || e.parameterBrowser || e.clearKeysBrowser || e.layerEdit) return null
+    if (!supportsParameterFader(e.field)) return null
+    return JSON.stringify([this.faderModeGeneration, this.queueGeneration, e.snapshot?.transportUid,
+      e.snapshot?.trackUid, e.layer?.uid, e.field.name, e.linkTime, e.linkTime ? null : e.time,
+      e.selectedKey?.time, e.field.min, e.field.max, Boolean(e.field.integer)])
+  }
+  setParameterFaderLevel(percent) {
+    const target = this.parameterFaderTarget(), editor = this.editor
+    if (!target) return Promise.resolve()
+    this.parameterFaderPending = {percent, target, editor}
+    if (this.parameterFaderPromise) return this.parameterFaderPromise
+    const drain = async () => {
+      try {
+        while (this.parameterFaderPending) {
+          const request = this.parameterFaderPending
+          this.parameterFaderPending = null
+          await this.perform(async e => {
+            if (!this.parameterFaderMode || e !== request.editor || request.target !== this.parameterFaderTarget()) return
+            await e.setFaderValue(request.percent)
+          }, {synchronise:false})
+        }
+      } finally { this.parameterFaderPromise = null }
+    }
+    this.parameterFaderPromise = drain()
+    return this.parameterFaderPromise
+  }
   setTransportMasterLevel(percent) {
     percent = Number(percent)
     if (!Number.isFinite(percent) || percent < 0 || percent > 100)
       return Promise.reject(new Error('Master level must be 0–100'))
     if (this.client?.viewOnly || this.config?.viewOnly) return Promise.resolve()
+    if (this.parameterFaderMode) return this.setParameterFaderLevel(percent)
     const target = this.masterTransport()
     if (target?.oscIndex !== undefined) return this.setOscFaderLevel(target.oscIndex, percent)
     const uid = this.masterTransportUid
@@ -868,14 +700,8 @@ class DisguiseLayerControl extends InstanceBase {
           return
         }
       }
-      const valueEditBefore=editor.valueEditRevision || 0
       await fn(editor)
-      if (!scrub || editor.moveKey || editor.layerEdit) this.viewerEditRevision = (this.viewerEditRevision || 0) + 1
       if (editor !== this.editor) return
-      if(editor.layer && (editor.moveKey || editor.layerEdit || (editor.valueEditRevision || 0)!==valueEditBefore)) {
-        this.viewerLivePatchAt=Date.now()
-        this.viewerLivePatch={revision:this.viewerEditRevision,trackUid:editor.snapshot.trackUid,layer:structuredClone({uid:editor.layer.uid,start:editor.layer.start,end:editor.layer.end,fields:editor.layerEdit ? editor.layer.fields : editor.field ? [editor.field] : []})}
-      }
       this.lastError = ''
       if (editor.snapshot && this.connection?.connected)
         this.connection.watch(
@@ -1001,6 +827,8 @@ class DisguiseLayerControl extends InstanceBase {
     if (deleteReady) padColors[5] = 0xb02028
     if (e?.clearKeysBrowser && !e.clearKeysTargetValid()) e.closeClearKeys()
     if (e?.parameterBrowser && !e.validParameterBrowser()) e.parameterBrowser = null
+    if (e?.layerBrowser && !e.validLayerBrowser()) e.layerBrowser = null
+    const layerBrowser = e?.layerBrowser
     const parameterBrowser = e?.parameterBrowser
     const clearBrowser = e?.clearKeysBrowser
     const clearItem = clearBrowser?.items[clearBrowser.index]
@@ -1021,6 +849,14 @@ class DisguiseLayerControl extends InstanceBase {
         const index=parameterBrowser.page*12+i, field=e.layer.fields[index]
         padLabels[i]=field?.label || field?.name || ''
         padColors[i]=field ? index===e.fieldIndex ? theme.active : theme.surface : theme.background
+      }
+    }
+    if (layerBrowser) {
+      const layers=e.activeLayers
+      for (let i=0;i<8;i++) {
+        const layer=layers[layerBrowser.page*12+i]
+        padLabels[i]=layer?.name || ''
+        padColors[i]=layer ? layer.uid===e.layer?.uid ? theme.active : theme.surface : theme.background
       }
     }
     const padVars = {}
@@ -1161,11 +997,6 @@ class DisguiseLayerControl extends InstanceBase {
       padVars.dial_title_3 = ''
       padVars.dial_value_3 = 'BACK'
     }
-    if (this.viewer?.zoomAvailable() && this.viewer.zoomMode && !mediaMode && !e?.layerEdit && !e?.moveKey && !clearBrowser) {
-      padVars.dial_title_0 = 'ZOOM'
-      padVars.dial_value_0 = 'VIEWER'
-      padVars.dial_info_0 = '− / +'
-    }
     if (parameterBrowser) {
       const pages=Math.max(1,Math.ceil(e.layer.fields.length/12))
       padVars.delete_hint=''
@@ -1177,7 +1008,17 @@ class DisguiseLayerControl extends InstanceBase {
         padVars['dial_info_'+i]=field && field.name===e.field?.name ? 'SELECTED' : ''
       }
     }
-    if(e?.moveKey?.group){padVars.dial_value_2=e.moveKey.group.length+' KEYFRAMES';padVars.dial_info_2='MOVE / DELETE';padVars.dial_title_2='GROUP'}
+    if (layerBrowser) {
+      const layers=e.activeLayers, pages=Math.max(1,Math.ceil(layers.length/12))
+      padVars.delete_hint=''
+      padVars.delete_ready=false
+      for(let i=0;i<4;i++) {
+        const layer=layers[layerBrowser.page*12+8+i]
+        padVars['dial_title_'+i]='LAYERS '+(layerBrowser.page+1)+'/'+pages
+        padVars['dial_value_'+i]=layer?.name || ''
+        padVars['dial_info_'+i]=layer && layer.uid===e.layer?.uid ? 'SELECTED' : ''
+      }
+    }
     // Capitalise display text only. Resource paths, parameter IDs, image data
     // and public raw-value variables must retain their original case.
     for (const name of Object.keys(padVars)) {
@@ -1187,7 +1028,7 @@ class DisguiseLayerControl extends InstanceBase {
     this.setVariableValues({
       ...padVars,
       ...masterVars,
-      ui_mode: parameterBrowser ? 'PARAMETER_LIST' : clearBrowser ? 'CLEAR_KEYS' : mediaMode ? 'MEDIA' : 'PARAMS',
+      ui_mode: layerBrowser ? 'LAYER_LIST' : parameterBrowser ? 'PARAMETER_LIST' : clearBrowser ? 'CLEAR_KEYS' : mediaMode ? 'MEDIA' : 'PARAMS',
       folder: e?.mediaFolder || '',
       media_name: e?.currentMedia?.name || '',
       media_field: e?.mediaField?.label || '',
@@ -1196,7 +1037,7 @@ class DisguiseLayerControl extends InstanceBase {
       time_entry: e?.timeEntryDigits ? e.timeEntryLabel : clockTc(presented.edit),
       time_entry_active: Boolean(e?.timeEntryDigits),
       playback_label: playbackLabel,
-      parameter_animated: Boolean(!parameterBrowser && !clearBrowser && !e?.layerEdit && e?.field?.sequenced && keys.length > 1),
+      parameter_animated: Boolean(!layerBrowser && !parameterBrowser && !clearBrowser && !e?.layerEdit && e?.field?.sequenced && keys.length > 1),
       track: e?.snapshot?.trackName || '',
       layer: e?.layer?.name || 'No active layer',
       layer_type: layerTypeLabel(e?.layer?.moduleType).toUpperCase(),
@@ -1219,7 +1060,6 @@ class DisguiseLayerControl extends InstanceBase {
       layer_elapsed: e?.layer ? fmt(presented.edit - (e.layer.start ?? 0)) : '-',
       layer_remaining: e?.layer ? fmt(e.layer.end - presented.edit) : '-',
       layer_uid: e?.layer?.uid || '',
-      viewer_status: this.viewerStatus || 'DISABLED',
       key_previous_distance: prev ? fmt(e.time - prev.time) : '-',
       key_next_distance: next ? fmt(next.time - e.time) : '-',
       value: e?.value ?? 0,
@@ -1248,7 +1088,7 @@ class DisguiseLayerControl extends InstanceBase {
       jog_locked: Boolean(this.jogLocked),
       jog_lock_label: this.jogLocked ? 'LOCKED' : 'ACTIVE',
     })
-    this.checkFeedbacks('navigation_track', 'fine', 'dirty', 'connected', 'link_time', 'jog_locked', 'transport_master_selected', 'timing_step_selected', 'timing_step_unavailable', 'transport_state')
+    this.checkFeedbacks('fader_parameter', 'navigation_track', 'fine', 'dirty', 'connected', 'link_time', 'jog_locked', 'transport_master_selected', 'timing_step_selected', 'timing_step_unavailable', 'transport_state')
     void this.loadThumbnails()
   }
   publishClock() {
@@ -1270,7 +1110,7 @@ class DisguiseLayerControl extends InstanceBase {
       layer_remaining:e.layer && Number.isFinite(edit) ? String(Number((e.layer.end-edit).toFixed(3))) : '-',
     }
     if(!e.timeEntryDigits)values.time_entry=values.timecode
-    if(!e.parameterBrowser && !e.mediaMode && !e.layerEdit && !e.clearKeysBrowser)values.dial_value_3=values.timecode.toUpperCase()
+    if(!e.parameterBrowser && !e.layerBrowser && !e.mediaMode && !e.layerEdit && !e.clearKeysBrowser)values.dial_value_3=values.timecode.toUpperCase()
     this.setVariableValues(values)
     this.checkFeedbacks('transport_state')
   }
@@ -1278,7 +1118,7 @@ class DisguiseLayerControl extends InstanceBase {
     const e=this.editor,confirmed=this.connection?.time
     if(!e?.snapshot)return {live:confirmed,edit:e?.time}
     const live=extrapolatedPlayback(this.clockPresentation,{
-      trackUid:e.snapshot.trackUid,time:Number.isFinite(confirmed)?confirmed:e.viewerTransportTime,
+      trackUid:e.snapshot.trackUid,time:Number.isFinite(confirmed)?confirmed:e.displayTransportTime,
       playing:Boolean(e.playing),connected:Boolean(this.connection?.connected),length:e.snapshot.length,
     },Date.now(),750)
     return {live,edit:e.linkTime && Number.isFinite(live) ? live : e.time}
@@ -1295,7 +1135,6 @@ class DisguiseLayerControl extends InstanceBase {
   }
   async destroy() {
     this.flushOscFaderValues()
-    await this.viewer?.close()
     clearTimeout(this.deleteHoldTimer)
     clearInterval(this.autoSyncTimer)
     clearInterval(this.clockDisplayTimer)

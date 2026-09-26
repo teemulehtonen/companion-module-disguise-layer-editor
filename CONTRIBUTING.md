@@ -6,16 +6,16 @@ Anyone can develop, fork and redistribute this project under the [MIT license](L
 
 1. Fork this repository on GitHub and clone your fork, or clone the original for local work.
 2. Install Node.js 22.22.0 and run `npm ci`.
-3. Read [Developer manual](docs/DEVELOPER-MANUAL.md), [current handoff](docs/PROJECT-HANDOFF.md) and [viewer development](docs/VIEWER-DEVELOPMENT.md). `AGENTS.md` also applies to coding assistants.
+3. Read [Developer manual](docs/DEVELOPER-MANUAL.md), [current handoff](docs/PROJECT-HANDOFF.md) and [CC1 development](docs/CC1-DEVELOPMENT.md). `AGENTS.md` also applies to coding assistants.
 4. Create a branch such as `codex/fix-out-navigation`, implement a focused change and add regression coverage where appropriate.
 5. Run `npm test` and `npm run package`. Run `npm run format:check`; avoid unrelated repository-wide formatting changes and report pre-existing failures separately.
 6. Submit a pull request describing the problem, behavior change, tests actually run and known limitations. Screenshots help for UI changes.
 
 ## Compatibility rules
 
-Keep UI and public documentation in English. Preserve the internal module ID, action/variable IDs and existing saved configurations. Designer calls belong behind the client/native-script boundary; Companion SDK access belongs behind its adapter. Browser and Stream Deck edits must share validation, ordering, selection and clock rules.
+Keep UI and public documentation in English. Preserve the internal module ID, action/variable IDs and existing saved configurations. Designer calls belong behind the client/native-script boundary; Companion SDK access belongs behind its adapter. All CC1 controls must share validation, ordering, selection and clock rules.
 
-VIEW must never mutate Designer. Keep expected-state checks, lock checks, request authentication and stale-response protection. OUT is a valid editing boundary even though playback has ended there. Quantized tracks require Designer time/beat conversion rather than a single assumed BPM. See the development guides for group, resource, waveform and concurrency details.
+VIEW must never mutate Designer. Keep expected-state checks, lock checks and stale-response protection. OUT is a valid editing boundary even though playback has ended there. Quantized tracks require Designer time/beat conversion rather than a single assumed BPM. See the development guides for CC1 resource, timing and concurrency details.
 
 ## Testing and privacy
 

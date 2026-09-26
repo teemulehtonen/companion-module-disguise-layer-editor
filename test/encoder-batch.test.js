@@ -51,18 +51,9 @@ test('Yamaha encoder sensitivity turns two physical detents into one isolated ed
  assert.deepEqual(calls.slice(1),[['time',1,1],['time',1,1]])
 })
 test('Yamaha zoom encoder uses the same half sensitivity',()=>{
- const seen=[],instance={viewer:{rotateZoomDirect:value=>seen.push(value)},publish(){}}
+ const seen=[],instance={zoomDesignerTimeline:value=>seen.push(value),publish(){}}
  const zoom=actions(instance).viewer_zoom
  const event={options:{direction:1,detent_divisor:2,detent_group:5}}
  zoom.callback(event);assert.deepEqual(seen,[])
  zoom.callback(event);assert.deepEqual(seen,[1])
-})
-test('ordinary VALUE edits publish confirmed geometry even without SELECT KEY or LAYER EDIT',async()=>{
- const body=source.slice(source.indexOf('  async performNow('),source.indexOf('  connectionStatus()'))
- const C=vm.runInNewContext('(class Host {'+body+'})',{structuredClone,Date})
- const h=new C();h.publish=()=>{};h.connectionStatus=()=>{};h.editor={snapshot:{trackUid:'1'},layer:{uid:'2',start:0,end:10},field:{name:'v',keys:[{time:1,value:0.2}]},valueEditRevision:0};
- await h.performNow(e=>{e.field.keys[0].value=0.7;e.valueEditRevision++})
- assert.equal(h.viewerLivePatch.layer.fields[0].keys[0].value,0.7)
- assert.equal(h.viewerLivePatch.revision,1)
- assert.equal(h.editor.moveKey,undefined)
 })

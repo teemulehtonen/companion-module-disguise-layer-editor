@@ -59,31 +59,15 @@ for bpm in (None,60.0,120.0,123.0):
                 t.bpm=bpm
             prefix=('TIME' if bpm is None else 'BEAT-'+str(bpm))+'/'+kind
             try:
-                uid=request('layer_manage',operation='create',kind=kind,targetTime=10)['layerUid']
-                layer=next(l for l in t.layers if str(l.uid)==uid)
+                # Fixture creation belongs to the harness, not the CC1 command surface.
+                cls={'video':VariableVideoModule,'audio':AudioModule,'bitmap':BitmapModule}[kind]
+                first=t.timeToBeat(10)
+                last=first+4 if bpm else t.timeToBeat(20)
+                layer=t.addNewLayer(cls,first,last-first,'CC1 REGRESSION')
+                layer.setExtents(first,last)
+                uid=str(layer.uid)
                 start,end=bounds(layer)
                 check('create',end>start and len(t.layers)>0)
-                # Marker and section operations share cues; deleting one tag must
-                # preserve the others. Inspect native cue contents independently.
-                def marker_value(kind, seconds):
-                    at=t.timeToBeat(seconds)
-                    index=next((i for i in range(t.cues.n()) if abs(t.cues.getT(i)-at)<0.00001),None)
-                    if index is None: return None
-                    cue=t.cues.getV(index)
-                    if kind=='notes': return cue.getNote() if cue.hasNote() else None
-                    tag_type={'cue':Tag.CUE,'tc':Tag.TC,'midi':Tag.MIDI}[kind]
-                    return next((tag.text for tag in cue.getTags() if tag.type==tag_type),None)
-                for marker_kind,text in [('cue','901'),('tc','12:00:00:00'),('midi','1.60'),('notes','Regression note')]:
-                    request('annotation_edit',kind=marker_kind,mode='add',targetTime=2,text=text)
-                    check('marker-add-'+marker_kind,marker_value(marker_kind,2)==text)
-                    request('annotation_edit',kind=marker_kind,mode='move',sourceTime=2,sourceText=text,targetTime=3,text=text)
-                    check('marker-move-'+marker_kind,marker_value(marker_kind,2) is None and marker_value(marker_kind,3)==text)
-                    request('annotation_edit',kind=marker_kind,mode='delete',sourceTime=3,sourceText=text,targetTime=3,text=text)
-                    check('marker-delete-'+marker_kind,marker_value(marker_kind,3) is None)
-                request('annotation_edit',kind='notes',mode='add',targetTime=4,text='Keep note')
-                request('annotation_edit',kind='cue',mode='add',targetTime=4,text='902')
-                request('annotation_edit',kind='cue',mode='delete',sourceTime=4,sourceText='902',targetTime=4,text='902')
-                check('marker-delete-preserves-note',marker_value('notes',4)=='Keep note')
                 request('section_edit',operation='cut',time=5)
                 check('section-cut',t.beatToSection(t.timeToBeat(5.1))>t.beatToSection(t.timeToBeat(4.9)))
                 request('section_edit',operation='merge',time=5.1)
@@ -91,7 +75,7 @@ for bpm in (None,60.0,120.0,123.0):
                 # All mutations below pass through the actual production native command generator.
                 field=layer.findSequence('volume' if kind=='audio' else 'brightness')
                 if field is None: raise RuntimeError('Primary parameter unavailable')
-                request('parameter_sequence',layer,field=field.name,mode='reset',confirmed=True,expectedSequenced=not field.disableSequencing,time=start)
+                request('keys_clear',layer,fields=[field.name],confirmed=True,resetDefault=True,time=start)
                 request('constant_set',layer,field=field.name,value=0.3,time=start)
                 check('constant',field.disableSequencing and close(field.sequence.key(0).v,0.3))
                 expected_value=0.3
@@ -111,11 +95,7 @@ for bpm in (None,60.0,120.0,123.0):
                     request('key_type',layer,field=field.name,time=keytimes[1],sourceTime=keytimes[1],type=keytype)
                     key=next(field.sequence.key(i) for i in range(field.sequence.nKeys()) if close(t.beatToTime(field.sequence.t(i)),keytimes[1]))
                     check('interpolation-'+str(keytype),key.interpolation==[Key.select,Key.linear,Key.cubic][keytype])
-                # Absolute pointer move and encoder delta both use the production key_move path.
-                target=keytimes[1]+(end-start)/16
-                r=request('key_move',layer,field=field.name,time=keytimes[1],sourceTime=keytimes[1],targetTime=target,delta=0.000001,snap=False,targetValue=0.6)
-                check('key-pointer-time',any(close(at,r['time']) and close(value,0.6) for at,value in field_keys(field)))
-                r=request('key_move',layer,field=field.name,time=r['time'],sourceTime=r['time'],delta=1.0/128 if bpm else 1,beats=bpm is not None,frames=bpm is None)
+                r=request('key_move',layer,field=field.name,time=keytimes[1],sourceTime=keytimes[1],delta=1.0/128 if bpm else 1,beats=bpm is not None,frames=bpm is None)
                 audit_field('key-encoder',layer,field,r['time'])
                 # OUT is a legal key position and repeated NEXT may not move backwards.
                 request('key_set',layer,field=field.name,time=end,value=0.9)
@@ -153,16 +133,6 @@ for bpm in (None,60.0,120.0,123.0):
                 check('clear-including-outside',field.disableSequencing and field.sequence.nKeys()==1)
                 request('parameter_default',layer,field=field.name,time=start,confirmed=True)
                 check('native-default',field.disableSequencing and close(field.sequence.key(0).v,field.defaultValue))
-                # Multi-key edits preserve spacing and values and reject stale groups.
-                for at,value in zip((start+(end-start)/4,start+(end-start)/2),(0.2,0.7)):
-                    request('key_set',layer,field=field.name,time=at,value=value)
-                keys=request('read_field',layer,field=field.name,time=start)['field']['keys'][-2:]
-                moved=request('key_group',layer,field=field.name,time=start,operation='move',expectedKeys=keys,delta=0.01)
-                selected=moved['selectedKeys']
-                check('multi-key-move',len(selected)==2 and all(close(new['time'],old['time']+0.01) and close(new['value'],old['value']) for new,old in zip(selected,keys)))
-                unchanged_rejection('stale-group-rejected',{'command':'key_group','layerUid':uid,'field':field.name,'time':start,'operation':'move','expectedKeys':keys,'delta':0.01,'keepPlayhead':True},lambda:field_keys(field))
-                request('key_group',layer,field=field.name,time=start,operation='delete',expectedKeys=selected)
-                check('multi-key-delete',field.sequence.nKeys()==1)
                 request('key_delete',layer,field=field.name,time=start,keyTime=field_keys(field)[0][0])
                 check('last-key-delete-keeps-constant',field.disableSequencing and field.sequence.nKeys()==1)
                 # Only real resources advertised for this parameter are used; no media is copied.
@@ -201,13 +171,6 @@ for bpm in (None,60.0,120.0,123.0):
                         correct=(str(value.uid) if value else '')==(str(default.uid) if default else '')
                     else: correct=close(f.sequence.key(0).v,f.defaultValue)
                     check('default-all-'+f.name,constant and correct)
-                duplicated=request('layer_manage',layer,operation='duplicate',expectedName=layer.name,expectedStart=start,expectedEnd=end)['layerUid']
-                copy=next(l for l in t.layers if str(l.uid)==duplicated)
-                check('duplicate',str(copy.uid)!=uid and all(close(a,b) for a,b in zip(bounds(copy),bounds(layer))))
-                request('layer_manage',copy,operation='rename',expectedName=copy.name,expectedStart=start,expectedEnd=end,name='REGRESSION COPY')
-                check('rename',copy.name=='REGRESSION COPY')
-                request('layer_manage',copy,operation='delete',expectedName=copy.name,expectedStart=start,expectedEnd=end)
-                check('delete',not any(str(l.uid)==duplicated for l in t.layers))
             except errors.Exception as error:
                 # Native exception text can contain project paths; retain a sanitized failure.
                 checks.append({'name':prefix+'/execution','status':'FAIL','detail':str(type(error).__name__) + ': ' + str(error).split('\n')[0][:150]})

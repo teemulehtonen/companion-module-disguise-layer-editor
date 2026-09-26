@@ -1,15 +1,14 @@
 'use strict'
 // Broad shared tests always run; groups add focused coverage, never replace it.
 const groups = {
-  layers: /layer|group|alignment|out-boundary|selection/,
-  keyframes: /key|curve|wheel|insert|gesture|discrete|parameter/,
-  timing: /clock|time|transport|seek|snap|zoom|pin-time|out-boundary/,
-  resources: /resource|audio|waveform|thumbnail|discrete|parameter/,
-  viewer: /viewer|view-mode/,
-  companion: /cc1|definitions|presets|page|encoder|editor|connection|parameter-browser/,
+  layers: /layer|out-boundary|selection/,
+  keyframes: /key|discrete|parameter/,
+  timing: /clock|time|transport|seek|zoom|out-boundary/,
+  resources: /resource|thumbnail|discrete|parameter/,
+  companion: /cc1|definitions|presets|page|encoder|editor|connection|content-refresh|layer-browser|parameter-browser/,
 }
 const shared =
-  /^(client|connection|editor|live-editor|definitions|view-mode|viewer-editor|viewer-server|viewer-edit-model|viewer-presentation|regression-plan)\.test\.js$/
+  /^(client|connection|editor|live-editor|definitions|view-mode|cc1-only|regression-plan)\.test\.js$/
 function selectTests(files, requested = 'all') {
   const names = requested
     .split(',')

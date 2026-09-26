@@ -1,4 +1,5 @@
 'use strict'
+const { parameterFaderValue } = require('./parameter-fader')
 const { parameterStep } = require('./parameter-step')
 
 const sample = () => ({
@@ -153,7 +154,7 @@ class DemoClient {
         throw new Error('Layer timing changed')
       if (args.mode === 'fit') throw new Error('Demo content has no duration for FIT')
       const origin = args.mode === 'out' ? layer.end : layer.start
-      const target = Number.isFinite(args.targetTime) ? args.targetTime : args.frames
+      const target = args.frames
         ? (Math.round(origin * this.data.fps) + args.delta) / this.data.fps
         : origin + args.delta
       const minimum = 1 / this.data.fps,
@@ -239,7 +240,7 @@ class DemoClient {
           Math.min(
             layer.end ?? this.data.length,
             this.data.length,
-            Number.isFinite(args.targetTime) ? args.targetTime : args.frames
+            args.frames
               ? (Math.round(k.time * this.data.fps) + args.delta) / this.data.fps
               : k.time + args.delta,
           ),
@@ -247,7 +248,6 @@ class DemoClient {
         if (field.keys.some((other) => other !== k && Math.abs(other.time - target) < 1e-5)) return result()
         if (target < 0 || target > this.data.length) throw new Error('Invalid keyframe destination')
         k.time = target
-        if (Number.isFinite(args.targetValue)) k.value=Math.max(field.min ?? -Infinity,Math.min(field.max ?? Infinity,args.targetValue))
         this.data.time = target
         field.keys.sort((a, b) => a.time - b.time)
       }
@@ -259,11 +259,9 @@ class DemoClient {
           ? field.keys[0]
           : field.keys.find((k) => Math.abs(k.time - args.keyTime) < 1e-5)
       if (!selected) throw new Error('Selected keyframe is missing')
-      if (Number.isFinite(args.targetValue)) {
-        if (Math.abs(selected.value-args.expectedValue)>1e-6) throw new Error('Value changed in Designer')
-        if (field.choices?.length && !field.choices.some(c=>c.value===args.targetValue)) throw new Error('Option is no longer available')
-        args.value=Math.max(field.min ?? -Infinity,Math.min(field.max ?? Infinity,args.targetValue))
-        if(field.integer) args.value=Math.round(args.value)
+      if (args.faderPercent !== undefined) {
+        if (JSON.stringify(args.expectedRange) !== JSON.stringify([field.min,field.max,Boolean(field.integer)])) throw Error('Parameter range changed')
+        args.value = parameterFaderValue(field,args.faderPercent)
       } else if (field.choices?.length) {
         const i = field.choices.findIndex((c) => c.value === selected.value)
         args.value = field.choices[Math.max(0, Math.min(field.choices.length - 1, i + args.direction))].value
