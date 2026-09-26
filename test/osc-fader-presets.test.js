@@ -93,3 +93,28 @@ test('preset catalog exposes exactly eight transports and eight OSC selectors wi
  assert.equal(p.master_transport_9.steps[0].down[0].actionId,'transport_master_select_slot')
  assert.ok(actions({}).transport_master_level)
 })
+test('eight optional OSC names default independently and appear in selectors and selected display',t=>{
+ const {item,values,sent}=instance(t)
+ const fields=item.getConfigFields().filter(f=>/^oscFaderName[1-8]$/.test(f.id))
+ assert.equal(fields.length,8);assert.ok(fields.every(f=>f.default===''&&f.type==='textinput'))
+ for(let i=1;i<=8;i++)item.config['oscFaderName'+i]='  Named '+i+'  '
+ item.selectMasterTransportSlot(15);item.publishMaster({names:true})
+ for(let i=1;i<=8;i++)assert.equal(values['master_transport_'+(i+8)],'Named '+i)
+ assert.equal(values.master_transport,'Named 8');assert.equal(item.masterTransportUid,'osc:fader8')
+ item.config.oscFaderName8=' \t ';item.publishMaster({names:true})
+ assert.equal(values.master_transport,'OSC FADER 8');assert.equal(values.master_transport_16,'OSC FADER 8')
+ assert.equal(values.master_transport_9,'Named 1');assert.deepEqual(sent,[])
+})
+
+test('renaming an OSC target preserves its value, selection, address and persisted settings',async t=>{
+ const {item,sent,values}=instance(t)
+ item.selectMasterTransportSlot(8);await item.setTransportMasterLevel(37.5)
+ item.config.oscFaderName1='Taustan kirkkaus';item.publishMaster({names:true})
+ assert.equal(values.master_transport,'Taustan kirkkaus');assert.equal(values.transport_master_level,37.5)
+ assert.equal(item.masterTransportUid,'osc:fader1');assert.equal(sent.length,1)
+ item.flushOscFaderValues();assert.equal(item.saved.oscFaderName1,'Taustan kirkkaus')
+ item.config=structuredClone(item.saved);item.selectMasterTransportSlot(9);item.selectMasterTransportSlot(8)
+ assert.equal(item.masterTransport().name,'Taustan kirkkaus');assert.equal(item.masterTransport().brightness,.375)
+ await item.setTransportMasterLevel(50)
+ assert.deepEqual(sent.at(-1),['127.0.0.1',9000,'/vehka/fader1',[{type:'f',value:.5}]])
+})

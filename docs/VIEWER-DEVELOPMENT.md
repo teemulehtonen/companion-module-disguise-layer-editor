@@ -228,3 +228,6 @@ Designer parameter mutation tests were not run.
 ## Yamaha parameter list (beta.78)
 
 This is Companion LCD navigation, not a browser viewer change. parameterBrowser stores page and a transport/track/layer/field signature. All twelve LCDs are selectors while open. Keep lightweight field/time publications from replacing the bottom-row parameter names. Value presses cycle numeric precision; the explicit key_set action retains insertion.
+
+## Finer encoder defaults (beta.80)
+Supersedes the beta.77 percentages above: automatic range-relative steps are now 1%, 0.1%, 0.01%. For -180..180 this gives 3.6 / 0.36 / 0.036; for 0..1, 0.01 / 0.001 / 0.0001. Missing-range float fallbacks use the latter. Explicit overrides and discrete/integer handling are preserved.

@@ -167,7 +167,7 @@ test('unsequenced and single-key fields never gain keys through rotation', async
     e.field.keys.map((k) => k.time),
     [0],
   )
-  assert.equal(e.field.keys[0].value, 1.1)
+  assert.equal(e.field.keys[0].value, 1.01)
   await e.pressValue()
   assert.equal(e.field.sequenced, true)
   assert.deepEqual(
@@ -390,7 +390,7 @@ test('empty-key NEXT reaches exact OUT and PREV returns to IN', async () => {
   }
 })
 
-test('default dial increments are tenths, hundredths and thousandths regardless of metadata step', async () => {
+test('default dial increments use finer range-relative steps regardless of metadata step', async () => {
   const e = await ready()
   const f = e.client.data.layers[0].fields[0]
   f.step = 0.00001
@@ -399,17 +399,17 @@ test('default dial increments are tenths, hundredths and thousandths regardless 
   f.keys[0].value = 0
   await e.refresh()
   await e.adjustLiveValue(1)
-  assert.equal(e.value, 0.1)
+  assert.equal(e.value, 0.01)
   e.cyclePrecision()
   await e.adjustLiveValue(1)
-  assert.equal(e.value, 0.11)
+  assert.equal(e.value, 0.011)
   e.cyclePrecision()
   await e.adjustLiveValue(1)
-  assert.equal(e.value, 0.111)
+  assert.equal(e.value, 0.0111)
   await e.adjustLiveValue(-1)
-  assert.equal(e.value, 0.11)
+  assert.equal(e.value, 0.011)
   e.cyclePrecision()
-  for (let i = 0; i < 10; i++) await e.adjustLiveValue(1)
+  for (let i = 0; i < 100; i++) await e.adjustLiveValue(1)
   assert.equal(e.value, 1)
   assert.equal(f.keys.length, 3)
   f.integer = true
@@ -852,7 +852,7 @@ test('live evaluated values between keys are displayed without changing the edit
   e.acceptLive({ field: { value: 0.6875 } })
   assert.equal(e.value, 0.6875)
   e.precision = 'ultra'
-  assert.equal(e.valueLabel, '0.688')
+  assert.equal(e.valueLabel, '0.6875')
   assert.equal(e.field.keys[0].value, 0.5)
 })
 

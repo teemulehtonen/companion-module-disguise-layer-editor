@@ -60,3 +60,7 @@ Viewer size: SMALL 100%, MEDIUM 110%, LARGE 120%, saved per browser. Track headi
 Press the parameter-name display to replace all three LCD rows with 12 parameters. Turn the parameter encoder to move one page at a time; press a parameter to select it and restore the normal controls. Empty slots do nothing. The current parameter is highlighted. The list uses cached fields; the normal stale-context check still refreshes when necessary. The value display now cycles COARSE / FINE / ULTRA; use the explicit Add keyframe action to insert a key. Resource and layer-timing contexts retain their existing press functions. Existing PARAMETER buttons must use the new Open parameter list / select parameter action.
 
 On Yamaha CC1, pressing the third physical encoder adds a keyframe at the playhead. The value LCD button separately cycles COARSE / FINE / ULTRA (or selects a parameter while the list is open).
+
+Set **OSC fader 1–8 display name** in the module connection settings to name each OSC target. Blank names retain OSC FADER 1–8. Names appear on selector buttons and the selected fader display; addresses /vehka/fader1–8 and remembered values do not change.
+
+Numeric encoder sensitivity (beta.80): COARSE / FINE / ULTRA use 1% / 0.1% / 0.01% of the parameter range per effective step. On 0–1 these are 0.01 / 0.001 / 0.0001. Unbounded floating-point parameters use the same fallback steps. Explicit step overrides remain unchanged; integer parameters still move by at least one.

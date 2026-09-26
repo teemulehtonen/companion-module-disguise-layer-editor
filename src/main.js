@@ -154,10 +154,11 @@ class DisguiseLayerControl extends InstanceBase {
         id: 'info',
         label: 'Designer 32.4.17 / Companion 5.0.5',
         value:
-          'VALUE rotation edits the selected key or constant; press VALUE to cycle COARSE / FINE / ULTRA. Press PARAMETER to open the 12-slot list, then turn PARAMETER to page and press a displayed parameter to select it. Use Add keyframe to insert a key. LAYER EDIT opens IN / POSITION (centre time) / OUT / FIT (length). Press a timing dial to change its step. Time presses cycle 1 frame / 0.5 / 1 / 2 / 5 / 10 / 30 seconds / 1 / 2 / 5 minutes, including while SELECT KEY is active. Press SELECT KEY again to unlock. Layers at the playhead update automatically. Numeric steps: 10% / 1% / 0.1% of the parameter range; integers use at least one.',
+          'VALUE rotation edits the selected key or constant; press VALUE to cycle COARSE / FINE / ULTRA. Press PARAMETER to open the 12-slot list, then turn PARAMETER to page and press a displayed parameter to select it. Use Add keyframe to insert a key. LAYER EDIT opens IN / POSITION (centre time) / OUT / FIT (length). Press a timing dial to change its step. Time presses cycle 1 frame / 0.5 / 1 / 2 / 5 / 10 / 30 seconds / 1 / 2 / 5 minutes, including while SELECT KEY is active. Press SELECT KEY again to unlock. Layers at the playhead update automatically. Numeric steps: 1% / 0.1% / 0.01% of the parameter range; integers use at least one.',
       },
       {type:'textinput',id:'oscHost',label:'OSC destination IP / hostname',width:8,default:'',tooltip:'Empty disables OSC output. Faders send float values 0–1 to /vehka/fader1 through /vehka/fader8.'},
       {type:'number',id:'oscPort',label:'OSC destination UDP port',width:4,default:9000,min:1,max:65535},
+      ...Array.from({length:8},(_,i)=>({type:'textinput',id:'oscFaderName'+(i+1),label:'OSC fader '+(i+1)+' display name',width:6,default:'',tooltip:'Optional display name. Empty uses OSC FADER '+(i+1)+'. The OSC address stays /vehka/fader'+(i+1)+'.'})),
       { type: 'textinput', id: 'host', label: 'Designer IP / hostname', width: 8, default: '127.0.0.1' },
       {
         type: 'number',
@@ -652,7 +653,7 @@ class DisguiseLayerControl extends InstanceBase {
   masterTargetSlots() {
     return [
       ...Array.from({length:8},(_,i)=>this.masterTransports?.[i]),
-      ...Array.from({length:8},(_,i)=>({uid:'osc:fader'+(i+1),name:'OSC FADER '+(i+1),oscIndex:i,
+      ...Array.from({length:8},(_,i)=>({uid:'osc:fader'+(i+1),name:String(this.config?.['oscFaderName'+(i+1)] || '').trim() || 'OSC FADER '+(i+1),oscIndex:i,
         brightness:this.oscFaderValues?.[i] ?? 0,volume:this.oscFaderValues?.[i] ?? 0})),
     ]
   }

@@ -33,6 +33,13 @@ test('CC1 export reproduces the clean operator page 8 layout',()=>{
  assert.equal(cc1.page.controls[5][2].steps[0].action_sets.up.length,1)
  const pageLink=cc1.page.controls[5][2].steps[0].action_sets.up[0]
  assert.equal(pageLink.connectionId,'internal');assert.equal(pageLink.definitionId,'set_page')
+ const fourth=cc1.page.controls[0][3]
+ assert.equal(fourth.steps[0].action_sets.down[0].options.slot.value,3)
+ assert.equal(action(fourth,'up'),'pad_up')
+ assert.equal(fourth.style.layers.find(l=>l.id==='image0').base64Image.value,'$(d3layers:pad_image_3)')
+ assert.match(fourth.style.layers.find(l=>l.id==='fader-display').text.value,/master_transport/)
+ assert.match(fourth.style.layers.find(l=>l.id==='fader-display').text.value,/transport_master_level/)
+ assert.deepEqual(fourth.style.layers.filter(l=>l.id!=='fader-display').map(l=>l.id),cc1.page.controls[0][2].style.layers.map(l=>l.id))
  assert.equal(action(cc1.page.controls[2][1]),'parameter_press')
  assert.equal(action(cc1.page.controls[3][1]),'parameter_press')
  assert.equal(action(cc1.page.controls[2][2]),'value_press')

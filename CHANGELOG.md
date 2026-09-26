@@ -434,3 +434,11 @@
 - VALUE now cycles COARSE / FINE / ULTRA for numeric parameters. Explicit Add keyframe remains available. Resource and layer timing contexts keep their existing functions.
 - Clock/field feedback preserves the list labels, empty slots are inert, and context changes invalidate stale selections.
 - CC1 follow-up: the third physical encoder press adds a keyframe; the separate value LCD press cycles precision. Rotation is unchanged.
+- Restore the fourth CC1 LCD's complete resource/parameter context behavior. Normal mode shows the selected fader target and percentage; context lists show their own labels and resource images.
+
+## 0.2.0-beta.79
+- Add eight optional OSC fader display names in connection settings. Names update selector labels and the selected fader display; blank names retain defaults. OSC addresses, stable channel IDs and stored levels are unchanged.
+- Rebuild the fourth CC1 LCD from the standard adjacent-button style, removing old font/layout overrides while preserving fader and context content.
+
+## 0.2.0-beta.80
+- Reduce automatic numeric encoder steps tenfold: COARSE / FINE / ULTRA now use 1% / 0.1% / 0.01% of the full range. Unbounded float fallbacks are 0.01 / 0.001 / 0.0001. Explicit overrides and integer/discrete constraints remain intact.

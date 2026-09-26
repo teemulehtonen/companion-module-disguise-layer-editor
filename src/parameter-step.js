@@ -5,8 +5,8 @@ function parameterStep(field, options = {}) {
   const span = typeof field.min === 'number' && typeof field.max === 'number' ? field.max - field.min : NaN
   let step
   if (override > 0) step = override / (field.integer ? 1 : divisor)
-  else if (Number.isFinite(span) && span > 0) step = Number(span.toPrecision(7)) / (10 * divisor)
-  else step = (field.integer ? field.step || 1 : 0.1) / (field.integer ? 1 : divisor)
+  else if (Number.isFinite(span) && span > 0) step = Number(span.toPrecision(7)) / (100 * divisor)
+  else step = (field.integer ? field.step || 1 : 0.01) / (field.integer ? 1 : divisor)
   return field.integer ? Math.max(1, Math.floor(step + 0.5)) : step
 }
 function parameterDecimals(field, precision) {
@@ -27,9 +27,9 @@ def parameter_step(meta, options):
     if override > 0:
         step = override / (1 if meta.get('integer') else divisor)
     elif not math.isnan(span) and not math.isinf(span) and span > 0:
-        step = float('%.7g' % span) / (10 * divisor)
+        step = float('%.7g' % span) / (100 * divisor)
     else:
-        step = float((meta.get('step') or 1) if meta.get('integer') else 0.1) / (1 if meta.get('integer') else divisor)
+        step = float((meta.get('step') or 1) if meta.get('integer') else 0.01) / (1 if meta.get('integer') else divisor)
     return max(1, math.floor(step + 0.5)) if meta.get('integer') else step
 `
 module.exports = {parameterStep, parameterDecimals, pythonParameterStep}

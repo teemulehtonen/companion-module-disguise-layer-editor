@@ -137,3 +137,5 @@ integer steps, enum choices, bounds, key/constant targets and small-value labels
 It performs no native Designer writes.
 
 parameter-browser.test.js covers 12-slot paging and all display selections in LIVE/VIEW, inert empty slots, stale-context cancellation, precision presses and field/clock feedback. It runs in keyframes, resources and companion groups. These are offline actions against DemoClient, not installed button presses or native Designer mutations.
+
+OSC display-name regressions in osc-fader-presets.test.js cover all eight optional settings, trimmed/default labels, selected display, saved names and levels, and unchanged OSC destinations/payloads. OSC output is captured by an offline stub; no receiver or hardware test is implied.

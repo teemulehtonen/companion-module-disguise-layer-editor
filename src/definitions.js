@@ -166,7 +166,7 @@ function actions(instance) {
     ),
     value: action(
       'Adjust live value / preview media',
-      [direction, ...detentSensitivity, numeric('step', 'Step override (0 = 10% / 1% / 0.1% of range)', 0, 0)],
+      [direction, ...detentSensitivity, numeric('step', 'Step override (0 = 1% / 0.1% / 0.01% of range)', 0, 0)],
       (e, o) =>
         e.layerEdit === 'edit'
           ? e.adjustLayerTiming('out', Number(o.direction),{detents:o.detents})

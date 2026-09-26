@@ -1186,8 +1186,8 @@
               "usage": "auto",
               "type": "text",
               "enabled": {
-                "value": true,
-                "isExpression": false
+                "isExpression": true,
+                "value": "!($(d3layers:ui_mode) == 'PARAMS' && $(d3layers:pad_3) == 'LINK\\nTIME')"
               },
               "opacity": {
                 "value": 100,
@@ -1198,7 +1198,7 @@
                 "isExpression": false
               },
               "y": {
-                "value": "$(d3layers:ui_mode) == 'MEDIA' ? 40 : ($(d3layers:playing) && $(d3layers:ui_mode) == 'PARAMS' ? 6 : 10)",
+                "value": "$(d3layers:ui_mode) == 'MEDIA' ? 40 : 10",
                 "isExpression": true
               },
               "width": {
@@ -1206,7 +1206,7 @@
                 "isExpression": false
               },
               "height": {
-                "value": "$(d3layers:ui_mode) == 'MEDIA' ? 59 : ($(d3layers:playing) && $(d3layers:ui_mode) == 'PARAMS' ? 56 : 80)",
+                "value": "$(d3layers:ui_mode) == 'MEDIA' ? 59 : 80",
                 "isExpression": true
               },
               "rotation": {
@@ -1214,8 +1214,8 @@
                 "isExpression": false
               },
               "text": {
-                "value": "$(d3layers:pad_3)",
-                "isExpression": false
+                "isExpression": false,
+                "value": "$(d3layers:pad_3)"
               },
               "color": {
                 "value": 16382458,
@@ -1230,7 +1230,7 @@
                 "isExpression": false
               },
               "fontsize": {
-                "value": "$(d3layers:ui_mode) == 'MEDIA' ? 68 : ($(d3layers:playing) && $(d3layers:ui_mode) == 'PARAMS' ? 28 : 20)",
+                "value": "$(d3layers:ui_mode) == 'MEDIA' ? 68 : 20",
                 "isExpression": true
               },
               "fontsizeAllowShrink": {
@@ -1363,13 +1363,13 @@
               }
             },
             {
-              "id": "play-clock",
-              "name": "Playback timecode",
+              "id": "fader-display",
+              "name": "Selected fader",
               "usage": "auto",
               "type": "text",
               "enabled": {
-                "value": "$(d3layers:playing) && $(d3layers:ui_mode) == 'PARAMS'",
-                "isExpression": true
+                "isExpression": true,
+                "value": "$(d3layers:ui_mode) == 'PARAMS' && $(d3layers:pad_3) == 'LINK\\nTIME'"
               },
               "opacity": {
                 "value": 100,
@@ -1380,24 +1380,24 @@
                 "isExpression": false
               },
               "y": {
-                "value": 66,
-                "isExpression": false
+                "value": "$(d3layers:ui_mode) == 'MEDIA' ? 40 : 10",
+                "isExpression": true
               },
               "width": {
                 "value": 100,
                 "isExpression": false
               },
               "height": {
-                "value": 26,
-                "isExpression": false
+                "value": "$(d3layers:ui_mode) == 'MEDIA' ? 59 : 80",
+                "isExpression": true
               },
               "rotation": {
                 "value": 0,
                 "isExpression": false
               },
               "text": {
-                "value": "$(d3layers:timecode)",
-                "isExpression": false
+                "isExpression": false,
+                "value": "$(d3layers:master_transport)\n$(d3layers:transport_master_level)%"
               },
               "color": {
                 "value": 16382458,
@@ -1412,74 +1412,8 @@
                 "isExpression": false
               },
               "fontsize": {
-                "value": 48,
-                "isExpression": false
-              },
-              "fontsizeAllowShrink": {
-                "value": true,
-                "isExpression": false
-              },
-              "font": {
-                "value": "companion-sans",
-                "isExpression": false
-              },
-              "outlineColor": {
-                "value": 4278190080,
-                "isExpression": false
-              }
-            },
-            {
-              "id": "designer-heartbeat",
-              "name": "Designer response heartbeat",
-              "usage": "auto",
-              "type": "text",
-              "enabled": {
-                "value": "$(d3layers:ui_mode) == 'PARAMS' && $(d3layers:heartbeat)",
+                "value": "$(d3layers:ui_mode) == 'MEDIA' ? 68 : 20",
                 "isExpression": true
-              },
-              "opacity": {
-                "value": 100,
-                "isExpression": false
-              },
-              "x": {
-                "value": 85,
-                "isExpression": false
-              },
-              "y": {
-                "value": 3,
-                "isExpression": false
-              },
-              "width": {
-                "value": 12,
-                "isExpression": false
-              },
-              "height": {
-                "value": 14,
-                "isExpression": false
-              },
-              "rotation": {
-                "value": 0,
-                "isExpression": false
-              },
-              "text": {
-                "value": "●",
-                "isExpression": false
-              },
-              "color": {
-                "value": 4449932,
-                "isExpression": false
-              },
-              "halign": {
-                "value": "center",
-                "isExpression": false
-              },
-              "valign": {
-                "value": "center",
-                "isExpression": false
-              },
-              "fontsize": {
-                "value": 80,
-                "isExpression": false
               },
               "fontsizeAllowShrink": {
                 "value": true,
